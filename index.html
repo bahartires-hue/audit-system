@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="UTF-8">
+<title>نظام المراجعة</title>
+<style>
+body { font-family: Arial; padding: 20px; direction: rtl; }
+table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+td, th { border: 1px solid #ccc; padding: 10px; text-align: center; }
+.error { background-color: #ffcccc; }
+.ok { background-color: #ccffcc; }
+</style>
+</head>
+
+<body>
+
+<h2>رفع الملفات</h2>
+
+<input type="file" id="file1">
+<input type="file" id="file2">
+<button onclick="send()">تحليل</button>
+
+<table id="resultTable">
+<tr>
+<th>المبلغ</th>
+<th>الحالة</th>
+</tr>
+</table>
+
+<script>
+async function send() {
+    let f1 = document.getElementById("file1").files[0];
+    let f2 = document.getElementById("file2").files[0];
+
+    let formData = new FormData();
+    formData.append("file1", f1);
+    formData.append("file2", f2);
+
+    let res = await fetch("/compare", {
+        method: "POST",
+        body: formData
+    });
+
+    let data = await res.json();
+
+    let table = document.getElementById("resultTable");
+    table.innerHTML = "<tr><th>المبلغ</th><th>الحالة</th></tr>";
+
+    data.forEach(row => {
+        let tr = document.createElement("tr");
+        tr.className = "error";
+
+        tr.innerHTML = `
+            <td>${row.amount}</td>
+            <td>${row.error}</td>
+        `;
+
+        table.appendChild(tr);
+    });
+}
+</script>
+
+</body>
+</html>

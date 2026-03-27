@@ -1,0 +1,9 @@
+import tkinter as tk
+
+root = tk.Tk()
+root.title("تجربة البرنامج")
+
+label = tk.Label(root, text="اشتغل البرنامج بنجاح 👍")
+label.pack()
+
+root.mainloop()
