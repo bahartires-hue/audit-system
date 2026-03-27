@@ -7,7 +7,7 @@ import uuid
 
 app = FastAPI()
 
-# 🔥 PostgreSQL بدل SQLite
+# 🔥 PostgreSQL
 DATABASE_URL = "postgresql://app_user:sL2xxFyLUVcQqJQ01Li9SY35QLoMqvM3@dpg-d73a0slm5p6s73e56bg0-a.oregon-postgres.render.com/app_db_mf72"
 
 engine = create_engine(
@@ -19,11 +19,22 @@ engine = create_engine(
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
+# 👤 المستخدم
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True)
     password = Column(String)
+
+# 📊 التحليل
+class Analysis(Base):
+    __tablename__ = "analysis"
+    id = Column(Integer, primary_key=True)
+    username = Column(String)
+    branch = Column(String)
+    amount = Column(String)
+    date = Column(String)
+    doc = Column(String)
 
 Base.metadata.create_all(bind=engine)
 
@@ -35,7 +46,6 @@ def get_db():
         db.close()
 
 tokens = {}
-last_errors = []
 
 def check_auth(token: str):
     if token not in tokens:
@@ -115,7 +125,8 @@ def analyze_api(
     file1: UploadFile = File(...),
     file2: UploadFile = File(...),
     b1: str = Form(...),
-    b2: str = Form(...)
+    b2: str = Form(...),
+    db: Session = Depends(get_db)
 ):
     check_auth(token)
 
@@ -124,8 +135,18 @@ def analyze_api(
 
     errors, counts = analyze(d1, d2)
 
-    global last_errors
-    last_errors = errors
+    username = tokens[token]
+
+    for e in errors:
+        db.add(Analysis(
+            username=username,
+            branch=e["branch"],
+            amount=str(e["amount"]),
+            date=e["date"],
+            doc=e["doc"]
+        ))
+
+    db.commit()
 
     totals = {
         b1: len(d1),
@@ -135,9 +156,26 @@ def analyze_api(
     return {"errors": errors, "counts": counts, "totals": totals}
 
 @app.get("/download")
-def download(token: str):
+def download(token: str, db: Session = Depends(get_db)):
     check_auth(token)
-    df = pd.DataFrame(last_errors)
+
+    username = tokens[token]
+
+    rows = db.query(Analysis).filter_by(username=username).all()
+
+    data = [
+        {
+            "amount": r.amount,
+            "branch": r.branch,
+            "date": r.date,
+            "doc": r.doc
+        }
+        for r in rows
+    ]
+
+    df = pd.DataFrame(data)
+
     name = f"report_{uuid.uuid4().hex}.xlsx"
     df.to_excel(name, index=False)
+
     return FileResponse(name, filename="report.xlsx")
