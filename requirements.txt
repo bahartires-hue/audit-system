@@ -4,3 +4,4 @@ pandas
 sqlalchemy
 pdfplumber
 openpyxl
+python-multipart
