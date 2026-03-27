@@ -2,6 +2,7 @@ fastapi
 uvicorn
 pandas
 sqlalchemy
-pdfplumber
-openpyxl
+psycopg2-binary
 python-multipart
+openpyxl
+pdfplumber
