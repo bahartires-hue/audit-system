@@ -395,14 +395,23 @@ right.innerHTML = `<h4>${b1.value}</h4>`
 left.innerHTML  = `<h4>${b2.value}</h4>`
 
 errors.filter(x=>x.branch==b1.value).forEach(x=>{
-right.innerHTML+=`<div class="error"><div>${x.amount}</div><div>${x.date}</div></div>`
+right.innerHTML+=`
+<div class="error">
+<div>المبلغ: ${x.amount}</div>
+<div>نوع المستند: ${x.doc || "-"}</div>
+<div>التاريخ: ${x.date || "-"}</div>
+</div>`
 })
 
 errors.filter(x=>x.branch==b2.value).forEach(x=>{
-left.innerHTML+=`<div class="error"><div>${x.amount}</div><div>${x.date}</div></div>`
+left.innerHTML+=`
+<div class="error">
+<div>المبلغ: ${x.amount}</div>
+<div>نوع المستند: ${x.doc || "-"}</div>
+<div>التاريخ: ${x.date || "-"}</div>
+</div>`
 })
 }
-
 async function upload(){
 
 let f=new FormData()
