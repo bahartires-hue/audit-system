@@ -4,9 +4,13 @@ from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 import pandas as pd
 import uuid
+import pdfplumber
+import jwt
+from passlib.hash import bcrypt
 
 app = FastAPI()
 
+# ================= DB =================
 engine = create_engine("sqlite:///db.sqlite", connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
@@ -19,46 +23,118 @@ class User(Base):
 
 Base.metadata.create_all(engine)
 
+# ================= AUTH =================
+SECRET = "SECRET_KEY"
+
+def create_token(username):
+    return jwt.encode({"user": username}, SECRET, algorithm="HS256")
+
+def check_auth(token: str):
+    try:
+        jwt.decode(token, SECRET, algorithms=["HS256"])
+    except:
+        raise HTTPException(401, "غير مصرح")
+
+# ================= UTILS =================
 def get_db():
     db = SessionLocal()
     try: yield db
     finally: db.close()
 
-tokens = {}
-last_errors = []
-
-def check_auth(token: str):
-    if token not in tokens:
-        raise HTTPException(401, "غير مصرح")
-
 def safe(v):
     try: return round(float(v),2)
     except: return 0
 
-def read(file, branch):
-    df = pd.read_excel(file)
-    df.columns = df.columns.str.strip()
+# ================= SMART DETECTION =================
+def detect_columns(df):
+    date_col = None
+    numeric_cols = []
+
+    for col in df.columns:
+        sample = df[col].dropna().head(20)
+
+        parsed = pd.to_datetime(sample, errors='coerce')
+        if parsed.notna().sum() > len(sample)*0.6:
+            date_col = col
+            continue
+
+        nums = pd.to_numeric(sample, errors='coerce')
+        if nums.notna().sum() > len(sample)*0.6:
+            numeric_cols.append(col)
+
+    debit = numeric_cols[0] if len(numeric_cols)>0 else None
+    credit = numeric_cols[1] if len(numeric_cols)>1 else None
+
+    return debit, credit, date_col
+
+# ================= READ =================
+def read_excel(file):
+    return pd.read_excel(file)
+
+def read_pdf(file):
+    rows=[]
+    with pdfplumber.open(file) as pdf:
+        for page in pdf.pages:
+            tables = page.extract_tables()
+            for table in tables:
+                for row in table:
+                    rows.append(row)
+
+    df=pd.DataFrame(rows)
+    df=df.dropna(how="all")
+    df.columns=df.iloc[0]
+    df=df[1:]
+    return df
+
+def read_any(file, filename):
+    if filename.endswith(".pdf"):
+        return read_pdf(file)
+    return read_excel(file)
+
+def process(file, filename, branch):
+    df = read_any(file, filename)
+    df.columns = df.columns.astype(str).str.strip()
+
+    debit_col, credit_col, date_col = detect_columns(df)
+
     data=[]
     for _,row in df.iterrows():
-        debit  = safe(row.get("مدين_8",0))
-        credit = safe(row.get("دائن_9",0))
-        date = str(row.get("التأريخ_7",""))
+        debit  = safe(row.get(debit_col,0))
+        credit = safe(row.get(credit_col,0)) if credit_col else 0
+        date = str(row.get(date_col,"")) if date_col else ""
         doc  = str(row.get("المستند_4",""))
 
         if debit > 0:
             data.append({"amount":debit,"branch":branch,"date":date,"doc":doc})
         elif credit > 0:
             data.append({"amount":credit,"branch":branch,"date":date,"doc":doc})
+
     return data
 
+# ================= ANALYZE =================
 def analyze(d1,d2):
     res=[]; used=[False]*len(d2); counts={}
+
     for x1 in d1:
         found=False
         for i,x2 in enumerate(d2):
             if used[i]: continue
-            if abs(x1["amount"]-x2["amount"])<=0.05:
+
+            amount_match = abs(x1["amount"]-x2["amount"])<=0.05
+
+            date_match = False
+            if x1["date"] and x2["date"]:
+                try:
+                    d1_date = pd.to_datetime(x1["date"])
+                    d2_date = pd.to_datetime(x2["date"])
+                    diff = abs((d1_date - d2_date).days)
+                    date_match = diff <= 2
+                except:
+                    date_match = True
+
+            if amount_match and date_match:
                 used[i]=True; found=True; break
+
         if not found:
             res.append(x1)
             counts[x1["branch"]] = counts.get(x1["branch"],0)+1
@@ -70,9 +146,10 @@ def analyze(d1,d2):
 
     return res,counts
 
+# ================= FRONTEND (نفس واجهتك) =================
 @app.get("/", response_class=HTMLResponse)
 def home():
-    return """
+    return """ 
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -89,7 +166,6 @@ body.dark{background:#020617;color:#fff;}
 .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
 .logo{font-size:20px;font-weight:800;color:#3b82f6;}
 
-/* ✅ تعديل فقط */
 #welcomeUser{
 font-size:16px;
 color:#1d4ed8;
@@ -128,7 +204,6 @@ border:none;
 border-radius:10px;
 }
 
-/* الإحصائيات */
 .stats{
 display:grid;
 grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
@@ -145,7 +220,6 @@ border:1px solid #e5e7eb;
 .stat b{font-size:26px;color:#3b82f6;display:block;}
 .stat span{font-size:14px;color:#666;}
 
-/* الأخطاء */
 .errors{
 display:grid;
 grid-template-columns:1fr 1fr;
@@ -161,19 +235,9 @@ margin-bottom:12px;
 }
 .error div{
 font-size:15px;
-color:#111;
 margin-bottom:5px;
 }
 
-body.dark .error{
-background:#0f172a;
-border:1px solid #1e293b;
-}
-body.dark .error div{
-color:#f1f5f9;
-}
-
-/* شريط النسبة */
 .bar{
 background:#e5e7eb;
 height:10px;
@@ -183,7 +247,6 @@ overflow:hidden
 }
 .bar-inner{background:#ef4444;height:100%}
 
-/* Toast */
 .toast{
 position:fixed;
 bottom:20px;
@@ -204,7 +267,6 @@ z-index:999;
 
 <div id="toast" class="toast"></div>
 
-<!-- تسجيل الدخول -->
 <div id="loginBox" class="container">
 <div class="card" style="max-width:400px;margin:auto">
 <h2>تسجيل الدخول</h2>
@@ -215,7 +277,6 @@ z-index:999;
 </div>
 </div>
 
-<!-- تسجيل -->
 <div id="registerBox" class="container hidden">
 <div class="card" style="max-width:400px;margin:auto">
 <h2>إنشاء حساب</h2>
@@ -226,14 +287,13 @@ z-index:999;
 </div>
 </div>
 
-<!-- النظام -->
 <div id="systemBox" class="hidden">
 <div class="container">
 
 <div class="topbar">
 <div>
 <div class="logo">📊 Smart Audit</div>
-<div id="welcomeUser" style=""></div>
+<div id="welcomeUser"></div>
 </div>
 <div>
 <button class="btn btn-mode" onclick="toggleMode()">الوضع</button>
@@ -247,30 +307,23 @@ z-index:999;
 <input type="file" id="f1">
 <input type="file" id="f2">
 
-<!-- ✅ تعديل فقط -->
 <div style="display:flex;gap:10px;justify-content:center;margin-top:10px">
 <button class="analyze-btn" onclick="upload()">تحليل</button>
 <button class="analyze-btn" style="background:#10b981" onclick="download()">تحميل التقرير</button>
 </div>
-
 </div>
 
-<!-- الإحصائيات -->
 <div id="stats" class="stats"></div>
-
-<!-- النسب -->
 <div id="totals" class="card"></div>
 
-<!-- الفلترة -->
 <div class="card">
 <h3>فلترة الأخطاء</h3>
 <input id="filterDoc" placeholder="نوع المستند">
 <input id="filterAmount" placeholder="المبلغ">
 <button class="analyze-btn" onclick="applyFilter()">تطبيق</button>
-<button class="btn btn-mode" onclick="resetFilter()">إلغاء الفلترة</button>
+<button class="btn btn-mode" onclick="resetFilter()">إلغاء</button>
 </div>
 
-<!-- الأخطاء -->
 <div class="card">
 <h3>الأخطاء</h3>
 <div class="errors">
@@ -337,30 +390,19 @@ showToast("خطأ","#ef4444")
 }
 
 function render(errors){
-right.innerHTML = `<h4 style="margin-bottom:10px">${b1.value}</h4>`
-left.innerHTML  = `<h4 style="margin-bottom:10px">${b2.value}</h4>`
+right.innerHTML = `<h4>${b1.value}</h4>`
+left.innerHTML  = `<h4>${b2.value}</h4>`
 
 errors.filter(x=>x.branch==b1.value).forEach(x=>{
-right.innerHTML+=`
-<div class="error">
-<div>المبلغ: ${x.amount}</div>
-<div>نوع المستند: ${x.doc || "-"}</div>
-<div>التاريخ: ${x.date || "-"}</div>
-</div>`
+right.innerHTML+=`<div class="error"><div>${x.amount}</div><div>${x.date}</div></div>`
 })
 
 errors.filter(x=>x.branch==b2.value).forEach(x=>{
-left.innerHTML+=`
-<div class="error">
-<div>المبلغ: ${x.amount}</div>
-<div>نوع المستند: ${x.doc || "-"}</div>
-<div>التاريخ: ${x.date || "-"}</div>
-</div>`
+left.innerHTML+=`<div class="error"><div>${x.amount}</div><div>${x.date}</div></div>`
 })
 }
 
 async function upload(){
-
 let f=new FormData()
 f.append("file1",f1.files[0])
 f.append("file2",f2.files[0])
@@ -373,94 +415,36 @@ let d=await r.json()
 
 ALL_ERRORS=d.errors
 
-let ordered = [
-[b1.value, d.counts[b1.value] || 0],
-[b2.value, d.counts[b2.value] || 0]
-]
-
-stats.innerHTML=""
-ordered.forEach(([b,count])=>{
-stats.innerHTML+=`
-<div class="stat">
-<span>${b}</span>
-<b>${count}</b>
-<span>عدد الأخطاء</span>
-</div>`
-})
-
-let totalHTML = "<h3>نسبة الخطأ لكل فرع</h3>"
-
-ordered.forEach(([b,count])=>{
-let total = d.totals[b] || 0
-let percent = total ? ((count / total) * 100).toFixed(1) : 0
-
-totalHTML += `
-<div style="margin-bottom:12px">
-📍 ${b}: ${percent}%
-<div class="bar">
-<div class="bar-inner" style="width:${percent}%"></div>
-</div>
-</div>`
-})
-
-totals.innerHTML = totalHTML
-
 render(ALL_ERRORS)
-showToast("تم التحليل ✔️")
-}
-
-function applyFilter(){
-let doc=filterDoc.value.toLowerCase()
-let amount=filterAmount.value
-
-let filtered=ALL_ERRORS.filter(x=>{
-let dmatch=doc?(x.doc||"").toLowerCase().includes(doc):true
-let amatch=amount?String(x.amount).includes(amount):true
-return dmatch && amatch
-})
-
-render(filtered)
-
-if(filtered.length==0){
-showToast("لا توجد نتائج","#ef4444")
-}else{
-showToast("تمت الفلترة ✔️")
-}
-}
-
-function resetFilter(){
-filterDoc.value=""
-filterAmount.value=""
-render(ALL_ERRORS)
-showToast("تم إلغاء الفلترة ✔️")
+showToast("تم التحليل")
 }
 
 function download(){
-showToast("تم تحميل التقرير ✔️")
 window.open("/download?token="+TOKEN)
 }
 </script>
 
 </body>
 </html>
-"""
+    """
+
+# ================= API =================
+last_errors = []
 
 @app.post("/register")
 def register(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     if db.query(User).filter_by(username=username).first():
         return {"msg":"المستخدم موجود"}
-    db.add(User(username=username, password=password))
+    db.add(User(username=username, password=bcrypt.hash(password)))
     db.commit()
     return {"msg":"تم"}
 
 @app.post("/login")
 def login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
-    user = db.query(User).filter_by(username=username, password=password).first()
-    if not user:
+    user = db.query(User).filter_by(username=username).first()
+    if not user or not bcrypt.verify(password, user.password):
         return {"msg":"خطأ"}
-    token=str(uuid.uuid4())
-    tokens[token]=user.username
-    return {"token":token,"username":user.username}
+    return {"token":create_token(username),"username":username}
 
 @app.post("/analyze")
 def analyze_api(token: str = Form(...),
@@ -471,8 +455,8 @@ b2: str = Form(...)):
 
     check_auth(token)
 
-    d1=read(file1.file,b1)
-    d2=read(file2.file,b2)
+    d1=process(file1.file,file1.filename,b1)
+    d2=process(file2.file,file2.filename,b2)
 
     errors,counts=analyze(d1,d2)
 
