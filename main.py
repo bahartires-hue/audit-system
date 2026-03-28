@@ -382,8 +382,12 @@ goLogin()
 
 async function login(){
 let f=new FormData()
-f.append("username",user.value)
-f.append("password",pass.value)
+
+let username = document.getElementById("ruser").value
+let password = document.getElementById("rpass").value
+
+f.append("username", username)
+f.append("password", password)
 
 let r=await fetch("/login",{method:"POST",body:f})
 
