@@ -546,28 +546,29 @@ def login(username: str = Form(...), password: str = Form(...), db: Session = De
 @app.post("/analyze")
 def analyze_api(
     authorization: str = Header(...),
-file1: UploadFile = File(...),
-file2: UploadFile = File(...),
-b1: str = Form(...),
-b2: str = Form(...)):
+    file1: UploadFile = File(...),
+    file2: UploadFile = File(...),
+    b1: str = Form(...),
+    b2: str = Form(...)
+):
+    scheme, token = authorization.split()
+    check_auth(token)
 
-scheme, token = authorization.split()
-check_auth(token)
-    d1=process(file1.file,file1.filename,b1)
-    d2=process(file2.file,file2.filename,b2)
+    d1 = process(file1.file, file1.filename, b1)
+    d2 = process(file2.file, file2.filename, b2)
 
-    errors,counts=analyze(d1,d2)
+    errors, counts = analyze(d1, d2)
 
     global last_errors
-    last_errors=errors
+    last_errors = errors
 
     totals = {
         b1: len(d1),
         b2: len(d2)
     }
 
-    return {"errors":errors,"counts":counts,"totals":totals}
-
+    return {"errors": errors, "counts": counts, "totals": totals}
+    
 from fastapi import Header
 
 @app.get("/download")
