@@ -6,7 +6,7 @@ import pandas as pd
 import uuid
 import pdfplumber
 import jwt
-from passlib.hash import bcrypt
+from passlib.hash import pbkdf2_sha256
 
 app = FastAPI()
 
@@ -383,8 +383,8 @@ goLogin()
 async function login(){
 let f=new FormData()
 
-let username = document.getElementById("ruser").value
-let password = document.getElementById("rpass").value
+let username = document.getElementById("user").value
+let password = document.getElementById("pass").value
 
 f.append("username", username)
 f.append("password", password)
@@ -441,10 +441,14 @@ f.append("file1",f1.files[0])
 f.append("file2",f2.files[0])
 f.append("b1",b1.value)
 f.append("b2",b2.value)
-f.append("token",TOKEN)
 
-let r=await fetch("/analyze",{method:"POST",body:f})
-
+let r=await fetch("/analyze",{
+method:"POST",
+body:f,
+headers:{
+"Authorization":"Bearer "+TOKEN
+}
+})
 if(!r.ok){
     let text = await r.text()
     console.log("ANALYZE ERROR:", text)
@@ -493,7 +497,19 @@ showToast("تم التحليل ✔️")
 }
 
 function download(){
-window.open("/download?token="+TOKEN)
+fetch("/download", {
+headers: {
+"Authorization": "Bearer " + TOKEN
+}
+})
+.then(res => res.blob())
+.then(blob => {
+let url = window.URL.createObjectURL(blob)
+let a = document.createElement("a")
+a.href = url
+a.download = "report.xlsx"
+a.click()
+})
 }
 </script>
 
@@ -508,7 +524,7 @@ last_errors = []
 def register(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     if db.query(User).filter_by(username=username).first():
         return {"msg":"المستخدم موجود"}
-    db.add(User(username=username, password=bcrypt.hash(password)))
+    db.add(User(username=username, password=pbkdf2_sha256.hash(password)))
     db.commit()
     return {"msg":"تم"}
 
@@ -520,7 +536,7 @@ def login(username: str = Form(...), password: str = Form(...), db: Session = De
     if not user:
         return {"error": "user_not_found"}
 
-    if not bcrypt.verify(password, user.password):
+    if not pbkdf2_sha256.verify(password, user.password):
         return {"error": "wrong_password"}
 
     return {
@@ -528,14 +544,15 @@ def login(username: str = Form(...), password: str = Form(...), db: Session = De
         "username": username
     }
 @app.post("/analyze")
-def analyze_api(token: str = Form(...),
+def analyze_api(
+    authorization: str = Header(...),
 file1: UploadFile = File(...),
 file2: UploadFile = File(...),
 b1: str = Form(...),
 b2: str = Form(...)):
 
-    check_auth(token)
-
+scheme, token = authorization.split()
+check_auth(token)
     d1=process(file1.file,file1.filename,b1)
     d2=process(file2.file,file2.filename,b2)
 
@@ -551,10 +568,16 @@ b2: str = Form(...)):
 
     return {"errors":errors,"counts":counts,"totals":totals}
 
+from fastapi import Header
+
 @app.get("/download")
-def download(token: str):
+def download(authorization: str = Header(...)):
+    scheme, token = authorization.split()
+
     check_auth(token)
-    df=pd.DataFrame(last_errors)
-    name=f"report_{uuid.uuid4().hex}.xlsx"
-    df.to_excel(name,index=False)
-    return FileResponse(name,filename="report.xlsx")
+
+    df = pd.DataFrame(last_errors)
+    name = f"report_{uuid.uuid4().hex}.xlsx"
+    df.to_excel(name, index=False)
+
+    return FileResponse(name, filename="report.xlsx")
