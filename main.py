@@ -89,28 +89,37 @@ def read_pdf(file):
     df=df[1:]
     return df
 
-def read_any(file, filename):
-    if filename.endswith(".pdf"):
-        return read_pdf(file)
-    return read_excel(file)
-
 def process(file, filename, branch):
     df = read_any(file, filename)
     df.columns = df.columns.astype(str).str.strip()
 
-    debit_col, credit_col, date_col = detect_columns(df)
+    data = []
 
-    data=[]
-    for _,row in df.iterrows():
-        debit  = safe(row.get(debit_col,0))
-        credit = safe(row.get(credit_col,0)) if credit_col else 0
-        date = str(row.get(date_col,"")) if date_col else ""
-        doc  = str(row.get("المستند_4",""))
+    debit_col = None
+    credit_col = None
+    date_col = None
+
+    for col in df.columns:
+        name = str(col).lower()
+
+        if "مدين" in name or "debit" in name:
+            debit_col = col
+        elif "دائن" in name or "credit" in name:
+            credit_col = col
+        elif "تاريخ" in name or "date" in name:
+            date_col = col
+
+    print("DETECTED:", debit_col, credit_col, date_col)
+
+    for _, row in df.iterrows():
+        debit  = safe(row.get(debit_col, 0))
+        credit = safe(row.get(credit_col, 0))
+        date   = str(row.get(date_col, ""))
 
         if debit > 0:
-            data.append({"amount":debit,"branch":branch,"date":date,"doc":doc})
+            data.append({"amount": debit, "branch": branch, "date": date, "doc": ""})
         elif credit > 0:
-            data.append({"amount":credit,"branch":branch,"date":date,"doc":doc})
+            data.append({"amount": credit, "branch": branch, "date": date, "doc": ""})
 
     return data
 
