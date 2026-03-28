@@ -130,11 +130,13 @@ def analyze(d1, d2):
             if used[i]:
                 continue
 
+            # فرق المبلغ (نفس طريقتك المرنة)
             amount_diff = abs(x1["amount"] - x2["amount"])
 
             if amount_diff > 0.05:
                 continue
 
+            # فرق التاريخ (اختياري)
             try:
                 d1_date = pd.to_datetime(x1["date"], errors='coerce')
                 d2_date = pd.to_datetime(x2["date"], errors='coerce')
@@ -146,6 +148,7 @@ def analyze(d1, d2):
             except:
                 date_diff = 1
 
+            # اختيار أفضل تطابق
             score = amount_diff + (date_diff * 0.01)
 
             if score < best_score:
@@ -158,6 +161,7 @@ def analyze(d1, d2):
             res.append(x1)
             counts[x1["branch"]] = counts.get(x1["branch"], 0) + 1
 
+    # العناصر المتبقية من الملف الثاني
     for i, x in enumerate(d2):
         if not used[i]:
             res.append(x)
