@@ -11,7 +11,8 @@ from passlib.hash import bcrypt
 app = FastAPI()
 
 # ================= DB =================
-engine = create_engine("sqlite:///new.db", connect_args={"check_same_thread": False})SessionLocal = sessionmaker(bind=engine)
+engine = create_engine("sqlite:///new.db", connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
 class User(Base):
