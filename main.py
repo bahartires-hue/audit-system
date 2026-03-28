@@ -573,7 +573,6 @@ from fastapi import Header
 @app.get("/download")
 def download(authorization: str = Header(...)):
     scheme, token = authorization.split()
-
     check_auth(token)
 
     df = pd.DataFrame(last_errors)
