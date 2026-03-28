@@ -1,11 +1,14 @@
-from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Header
 from fastapi.responses import HTMLResponse, FileResponse
+
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
+
 import pandas as pd
 import uuid
 import pdfplumber
 import jwt
+
 from passlib.hash import pbkdf2_sha256
 
 app = FastAPI()
@@ -569,10 +572,9 @@ def analyze_api(
 
     return {"errors": errors, "counts": counts, "totals": totals}
     
-from fastapi import Header
-
 @app.get("/download")
-def download(token: str):
+def download(authorization: str = Header(...)):
+    scheme, token = authorization.split()
     check_auth(token)
 
     df = pd.DataFrame(last_errors)
