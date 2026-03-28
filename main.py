@@ -115,39 +115,55 @@ def process(file, filename, branch):
     return data
 
 # ================= ANALYZE =================
-def analyze(d1,d2):
-    res=[]; used=[False]*len(d2); counts={}
+# ================= ANALYZE =================
+
+def analyze(d1, d2):
+    res = []
+    used = [False] * len(d2)
+    counts = {}
 
     for x1 in d1:
-        found=False
-        for i,x2 in enumerate(d2):
-            if used[i]: continue
+        best_i = -1
+        best_score = 999999
 
-            amount_match = abs(x1["amount"]-x2["amount"])<=0.05
+        for i, x2 in enumerate(d2):
+            if used[i]:
+                continue
 
-            date_match = False
-            if x1["date"] and x2["date"]:
-                try:
-                    d1_date = pd.to_datetime(x1["date"])
-                    d2_date = pd.to_datetime(x2["date"])
-                    diff = abs((d1_date - d2_date).days)
-                    date_match = diff <= 2
-                except:
-                    date_match = True
+            amount_diff = abs(x1["amount"] - x2["amount"])
 
-            if amount_match and date_match:
-                used[i]=True; found=True; break
+            if amount_diff > 0.05:
+                continue
 
-        if not found:
+            try:
+                d1_date = pd.to_datetime(x1["date"], errors='coerce')
+                d2_date = pd.to_datetime(x2["date"], errors='coerce')
+
+                if pd.notna(d1_date) and pd.notna(d2_date):
+                    date_diff = abs((d1_date - d2_date).days)
+                else:
+                    date_diff = 1
+            except:
+                date_diff = 1
+
+            score = amount_diff + (date_diff * 0.01)
+
+            if score < best_score:
+                best_score = score
+                best_i = i
+
+        if best_i != -1:
+            used[best_i] = True
+        else:
             res.append(x1)
-            counts[x1["branch"]] = counts.get(x1["branch"],0)+1
+            counts[x1["branch"]] = counts.get(x1["branch"], 0) + 1
 
-    for i,x in enumerate(d2):
+    for i, x in enumerate(d2):
         if not used[i]:
             res.append(x)
-            counts[x["branch"]] = counts.get(x["branch"],0)+1
+            counts[x["branch"]] = counts.get(x["branch"], 0) + 1
 
-    return res,counts
+    return res, counts
 
 # ================= FRONTEND (نفس واجهتك) =================
 @app.get("/", response_class=HTMLResponse)
