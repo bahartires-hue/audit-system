@@ -385,7 +385,8 @@ loginBox.classList.add("hidden")
 systemBox.classList.remove("hidden")
 document.getElementById("welcomeUser").innerText="مرحبًا "+USERNAME
 }else{
-showToast("خطأ","#ef4444")
+console.log(d)
+showToast("فشل تسجيل الدخول","#ef4444")
 }
 }
 
@@ -402,15 +403,6 @@ left.innerHTML+=`<div class="error"><div>${x.amount}</div><div>${x.date}</div></
 })
 }
 
-async function upload(){
-let f=new FormData()
-f.append("file1",f1.files[0])
-f.append("file2",f2.files[0])
-f.append("b1",b1.value)
-f.append("b2",b2.value)
-f.append("token",TOKEN)
-
-let r=await fetch("/analyze",{method:"POST",body:f})
 async function upload(){
 
 let f=new FormData()
@@ -481,13 +473,21 @@ def register(username: str = Form(...), password: str = Form(...), db: Session =
     db.commit()
     return {"msg":"تم"}
 
+
 @app.post("/login")
 def login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     user = db.query(User).filter_by(username=username).first()
-    if not user or not bcrypt.verify(password, user.password):
-        return {"msg":"خطأ"}
-    return {"token":create_token(username),"username":username}
 
+    if not user:
+        return {"error": "user_not_found"}
+
+    if not bcrypt.verify(password, user.password):
+        return {"error": "wrong_password"}
+
+    return {
+        "token": create_token(username),
+        "username": username
+    }
 @app.post("/analyze")
 def analyze_api(token: str = Form(...),
 file1: UploadFile = File(...),
