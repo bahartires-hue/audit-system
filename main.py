@@ -11,8 +11,7 @@ from passlib.hash import bcrypt
 app = FastAPI()
 
 # ================= DB =================
-engine = create_engine("sqlite:///db.sqlite", connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(bind=engine)
+engine = create_engine("sqlite:///new.db", connect_args={"check_same_thread": False})SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
 class User(Base):
@@ -365,7 +364,17 @@ async function register(){
 let f=new FormData()
 f.append("username",ruser.value)
 f.append("password",rpass.value)
-await fetch("/register",{method:"POST",body:f})
+
+let r = await fetch("/register",{method:"POST",body:f})
+
+if(!r.ok){
+    let text = await r.text()
+    console.log("REGISTER ERROR:", text)
+    showToast("خطأ في التسجيل","#ef4444")
+    return
+}
+
+let d = await r.json()
 showToast("تم إنشاء الحساب")
 goLogin()
 }
@@ -376,7 +385,16 @@ f.append("username",user.value)
 f.append("password",pass.value)
 
 let r=await fetch("/login",{method:"POST",body:f})
+
+if(!r.ok){
+    let text = await r.text()
+    console.log("SERVER ERROR:", text)
+    showToast("خطأ في السيرفر","#ef4444")
+    return
+}
+
 let d=await r.json()
+console.log(d)
 
 if(d.token){
 TOKEN=d.token
@@ -385,7 +403,6 @@ loginBox.classList.add("hidden")
 systemBox.classList.remove("hidden")
 document.getElementById("welcomeUser").innerText="مرحبًا "+USERNAME
 }else{
-console.log(d)
 showToast("فشل تسجيل الدخول","#ef4444")
 }
 }
@@ -422,6 +439,14 @@ f.append("b2",b2.value)
 f.append("token",TOKEN)
 
 let r=await fetch("/analyze",{method:"POST",body:f})
+
+if(!r.ok){
+    let text = await r.text()
+    console.log("ANALYZE ERROR:", text)
+    showToast("خطأ في التحليل","#ef4444")
+    return
+}
+
 let d=await r.json()
 
 ALL_ERRORS=d.errors
