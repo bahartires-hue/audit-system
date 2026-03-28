@@ -571,8 +571,7 @@ check_auth(token)
 from fastapi import Header
 
 @app.get("/download")
-def download(authorization: str = Header(...)):
-    scheme, token = authorization.split()
+def download(token: str):
     check_auth(token)
 
     df = pd.DataFrame(last_errors)
