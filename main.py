@@ -411,12 +411,54 @@ f.append("b2",b2.value)
 f.append("token",TOKEN)
 
 let r=await fetch("/analyze",{method:"POST",body:f})
+async function upload(){
+
+let f=new FormData()
+f.append("file1",f1.files[0])
+f.append("file2",f2.files[0])
+f.append("b1",b1.value)
+f.append("b2",b2.value)
+f.append("token",TOKEN)
+
+let r=await fetch("/analyze",{method:"POST",body:f})
 let d=await r.json()
 
 ALL_ERRORS=d.errors
 
+let ordered = [
+[b1.value, d.counts[b1.value] || 0],
+[b2.value, d.counts[b2.value] || 0]
+]
+
+stats.innerHTML=""
+ordered.forEach(([b,count])=>{
+stats.innerHTML+=`
+<div class="stat">
+<span>${b}</span>
+<b>${count}</b>
+<span>عدد الأخطاء</span>
+</div>`
+})
+
+let totalHTML = "<h3>نسبة الخطأ لكل فرع</h3>"
+
+ordered.forEach(([b,count])=>{
+let total = d.totals[b] || 0
+let percent = total ? ((count / total) * 100).toFixed(1) : 0
+
+totalHTML += `
+<div style="margin-bottom:12px">
+📍 ${b}: ${percent}%
+<div class="bar">
+<div class="bar-inner" style="width:${percent}%"></div>
+</div>
+</div>`
+})
+
+totals.innerHTML = totalHTML
+
 render(ALL_ERRORS)
-showToast("تم التحليل")
+showToast("تم التحليل ✔️")
 }
 
 function download(){
