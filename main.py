@@ -410,105 +410,27 @@ def home():
 *{font-family:Cairo;box-sizing:border-box}
 body{margin:0;background:#f1f5f9;color:#111;transition:0.3s;}
 body.dark{background:#020617;color:#fff;}
-
 .container{padding:20px;max-width:1100px;margin:auto;}
-
 .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
 .logo{font-size:20px;font-weight:800;color:#3b82f6;}
-
-#welcomeUser{
-font-size:16px;
-color:#1d4ed8;
-font-weight:900;
-}
-
+#welcomeUser{font-size:16px;color:#1d4ed8;font-weight:900;}
 .btn{padding:10px;border:none;border-radius:10px;cursor:pointer;}
 .btn-danger{background:#ef4444;color:#fff;}
 .btn-mode{background:#e2e8f0;}
-
-.card{
-background:#fff;
-padding:20px;
-border-radius:15px;
-margin-bottom:20px;
-box-shadow:0 5px 20px rgba(0,0,0,0.05);
-}
+.card{background:#fff;padding:20px;border-radius:15px;margin-bottom:20px;box-shadow:0 5px 20px rgba(0,0,0,0.05);}
 body.dark .card{background:#0f172a;}
-
-input{
-width:100%;
-padding:10px;
-margin:5px 0 10px;
-border-radius:8px;
-border:1px solid #ddd;
-}
-
-.analyze-btn{
-width:150px;
-margin:auto;
-display:block;
-padding:10px;
-background:#3b82f6;
-color:#fff;
-border:none;
-border-radius:10px;
-}
-
-.stats{
-display:grid;
-grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
-gap:10px;
-margin-bottom:15px;
-}
-.stat{
-background:#fff;
-padding:15px;
-border-radius:12px;
-text-align:center;
-border:1px solid #e5e7eb;
-}
+input{width:100%;padding:10px;margin:5px 0 10px;border-radius:8px;border:1px solid #ddd;}
+.analyze-btn{width:150px;margin:auto;display:block;padding:10px;background:#3b82f6;color:#fff;border:none;border-radius:10px;}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:15px;}
+.stat{background:#fff;padding:15px;border-radius:12px;text-align:center;border:1px solid #e5e7eb;}
 .stat b{font-size:26px;color:#3b82f6;display:block;}
 .stat span{font-size:14px;color:#666;}
-
-.errors{
-display:grid;
-grid-template-columns:1fr 1fr;
-gap:15px;
-}
-
-.error{
-background:#fff;
-border:1px solid #e5e7eb;
-padding:18px;
-border-radius:14px;
-margin-bottom:12px;
-}
-.error div{
-font-size:15px;
-margin-bottom:5px;
-}
-
-.bar{
-background:#e5e7eb;
-height:10px;
-border-radius:10px;
-margin-top:5px;
-overflow:hidden
-}
+.errors{display:grid;grid-template-columns:1fr 1fr;gap:15px;}
+.error{background:#fff;border:1px solid #e5e7eb;padding:18px;border-radius:14px;margin-bottom:12px;}
+.error div{font-size:15px;margin-bottom:5px;}
+.bar{background:#e5e7eb;height:10px;border-radius:10px;margin-top:5px;overflow:hidden}
 .bar-inner{background:#ef4444;height:100%}
-
-.toast{
-position:fixed;
-bottom:20px;
-left:20px;
-background:#22c55e;
-color:#fff;
-padding:12px 20px;
-border-radius:10px;
-display:none;
-z-index:999;
-}
-
+.toast{position:fixed;bottom:20px;left:20px;background:#22c55e;color:#fff;padding:12px 20px;border-radius:10px;display:none;z-index:999;}
 .hidden{display:none}
 </style>
 </head>
@@ -590,8 +512,8 @@ let TOKEN=""
 let USERNAME=""
 let ALL_ERRORS=[]
 
+// ================= FILTER =================
 function applyFilter(){
-
     let doc = document.getElementById("filterDoc").value.toLowerCase().trim()
     let amount = document.getElementById("filterAmount").value.trim()
 
@@ -615,11 +537,10 @@ function applyFilter(){
 function resetFilter(){
     document.getElementById("filterDoc").value = ""
     document.getElementById("filterAmount").value = ""
-
     render(ALL_ERRORS)
 }
 
-
+// ================= UI =================
 function showToast(msg,color="#22c55e"){
 let t=document.getElementById("toast")
 t.innerText=msg
@@ -631,6 +552,7 @@ setTimeout(()=>t.style.display="none",3000)
 function toggleMode(){document.body.classList.toggle("dark")}
 function logout(){location.reload()}
 
+// ================= AUTH =================
 function goRegister(){
 loginBox.classList.add("hidden")
 registerBox.classList.remove("hidden")
@@ -645,16 +567,7 @@ async function register(){
 let f=new FormData()
 f.append("username",ruser.value)
 f.append("password",rpass.value)
-
 let r = await fetch("/register",{method:"POST",body:f})
-
-if(!r.ok){
-    let text = await r.text()
-    console.log("REGISTER ERROR:", text)
-    showToast("خطأ في التسجيل","#ef4444")
-    return
-}
-
 let d = await r.json()
 showToast("تم إنشاء الحساب")
 goLogin()
@@ -662,36 +575,24 @@ goLogin()
 
 async function login(){
 let f=new FormData()
-
-let username = document.getElementById("user").value
-let password = document.getElementById("pass").value
-
-f.append("username", username)
-f.append("password", password)
+f.append("username",user.value)
+f.append("password",pass.value)
 
 let r=await fetch("/login",{method:"POST",body:f})
-
-if(!r.ok){
-    let text = await r.text()
-    console.log("SERVER ERROR:", text)
-    showToast("خطأ في السيرفر","#ef4444")
-    return
-}
-
 let d=await r.json()
-console.log(d)
 
 if(d.token){
 TOKEN=d.token
 USERNAME=d.username
 loginBox.classList.add("hidden")
 systemBox.classList.remove("hidden")
-document.getElementById("welcomeUser").innerText="مرحبًا "+USERNAME
+welcomeUser.innerText="مرحبًا "+USERNAME
 }else{
 showToast("فشل تسجيل الدخول","#ef4444")
 }
 }
 
+// ================= RENDER =================
 function render(errors){
 
     errors.sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -699,33 +600,41 @@ function render(errors){
     right.innerHTML = `<h4>${b1.value}</h4>`
     left.innerHTML  = `<h4>${b2.value}</h4>`
     
-    errors
-    .filter(x => x.branch == b1.value)
-    .forEach(x => {
-        right.innerHTML += `
+    errors.filter(x => x.branch == b1.value).forEach(x=>{
+        right.innerHTML+=`
         <div class="error">
             <div>المبلغ: ${x.amount}</div>
             <div>نوع المستند: ${x.doc || "-"}</div>
-            <div>التاريخ: ${x.date ? new Date(x.date).toISOString().split('T')[0] : "-"}</div>
+            <div>التاريخ: ${x.date || "-"}</div>
+            <div>السبب: ${x.reason || "-"}</div>
         </div>`
     })
 
-    errors
-    .filter(x => x.branch == b2.value)
-    .forEach(x => {
-        left.innerHTML += `
+    errors.filter(x => x.branch == b2.value).forEach(x=>{
+        left.innerHTML+=`
         <div class="error">
             <div>المبلغ: ${x.amount}</div>
             <div>نوع المستند: ${x.doc || "-"}</div>
-            <div>التاريخ: ${x.date ? new Date(x.date).toISOString().split('T')[0] : "-"}</div>
+            <div>التاريخ: ${x.date || "-"}</div>
+            <div>السبب: ${x.reason || "-"}</div>
         </div>`
     })
 }
+
+// ================= UPLOAD (FIXED) =================
 async function upload(){
 
+let file1 = document.getElementById("f1").files[0]
+let file2 = document.getElementById("f2").files[0]
+
+if(!file1 || !file2){
+    showToast("اختار الملفين أولاً","#ef4444")
+    return
+}
+
 let f=new FormData()
-f.append("file1",f1.files[0])
-f.append("file2",f2.files[0])
+f.append("file1", file1)
+f.append("file2", file2)
 f.append("b1",b1.value)
 f.append("b2",b2.value)
 
@@ -736,9 +645,10 @@ headers:{
 "Authorization":"Bearer "+TOKEN
 }
 })
+
 if(!r.ok){
     let text = await r.text()
-    console.log("ANALYZE ERROR:", text)
+    console.log(text)
     showToast("خطأ في التحليل","#ef4444")
     return
 }
@@ -747,54 +657,24 @@ let d=await r.json()
 
 ALL_ERRORS=d.errors
 
-let ordered = [
-[b1.value, d.counts[b1.value] || 0],
-[b2.value, d.counts[b2.value] || 0]
-]
-
 stats.innerHTML=""
-ordered.forEach(([b,count])=>{
-stats.innerHTML+=`
-<div class="stat">
-<span>${b}</span>
-<b>${count}</b>
-<span>عدد الأخطاء</span>
-</div>`
+[[b1.value, d.counts[b1.value]||0],[b2.value, d.counts[b2.value]||0]].forEach(([b,c])=>{
+stats.innerHTML+=`<div class="stat"><span>${b}</span><b>${c}</b><span>عدد الأخطاء</span></div>`
 })
-
-let totalHTML = "<h3>نسبة الخطأ لكل فرع</h3>"
-
-ordered.forEach(([b,count])=>{
-let total = d.totals[b] || 0
-let percent = total ? ((count / total) * 100).toFixed(1) : 0
-
-totalHTML += `
-<div style="margin-bottom:12px">
-📍 ${b}: ${percent}%
-<div class="bar">
-<div class="bar-inner" style="width:${percent}%"></div>
-</div>
-</div>`
-})
-
-totals.innerHTML = totalHTML
 
 render(ALL_ERRORS)
 showToast("تم التحليل ✔️")
 }
 
+// ================= DOWNLOAD =================
 function download(){
-fetch("/download", {
-headers: {
-"Authorization": "Bearer " + TOKEN
-}
-})
-.then(res => res.blob())
-.then(blob => {
-let url = window.URL.createObjectURL(blob)
-let a = document.createElement("a")
-a.href = url
-a.download = "report.xlsx"
+fetch("/download",{headers:{"Authorization":"Bearer "+TOKEN}})
+.then(res=>res.blob())
+.then(blob=>{
+let url=URL.createObjectURL(blob)
+let a=document.createElement("a")
+a.href=url
+a.download="report.xlsx"
 a.click()
 })
 }
