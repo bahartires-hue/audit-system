@@ -155,30 +155,31 @@ def process(file, filename, branch):
         debit  = safe(row[debit_col]) if debit_col else 0
         credit = safe(row[credit_col]) if credit_col else 0
 
-        # 🔥 إصلاح التاريخ (Excel + نص)
+        # 🔥 إصلاح التاريخ (المهم)
         date_val = row[date_col] if date_col else None
 
         try:
-    if isinstance(date_val, (int, float)):
-        date = pd.to_datetime(date_val, unit='d', origin='1899-12-30')
-    else:
-        date = pd.to_datetime(str(date_val), errors='coerce', dayfirst=True)
+            if isinstance(date_val, (int, float)):
+                date = pd.to_datetime(date_val, unit='d', origin='1899-12-30')
+            else:
+                date = pd.to_datetime(str(date_val), errors='coerce', dayfirst=True)
 
-    if pd.isna(date):
-        date = str(date_val)  # 👈 رجّع النص بدل ما يكون None
-    else:
-        date = date.strftime("%Y-%m-%d")
+            if pd.isna(date):
+                date = str(date_val)
+            else:
+                date = date.strftime("%Y-%m-%d")
 
-except:
-    date = str(date_val)
-    
+        except:
+            date = str(date_val)
+
+        # المستند
         doc = str(row[doc_col]).strip() if doc_col else ""
 
         # تجاهل الصفوف بدون مبلغ
         if debit == 0 and credit == 0:
             continue
 
-        # 🔥 مهم: لا نكرر الصف (نأخذ طرف واحد فقط)
+        # لا نكرر الصف
         if credit > 0:
             amount = credit
             t = "credit"
@@ -245,12 +246,40 @@ def match_doc(d1, d2):
 
     return False
     
+# ================= HELPERS =================
+
+def date_diff_days(d1, d2):
+    try:
+        d1 = pd.to_datetime(d1, errors='coerce')
+        d2 = pd.to_datetime(d2, errors='coerce')
+
+        if pd.isna(d1) or pd.isna(d2):
+            return None
+
+        return abs((d1 - d2).days)
+    except:
+        return None
+
+
+def clean_doc(s):
+    s = str(s).lower().strip()
+
+    s = s.replace("رقم", "")
+    s = s.replace("-", "")
+    s = s.replace("_", "")
+    s = s.replace("  ", " ")
+
+    return s
+
+
+# ================= ANALYZE =================
+
 def analyze(d1, d2):
     res = []
     used = [False] * len(d2)
     counts = {}
 
-    # 🔥 خطوة 1: حذف العمليات العكسية داخل نفس الفرع
+    # 🔥 حذف العمليات العكسية داخل نفس الفرع
     def remove_internal_matches(data):
         cleaned = []
         used_local = [False] * len(data)
@@ -265,16 +294,16 @@ def analyze(d1, d2):
                 if i == j or used_local[j]:
                     continue
 
-                # نفس الفرع
                 if x1["branch"] != x2["branch"]:
                     continue
 
-                # نفس التاريخ
-                if str(x1["date"]) != str(x2["date"]):
+                # تاريخ مرن
+                days = date_diff_days(x1["date"], x2["date"])
+                if days is None or days > 1:
                     continue
 
-                # نفس المبلغ
-                if abs(x1["amount"] - x2["amount"]) > 1:
+                # 🔥 تعديل المبلغ (دقيق جداً)
+                if abs(x1["amount"] - x2["amount"]) > 0.01:
                     continue
 
                 # عكس النوع
@@ -289,20 +318,20 @@ def analyze(d1, d2):
 
         return cleaned
 
-    # 🔥 تنظيف داخلي
+    # تنظيف داخلي
     d1 = remove_internal_matches(d1)
     d2 = remove_internal_matches(d2)
 
-    # 🔥 خطوة 2: المطابقة بين الفرعين
+    # 🔥 المطابقة الذكية
     for x1 in d1:
         best_i = -1
-        best_diff = 999999
+        best_score = -1
 
         for i, x2 in enumerate(d2):
             if used[i]:
                 continue
 
-            # مدين مقابل دائن
+            # لازم مدين مقابل دائن
             if x1.get("type") == x2.get("type"):
                 continue
 
@@ -311,27 +340,58 @@ def analyze(d1, d2):
 
             diff = abs(amount1 - amount2)
 
-            if diff > 1:
+            # 🔥 التعديل هنا
+            if diff > 0.01:
                 continue
 
-            if diff < best_diff:
-                best_diff = diff
+            score = 0
+
+            # 🔥 1. المبلغ
+            score += 5
+
+            # 🔥 2. التاريخ
+            days = date_diff_days(x1.get("date"), x2.get("date"))
+
+            if days is not None:
+                if days == 0:
+                    score += 3
+                elif days <= 2:
+                    score += 2
+                elif days <= 5:
+                    score += 1
+
+            # 🔥 3. المستند
+            doc1 = clean_doc(x1.get("doc"))
+            doc2 = clean_doc(x2.get("doc"))
+
+            if doc1 and doc2:
+                if doc1 in doc2 or doc2 in doc1:
+                    score += 2
+
+            # اختيار الأفضل
+            if score > best_score:
+                best_score = score
                 best_i = i
 
         if best_i != -1:
-            used[best_i] = True
-        else:
-            res.append(x1)
-            b = x1.get("branch") or "unknown"
-            counts[b] = counts.get(b, 0) + 1
-
+    used[best_i] = True
+else:
+    res.append({
+        **x1,
+        "reason": "لا يوجد عملية مطابقة في الفرع الآخر"
+    })
+    b = x1.get("branch") or "unknown"
+    counts[b] = counts.get(b, 0) + 1
+    
+    # الباقي من الفرع الثاني
     for i, x in enumerate(d2):
-        if not used[i]:
-            res.append(x)
-            b = x.get("branch") or "unknown"
-            counts[b] = counts.get(b, 0) + 1
-
-    return res, counts
+    if not used[i]:
+        res.append({
+            **x,
+            "reason": "لا يوجد عملية مطابقة في الفرع الآخر"
+        })
+        b = x.get("branch") or "unknown"
+        counts[b] = counts.get(b, 0) + 1
     
 # ================= FRONTEND (نفس واجهتك) =================
 @app.get("/", response_class=HTMLResponse)
@@ -631,9 +691,11 @@ showToast("فشل تسجيل الدخول","#ef4444")
 
 function render(errors){
 
+    errors.sort((a, b) => new Date(b.date) - new Date(a.date))
+
     right.innerHTML = `<h4>${b1.value}</h4>`
     left.innerHTML  = `<h4>${b2.value}</h4>`
-
+    
     errors
     .filter(x => x.branch == b1.value)
     .forEach(x => {
