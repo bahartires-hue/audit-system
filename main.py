@@ -53,53 +53,49 @@ def safe(v):
 
 # ================= SMART DETECTION =================
 def detect_columns(df):
+    df.columns = df.columns.astype(str).str.strip()
+
     debit_col = None
     credit_col = None
     date_col = None
 
+    # 1. تحديد بالاسم
     for col in df.columns:
-        name = str(col).strip().lower()
+        name = str(col).lower()
 
-        # 👇 تحديد بالاسم (الأهم)
-        if "مدين" in name or "debit" in name:
+        if not debit_col and any(x in name for x in ["مدين", "debit", "dr"]):
             debit_col = col
-            continue
 
-        if "دائن" in name or "credit" in name:
+        if not credit_col and any(x in name for x in ["دائن", "credit", "cr"]):
             credit_col = col
-            continue
 
-        if "تاريخ" in name or "date" in name:
+        if not date_col and any(x in name for x in ["تاريخ", "date"]):
             date_col = col
-            continue
 
-    # 👇 fallback لو الاسم فشل
-    numeric_cols = []
+    # 2. fallback رقمي
+    numeric_scores = {}
     for col in df.columns:
-        sample = df[col].dropna().head(20)
-        nums = pd.to_numeric(sample, errors='coerce')
+        nums = pd.to_numeric(df[col], errors='coerce')
+        numeric_scores[col] = nums.notna().sum()
 
-        if nums.notna().sum() > len(sample)*0.6:
-            numeric_cols.append(col)
+    sorted_cols = sorted(numeric_scores, key=numeric_scores.get, reverse=True)
 
-    if not debit_col and len(numeric_cols) > 0:
-        debit_col = numeric_cols[0]
+    if not debit_col and len(sorted_cols) >= 1:
+        debit_col = sorted_cols[0]
 
-    if not credit_col and len(numeric_cols) > 1:
-        credit_col = numeric_cols[1]
+    if not credit_col and len(sorted_cols) >= 2:
+        credit_col = sorted_cols[1]
 
-    # 👇 fallback للتاريخ
+    # 3. fallback تاريخ
     if not date_col:
         for col in df.columns:
-            sample = df[col].dropna().head(20)
-            parsed = pd.to_datetime(sample, errors='coerce')
-
-            if parsed.notna().sum() > len(sample)*0.6:
+            parsed = pd.to_datetime(df[col], errors='coerce')
+            if parsed.notna().sum() > len(df) * 0.5:
                 date_col = col
                 break
 
     return debit_col, credit_col, date_col
-    
+
 # ================= READ =================
 
 def read_excel(file):
@@ -129,8 +125,13 @@ def read_any(file, filename):
     else:
         raise Exception("نوع الملف غير مدعوم")
 
+
 def process(file, filename, branch):
     df = read_any(file, filename)
+
+    if df is None or len(df) == 0:
+        return []
+
     df.columns = df.columns.astype(str).str.strip()
 
     debit_col, credit_col, date_col = detect_columns(df)
@@ -141,9 +142,13 @@ def process(file, filename, branch):
         name = str(col).lower()
         if any(x in name for x in ["مستند", "doc", "نوع", "بيان", "الوصف", "description"]):
             doc_col = col
+            break
 
+    # fallback لو الأعمدة فشلت
     if not debit_col and not credit_col:
-        raise Exception("❌ لم يتم التعرف على الأعمدة")
+        numeric_cols = df.select_dtypes(include='number').columns.tolist()
+        if numeric_cols:
+            debit_col = numeric_cols[0]
 
     data = []
 
@@ -152,40 +157,64 @@ def process(file, filename, branch):
         if row.isna().all():
             continue
 
-        debit  = safe(row[debit_col]) if debit_col else 0
-        credit = safe(row[credit_col]) if credit_col else 0
+        debit  = safe(row[debit_col]) if debit_col in df.columns else 0
+        credit = safe(row[credit_col]) if credit_col in df.columns else 0
 
-        # 🔥 إصلاح التاريخ (المهم)
-        date_val = row[date_col] if date_col else None
-
-        try:
-            if isinstance(date_val, (int, float)):
-                date = pd.to_datetime(date_val, unit='d', origin='1899-12-30')
-            else:
-                date = pd.to_datetime(str(date_val), errors='coerce', dayfirst=True)
-
-            if pd.isna(date):
-                date = str(date_val)
-            else:
-                date = date.strftime("%Y-%m-%d")
-
-        except:
-            date = str(date_val)
-
-        # المستند
-        doc = str(row[doc_col]).strip() if doc_col else ""
-
-        # تجاهل الصفوف بدون مبلغ
         if debit == 0 and credit == 0:
             continue
 
-        # لا نكرر الصف
+        # =========================================
+        # 🔥 أي صف فيه مدين + دائن = خطأ
+        # =========================================
+        if debit > 0 and credit > 0:
+            amount = max(debit, credit)
+
+            data.append({
+                "amount": float(amount),
+                "type": "error",   # نوع خاص
+                "branch": branch,
+                "date": None,
+                "doc": "",
+                "reason": "خطأ: الصف يحتوي مدين ودائن"
+            })
+            continue
+
+        # =========================================
+        # تحديد النوع الطبيعي
+        # =========================================
         if credit > 0:
             amount = credit
             t = "credit"
         else:
             amount = debit
             t = "debit"
+
+        # =========================================
+        # التاريخ
+        # =========================================
+        date = None
+        if date_col and date_col in df.columns:
+            try:
+                val = row[date_col]
+
+                if isinstance(val, (int, float)):
+                    d = pd.to_datetime(val, unit='d', origin='1899-12-30', errors='coerce')
+                else:
+                    d = pd.to_datetime(str(val), errors='coerce', dayfirst=True)
+
+                if not pd.isna(d):
+                    date = d.strftime("%Y-%m-%d")
+
+            except:
+                date = None
+
+        # =========================================
+        # المستند
+        # =========================================
+        if doc_col and doc_col in df.columns:
+            doc = str(row[doc_col]).strip()
+        else:
+            doc = ""
 
         data.append({
             "amount": float(amount),
@@ -279,8 +308,11 @@ def analyze(d1, d2):
     used = [False] * len(d2)
     counts = {}
 
+    # =========================================
     # 🔥 حذف العمليات العكسية داخل نفس الفرع
-    def remove_internal_matches(data):
+    # (بيع + مردود نفس اليوم ونفس المبلغ)
+    # =========================================
+    def remove_reversals(data):
         cleaned = []
         used_local = [False] * len(data)
 
@@ -297,21 +329,21 @@ def analyze(d1, d2):
                 if x1["branch"] != x2["branch"]:
                     continue
 
-                # تاريخ مرن
-                days = date_diff_days(x1["date"], x2["date"])
-                if days is None or days > 1:
+                if x1["type"] == x2["type"]:
                     continue
 
-                # 🔥 تعديل المبلغ (دقيق جداً)
                 if abs(x1["amount"] - x2["amount"]) > 0.01:
                     continue
 
-                # عكس النوع
-                if x1["type"] != x2["type"]:
-                    used_local[i] = True
-                    used_local[j] = True
-                    found = True
-                    break
+                days = date_diff_days(x1["date"], x2["date"])
+                if days is None or days > 0:
+                    continue
+
+                # 🔥 حذف الاثنين
+                used_local[i] = True
+                used_local[j] = True
+                found = True
+                break
 
             if not found:
                 cleaned.append(x1)
@@ -319,77 +351,73 @@ def analyze(d1, d2):
         return cleaned
 
     # تنظيف داخلي
-    d1 = remove_internal_matches(d1)
-    d2 = remove_internal_matches(d2)
+    d1 = remove_reversals(d1)
+    d2 = remove_reversals(d2)
 
-    # 🔥 المطابقة الذكية
+    # =========================================
+    # 🔥 المطابقة بين الفروع
+    # =========================================
     for x1 in d1:
+
+        # 🔥 الصف الخطأ (مدين + دائن)
+        if x1.get("type") == "error":
+            res.append(x1)
+            b = x1.get("branch") or "unknown"
+            counts[b] = counts.get(b, 0) + 1
+            continue
+
         best_i = -1
-        best_score = -1
 
         for i, x2 in enumerate(d2):
             if used[i]:
                 continue
 
-            # لازم مدين مقابل دائن
-            if x1.get("type") == x2.get("type"):
+            # 🔥 تجاهل الصف الخطأ
+            if x2.get("type") == "error":
                 continue
 
-            amount1 = float(x1.get("amount") or 0)
-            amount2 = float(x2.get("amount") or 0)
-
-            diff = abs(amount1 - amount2)
-
-            # 🔥 التعديل هنا
-            if diff > 0.01:
+            # 🔥 لازم عكس الاتجاه
+            if not (
+                (x1["type"] == "credit" and x2["type"] == "debit") or
+                (x1["type"] == "debit" and x2["type"] == "credit")
+            ):
                 continue
 
-            score = 0
+            # نفس المبلغ
+            if abs(x1["amount"] - x2["amount"]) > 1:
+                continue
 
-            # 🔥 1. المبلغ
-            score += 5
-
-            # 🔥 2. التاريخ
-            days = date_diff_days(x1.get("date"), x2.get("date"))
-
-            if days is not None:
-                if days == 0:
-                    score += 3
-                elif days <= 2:
-                    score += 2
-                elif days <= 5:
-                    score += 1
-
-            # 🔥 3. المستند
-            doc1 = clean_doc(x1.get("doc"))
-            doc2 = clean_doc(x2.get("doc"))
-
-            if doc1 and doc2:
-                if doc1 in doc2 or doc2 in doc1:
-                    score += 2
-
-            # اختيار الأفضل
-            if score > best_score:
-                best_score = score
+            # نفس اليوم أو قريب
+            days = date_diff_days(x1["date"], x2["date"])
+            if days is not None and days <= 2:
                 best_i = i
+                break
 
-        # 🔥 هذا كان مكان الغلط عندك
         if best_i != -1:
             used[best_i] = True
         else:
             res.append({
                 **x1,
-                "reason": "لا يوجد عملية مطابقة في الفرع الآخر"
+                "reason": "لا يوجد مقابل في الفرع الآخر"
             })
             b = x1.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
 
+    # =========================================
     # 🔥 الباقي من الفرع الثاني
+    # =========================================
     for i, x in enumerate(d2):
         if not used[i]:
+
+            if x.get("type") == "error":
+                res.append(x)
+                b = x.get("branch") or "unknown"
+                counts[b] = counts.get(b, 0) + 1
+                continue
+
             res.append({
                 **x,
-                "reason": "لا يوجد عملية مطابقة في الفرع الآخر"
+                "reason": "لا يوجد مقابل في الفرع الآخر"
             })
             b = x.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
@@ -712,13 +740,23 @@ def login(username: str = Form(...), password: str = Form(...), db: Session = De
     }
 @app.post("/analyze")
 def analyze_api(
-    authorization: str = Header(...),
+    authorization: str = Header(None),
     file1: UploadFile = File(...),
     file2: UploadFile = File(...),
     b1: str = Form(...),
     b2: str = Form(...)
 ):
-    scheme, token = authorization.split()
+    # 🔥 حماية بدون ما يطيح
+    if not authorization:
+        raise HTTPException(401, "Missing token")
+
+    parts = authorization.split()
+
+    if len(parts) != 2:
+        raise HTTPException(401, "Invalid token format")
+
+    scheme, token = parts
+
     check_auth(token)
 
     d1 = process(file1.file, file1.filename, b1)
@@ -737,8 +775,18 @@ def analyze_api(
     return {"errors": errors, "counts": counts, "totals": totals}
     
 @app.get("/download")
-def download(authorization: str = Header(...)):
-    scheme, token = authorization.split()
+def download(authorization: str = Header(None)):
+    # 🔥 حماية بدون crash
+    if not authorization:
+        raise HTTPException(401, "Missing token")
+
+    parts = authorization.split()
+
+    if len(parts) != 2:
+        raise HTTPException(401, "Invalid token format")
+
+    scheme, token = parts
+
     check_auth(token)
 
     df = pd.DataFrame(last_errors)
