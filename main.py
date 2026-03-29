@@ -51,7 +51,7 @@ def safe(v):
     except:
         return 0
 
-# ================= SMART DETECTION =================
+# ================= DETECT =================
 def detect_columns(df):
     df.columns = df.columns.astype(str).str.strip()
 
@@ -59,45 +59,33 @@ def detect_columns(df):
     credit_col = None
     date_col = None
 
-    # 1. تحديد بالاسم
     for col in df.columns:
         name = str(col).lower()
 
-        if not debit_col and any(x in name for x in ["مدين", "debit", "dr"]):
+        if not debit_col and any(x in name for x in ["مدين","debit","dr"]):
             debit_col = col
-
-        if not credit_col and any(x in name for x in ["دائن", "credit", "cr"]):
+        if not credit_col and any(x in name for x in ["دائن","credit","cr"]):
             credit_col = col
-
-        if not date_col and any(x in name for x in ["تاريخ", "date"]):
+        if not date_col and any(x in name for x in ["تاريخ","date"]):
             date_col = col
 
-    # 2. fallback رقمي
-    numeric_scores = {}
-    for col in df.columns:
-        nums = pd.to_numeric(df[col], errors='coerce')
-        numeric_scores[col] = nums.notna().sum()
-
+    numeric_scores = {c: pd.to_numeric(df[c], errors='coerce').notna().sum() for c in df.columns}
     sorted_cols = sorted(numeric_scores, key=numeric_scores.get, reverse=True)
 
-    if not debit_col and len(sorted_cols) >= 1:
+    if not debit_col and sorted_cols:
         debit_col = sorted_cols[0]
-
-    if not credit_col and len(sorted_cols) >= 2:
+    if not credit_col and len(sorted_cols) > 1:
         credit_col = sorted_cols[1]
 
-    # 3. fallback تاريخ
     if not date_col:
         for col in df.columns:
-            parsed = pd.to_datetime(df[col], errors='coerce')
-            if parsed.notna().sum() > len(df) * 0.5:
+            if pd.to_datetime(df[col], errors='coerce').notna().sum() > len(df)*0.5:
                 date_col = col
                 break
 
     return debit_col, credit_col, date_col
 
 # ================= READ =================
-
 def read_excel(file):
     return pd.read_excel(file)
 
@@ -105,57 +93,43 @@ def read_pdf(file):
     rows=[]
     with pdfplumber.open(file) as pdf:
         for page in pdf.pages:
-            tables = page.extract_tables()
-            for table in tables:
+            for table in page.extract_tables():
                 for row in table:
                     rows.append(row)
 
     df=pd.DataFrame(rows)
     df=df.dropna(how="all")
     df.columns=df.iloc[0]
-    df=df[1:]
-    return df
+    return df[1:]
 
-# 👇 هذا اللي ناقصك (المهم جداً)
 def read_any(file, filename):
-    if filename.endswith(".xlsx") or filename.endswith(".xls"):
+    if filename.endswith((".xlsx",".xls")):
         return read_excel(file)
     elif filename.endswith(".pdf"):
         return read_pdf(file)
     else:
         raise Exception("نوع الملف غير مدعوم")
 
-
+# ================= PROCESS =================
 def process(file, filename, branch):
     df = read_any(file, filename)
 
-    if df is None or len(df) == 0:
+    if df is None or df.empty:
         return []
 
     df.columns = df.columns.astype(str).str.strip()
 
     debit_col, credit_col, date_col = detect_columns(df)
 
-    # عمود المستند (اختياري)
     doc_col = None
     for col in df.columns:
-        name = str(col).lower()
-        if any(x in name for x in ["مستند", "doc", "نوع", "بيان", "الوصف", "description"]):
+        if any(x in str(col).lower() for x in ["مستند","doc","نوع","بيان","الوصف"]):
             doc_col = col
             break
-
-    # fallback لو الأعمدة فشلت
-    if not debit_col and not credit_col:
-        numeric_cols = df.select_dtypes(include='number').columns.tolist()
-        if numeric_cols:
-            debit_col = numeric_cols[0]
 
     data = []
 
     for _, row in df.iterrows():
-
-        if row.isna().all():
-            continue
 
         debit  = safe(row[debit_col]) if debit_col in df.columns else 0
         credit = safe(row[credit_col]) if credit_col in df.columns else 0
@@ -163,58 +137,27 @@ def process(file, filename, branch):
         if debit == 0 and credit == 0:
             continue
 
-        # =========================================
-        # 🔥 أي صف فيه مدين + دائن = خطأ
-        # =========================================
         if debit > 0 and credit > 0:
-            amount = max(debit, credit)
-
             data.append({
-                "amount": float(amount),
-                "type": "error",   # نوع خاص
+                "amount": max(debit, credit),
+                "type": "error",
                 "branch": branch,
                 "date": None,
                 "doc": "",
-                "reason": "خطأ: الصف يحتوي مدين ودائن"
+                "reason": "خطأ: مدين + دائن"
             })
             continue
 
-        # =========================================
-        # تحديد النوع الطبيعي
-        # =========================================
-        if credit > 0:
-            amount = credit
-            t = "credit"
-        else:
-            amount = debit
-            t = "debit"
+        t = "credit" if credit > 0 else "debit"
+        amount = credit if credit > 0 else debit
 
-        # =========================================
-        # التاريخ
-        # =========================================
-        date = None
-        if date_col and date_col in df.columns:
-            try:
-                val = row[date_col]
+        date=None
+        if date_col:
+            d = pd.to_datetime(row[date_col], errors='coerce')
+            if not pd.isna(d):
+                date = d.strftime("%Y-%m-%d")
 
-                if isinstance(val, (int, float)):
-                    d = pd.to_datetime(val, unit='d', origin='1899-12-30', errors='coerce')
-                else:
-                    d = pd.to_datetime(str(val), errors='coerce', dayfirst=True)
-
-                if not pd.isna(d):
-                    date = d.strftime("%Y-%m-%d")
-
-            except:
-                date = None
-
-        # =========================================
-        # المستند
-        # =========================================
-        if doc_col and doc_col in df.columns:
-            doc = str(row[doc_col]).strip()
-        else:
-            doc = ""
+        doc = str(row[doc_col]).strip() if doc_col else ""
 
         data.append({
             "amount": float(amount),
@@ -225,572 +168,151 @@ def process(file, filename, branch):
         })
 
     return data
-    
-# ================= ANALYZE =================
-# ================= ANALYZE =================
+
+# ================= MATCH =================
+def clean(s):
+    return str(s).lower().replace(" ","").replace("-","")
 
 doc_map = {
-    "مردود مبيعات": "مردود مشتريات",
-    "مردود مشتريات": "مردود مبيعات",
-
-    "سند قبض": "سند صرف",
-    "سند صرف": "سند قبض",
-
-    "تحويل مخزني": "تحويل مخزني",
-    "توريد مخزني": "صرف مخزني",
-    "صرف مخزني": "توريد مخزني",
-
-    "قيد يومية": "قيد يومية",
-    "قيد افتتاحي": "قيد افتتاحي",
-
-    "مبيعات": "مشتريات",
-    "مشتريات": "مبيعات"
+    "مبيعات":"مشتريات",
+    "مشتريات":"مبيعات"
 }
 
-def clean(s):
-    s = str(s).strip().lower()
-    s = s.replace(" ", "")
-    s = s.replace("-", "")
-    s = s.replace("_", "")
-    return s
-
-def match_doc(d1, d2):
-    if not d1 or not d2:
-        return False
-
-    d1 = clean(d1)
-    d2 = clean(d2)
-
-    for key, val in doc_map.items():
-        k = clean(key)
-        v = clean(val)
-
-        # 👇 تطابق مرن
+def match_doc(d1,d2):
+    d1,d2=clean(d1),clean(d2)
+    for k,v in doc_map.items():
         if k in d1 and v in d2:
             return True
-
-        # 👇 دعم الاتجاه العكسي (احتياط)
-        if v in d1 and k in d2:
-            return True
-
     return False
-    
-# ================= HELPERS =================
 
-def date_diff_days(d1, d2):
+def date_diff(d1,d2):
     try:
-        d1 = pd.to_datetime(d1, errors='coerce')
-        d2 = pd.to_datetime(d2, errors='coerce')
-
-        if pd.isna(d1) or pd.isna(d2):
-            return None
-
-        return abs((d1 - d2).days)
+        return abs((pd.to_datetime(d1)-pd.to_datetime(d2)).days)
     except:
         return None
 
-
-def clean_doc(s):
-    s = str(s).lower().strip()
-
-    s = s.replace("رقم", "")
-    s = s.replace("-", "")
-    s = s.replace("_", "")
-    s = s.replace("  ", " ")
-
-    return s
-
-
 # ================= ANALYZE =================
+def analyze(d1,d2):
+    res=[]
+    used=[False]*len(d2)
+    counts={}
 
-def analyze(d1, d2):
-    res = []
-    used = [False] * len(d2)
-    counts = {}
-
-    # =========================================
-    # 🔥 حذف العمليات العكسية داخل نفس الفرع
-    # (بيع + مردود نفس اليوم ونفس المبلغ)
-    # =========================================
-    def remove_reversals(data):
-        cleaned = []
-        used_local = [False] * len(data)
-
-        for i, x1 in enumerate(data):
-            if used_local[i]:
-                continue
-
-            found = False
-
-            for j, x2 in enumerate(data):
-                if i == j or used_local[j]:
-                    continue
-
-                if x1["branch"] != x2["branch"]:
-                    continue
-
-                if x1["type"] == x2["type"]:
-                    continue
-
-                if abs(x1["amount"] - x2["amount"]) > 0.01:
-                    continue
-
-                days = date_diff_days(x1["date"], x2["date"])
-                if days is None or days > 0:
-                    continue
-
-                # 🔥 حذف الاثنين
-                used_local[i] = True
-                used_local[j] = True
-                found = True
-                break
-
-            if not found:
-                cleaned.append(x1)
-
-        return cleaned
-
-    # تنظيف داخلي
-    d1 = remove_reversals(d1)
-    d2 = remove_reversals(d2)
-
-    # =========================================
-    # 🔥 المطابقة بين الفروع
-    # =========================================
     for x1 in d1:
 
-        # 🔥 الصف الخطأ (مدين + دائن)
-        if x1.get("type") == "error":
+        if x1.get("type")=="error":
             res.append(x1)
-            b = x1.get("branch") or "unknown"
-            counts[b] = counts.get(b, 0) + 1
+            counts[x1["branch"]] = counts.get(x1["branch"],0)+1
             continue
 
-        best_i = -1
+        matched=False
 
-        for i, x2 in enumerate(d2):
-            if used[i]:
+        for i,x2 in enumerate(d2):
+            if used[i]: continue
+            if x2.get("type")=="error": continue
+
+            if x1["type"]==x2["type"]:
                 continue
 
-            # 🔥 تجاهل الصف الخطأ
-            if x2.get("type") == "error":
+            if abs(x1["amount"]-x2["amount"])>1:
                 continue
 
-            # 🔥 لازم عكس الاتجاه
-            if not (
-                (x1["type"] == "credit" and x2["type"] == "debit") or
-                (x1["type"] == "debit" and x2["type"] == "credit")
-            ):
+            if not match_doc(x1["doc"],x2["doc"]):
                 continue
 
-            # نفس المبلغ
-            if abs(x1["amount"] - x2["amount"]) > 1:
-                continue
-
-            # نفس اليوم أو قريب
-            days = date_diff_days(x1["date"], x2["date"])
-            if days is not None and days <= 2:
-                best_i = i
+            days=date_diff(x1["date"],x2["date"])
+            if days is None or days<=2:
+                used[i]=True
+                matched=True
                 break
 
-        if best_i != -1:
-            used[best_i] = True
-        else:
-            res.append({
-                **x1,
-                "reason": "لا يوجد مقابل في الفرع الآخر"
-            })
-            b = x1.get("branch") or "unknown"
-            counts[b] = counts.get(b, 0) + 1
+        if not matched:
+            x1["reason"]="لا يوجد مقابل"
+            res.append(x1)
+            counts[x1["branch"]] = counts.get(x1["branch"],0)+1
 
-    # =========================================
-    # 🔥 الباقي من الفرع الثاني
-    # =========================================
-    for i, x in enumerate(d2):
+    for i,x in enumerate(d2):
         if not used[i]:
+            x["reason"]="لا يوجد مقابل"
+            res.append(x)
+            counts[x["branch"]] = counts.get(x["branch"],0)+1
 
-            if x.get("type") == "error":
-                res.append(x)
-                b = x.get("branch") or "unknown"
-                counts[b] = counts.get(b, 0) + 1
-                continue
+    return res,counts
 
-            res.append({
-                **x,
-                "reason": "لا يوجد مقابل في الفرع الآخر"
-            })
-            b = x.get("branch") or "unknown"
-            counts[b] = counts.get(b, 0) + 1
-
-    return res, counts
-    
-# ================= FRONTEND (نفس واجهتك) =================
+# ================= FRONT =================
 @app.get("/", response_class=HTMLResponse)
 def home():
-    return """ 
+    return """
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;600;800&display=swap" rel="stylesheet">
-
-<style>
-*{font-family:Cairo;box-sizing:border-box}
-body{margin:0;background:#f1f5f9;color:#111;transition:0.3s;}
-body.dark{background:#020617;color:#fff;}
-.container{padding:20px;max-width:1100px;margin:auto;}
-.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
-.logo{font-size:20px;font-weight:800;color:#3b82f6;}
-#welcomeUser{font-size:16px;color:#1d4ed8;font-weight:900;}
-.btn{padding:10px;border:none;border-radius:10px;cursor:pointer;}
-.btn-danger{background:#ef4444;color:#fff;}
-.btn-mode{background:#e2e8f0;}
-.card{background:#fff;padding:20px;border-radius:15px;margin-bottom:20px;box-shadow:0 5px 20px rgba(0,0,0,0.05);}
-body.dark .card{background:#0f172a;}
-input{width:100%;padding:10px;margin:5px 0 10px;border-radius:8px;border:1px solid #ddd;}
-.analyze-btn{width:150px;margin:auto;display:block;padding:10px;background:#3b82f6;color:#fff;border:none;border-radius:10px;}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:15px;}
-.stat{background:#fff;padding:15px;border-radius:12px;text-align:center;border:1px solid #e5e7eb;}
-.stat b{font-size:26px;color:#3b82f6;display:block;}
-.stat span{font-size:14px;color:#666;}
-.errors{display:grid;grid-template-columns:1fr 1fr;gap:15px;}
-.error{background:#fff;border:1px solid #e5e7eb;padding:18px;border-radius:14px;margin-bottom:12px;}
-.error div{font-size:15px;margin-bottom:5px;}
-.bar{background:#e5e7eb;height:10px;border-radius:10px;margin-top:5px;overflow:hidden}
-.bar-inner{background:#ef4444;height:100%}
-.toast{position:fixed;bottom:20px;left:20px;background:#22c55e;color:#fff;padding:12px 20px;border-radius:10px;display:none;z-index:999;}
-.hidden{display:none}
-</style>
-</head>
-
+<html dir="rtl">
 <body>
 
-<div id="toast" class="toast"></div>
-
-<div id="loginBox" class="container">
-<div class="card" style="max-width:400px;margin:auto">
-<h2>تسجيل الدخول</h2>
-<input id="user">
-<input id="pass" type="password">
-<button class="analyze-btn" onclick="login()">دخول</button>
-<button class="btn btn-mode" onclick="goRegister()">إنشاء حساب</button>
-</div>
-</div>
-
-<div id="registerBox" class="container hidden">
-<div class="card" style="max-width:400px;margin:auto">
-<h2>إنشاء حساب</h2>
-<input id="ruser">
-<input id="rpass" type="password">
-<button class="analyze-btn" onclick="register()">تسجيل</button>
-<button class="btn btn-mode" onclick="goLogin()">رجوع</button>
-</div>
-</div>
-
-<div id="systemBox" class="hidden">
-<div class="container">
-
-<div class="topbar">
-<div>
-<div class="logo">📊 Smart Audit</div>
-<div id="welcomeUser"></div>
-</div>
-<div>
-<button class="btn btn-mode" onclick="toggleMode()">الوضع</button>
-<button class="btn btn-danger" onclick="logout()">خروج</button>
-</div>
-</div>
-
-<div class="card">
-<input id="b1" placeholder="الفرع الأول">
-<input id="b2" placeholder="الفرع الثاني">
+<input id="b1" placeholder="فرع1">
+<input id="b2" placeholder="فرع2">
 <input type="file" id="f1">
 <input type="file" id="f2">
+<button onclick="upload()">تحليل</button>
 
-<div style="display:flex;gap:10px;justify-content:center;margin-top:10px">
-<button class="analyze-btn" onclick="upload()">تحليل</button>
-<button class="analyze-btn" style="background:#10b981" onclick="download()">تحميل التقرير</button>
-</div>
-</div>
-
-<div id="stats" class="stats"></div>
-<div id="totals" class="card"></div>
-
-<div class="card">
-<h3>فلترة الأخطاء</h3>
-<input id="filterDoc" placeholder="نوع المستند">
-<input id="filterAmount" placeholder="المبلغ">
-<button class="analyze-btn" onclick="applyFilter()">تطبيق</button>
-<button class="btn btn-mode" onclick="resetFilter()">إلغاء</button>
-</div>
-
-<div class="card">
-<h3>الأخطاء</h3>
-<div class="errors">
-<div id="right"></div>
-<div id="left"></div>
-</div>
-</div>
-
-</div>
-</div>
+<div id="out"></div>
 
 <script>
-let TOKEN=""
-let USERNAME=""
-let ALL_ERRORS=[]
-
-// ================= FILTER =================
-function applyFilter(){
-    let doc = document.getElementById("filterDoc").value.toLowerCase().trim()
-    let amount = document.getElementById("filterAmount").value.trim()
-
-    let filtered = ALL_ERRORS
-
-    if(doc){
-        filtered = filtered.filter(x => 
-            (x.doc || "").toLowerCase().includes(doc)
-        )
-    }
-
-    if(amount){
-        filtered = filtered.filter(x => 
-            String(x.amount) === amount
-        )
-    }
-
-    render(filtered)
-}
-
-function resetFilter(){
-    document.getElementById("filterDoc").value = ""
-    document.getElementById("filterAmount").value = ""
-    render(ALL_ERRORS)
-}
-
-// ================= UI =================
-function showToast(msg,color="#22c55e"){
-let t=document.getElementById("toast")
-t.innerText=msg
-t.style.background=color
-t.style.display="block"
-setTimeout(()=>t.style.display="none",3000)
-}
-
-function toggleMode(){document.body.classList.toggle("dark")}
-function logout(){location.reload()}
-
-// ================= AUTH =================
-function goRegister(){
-loginBox.classList.add("hidden")
-registerBox.classList.remove("hidden")
-}
-
-function goLogin(){
-registerBox.classList.add("hidden")
-loginBox.classList.remove("hidden")
-}
-
-async function register(){
-let f=new FormData()
-f.append("username",ruser.value)
-f.append("password",rpass.value)
-let r = await fetch("/register",{method:"POST",body:f})
-let d = await r.json()
-showToast("تم إنشاء الحساب")
-goLogin()
-}
-
-async function login(){
-let f=new FormData()
-f.append("username",user.value)
-f.append("password",pass.value)
-
-let r=await fetch("/login",{method:"POST",body:f})
-let d=await r.json()
-
-if(d.token){
-TOKEN=d.token
-USERNAME=d.username
-loginBox.classList.add("hidden")
-systemBox.classList.remove("hidden")
-welcomeUser.innerText="مرحبًا "+USERNAME
-}else{
-showToast("فشل تسجيل الدخول","#ef4444")
-}
-}
-
-// ================= RENDER =================
-function render(errors){
-
-    errors.sort((a, b) => new Date(b.date) - new Date(a.date))
-
-    right.innerHTML = `<h4>${b1.value}</h4>`
-    left.innerHTML  = `<h4>${b2.value}</h4>`
-    
-    errors.filter(x => x.branch == b1.value).forEach(x=>{
-        right.innerHTML+=`
-        <div class="error">
-            <div>المبلغ: ${x.amount}</div>
-            <div>نوع المستند: ${x.doc || "-"}</div>
-            <div>التاريخ: ${x.date || "-"}</div>
-            <div>السبب: ${x.reason || "-"}</div>
-        </div>`
-    })
-
-    errors.filter(x => x.branch == b2.value).forEach(x=>{
-        left.innerHTML+=`
-        <div class="error">
-            <div>المبلغ: ${x.amount}</div>
-            <div>نوع المستند: ${x.doc || "-"}</div>
-            <div>التاريخ: ${x.date || "-"}</div>
-            <div>السبب: ${x.reason || "-"}</div>
-        </div>`
-    })
-}
-
-// ================= UPLOAD (FIXED) =================
 async function upload(){
 
-let file1 = document.getElementById("f1").files[0]
-let file2 = document.getElementById("f2").files[0]
-
-if(!file1 || !file2){
-    showToast("اختار الملفين أولاً","#ef4444")
-    return
-}
-
 let f=new FormData()
-f.append("file1", file1)
-f.append("file2", file2)
+f.append("file1",f1.files[0])
+f.append("file2",f2.files[0])
 f.append("b1",b1.value)
 f.append("b2",b2.value)
 
-let r=await fetch("/analyze",{
-method:"POST",
-body:f,
-headers:{
-"Authorization":"Bearer "+TOKEN
-}
-})
-
-if(!r.ok){
-    let text = await r.text()
-    console.log(text)
-    showToast("خطأ في التحليل","#ef4444")
-    return
-}
+let r=await fetch("/analyze",{method:"POST",body:f})
 
 let d=await r.json()
 
-ALL_ERRORS=d.errors
+let html=""
 
-stats.innerHTML=""
-[[b1.value, d.counts[b1.value]||0],[b2.value, d.counts[b2.value]||0]].forEach(([b,c])=>{
-stats.innerHTML+=`<div class="stat"><span>${b}</span><b>${c}</b><span>عدد الأخطاء</span></div>`
+;(d.errors||[]).forEach(x=>{
+html+=`<div>
+${x.branch} | ${x.amount} | ${x.doc} | ${x.reason}
+</div>`
 })
 
-render(ALL_ERRORS)
-showToast("تم التحليل ✔️")
-}
-
-// ================= DOWNLOAD =================
-function download(){
-fetch("/download",{headers:{"Authorization":"Bearer "+TOKEN}})
-.then(res=>res.blob())
-.then(blob=>{
-let url=URL.createObjectURL(blob)
-let a=document.createElement("a")
-a.href=url
-a.download="report.xlsx"
-a.click()
-})
+out.innerHTML=html
 }
 </script>
 
 </body>
 </html>
-    """
+"""
 
 # ================= API =================
-last_errors = []
+last_errors=[]
 
-@app.post("/register")
-def register(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
-    if db.query(User).filter_by(username=username).first():
-        return {"msg":"المستخدم موجود"}
-    db.add(User(username=username, password=pbkdf2_sha256.hash(password)))
-    db.commit()
-    return {"msg":"تم"}
-
-
-@app.post("/login")
-def login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
-    user = db.query(User).filter_by(username=username).first()
-
-    if not user:
-        return {"error": "user_not_found"}
-
-    if not pbkdf2_sha256.verify(password, user.password):
-        return {"error": "wrong_password"}
-
-    return {
-        "token": create_token(username),
-        "username": username
-    }
 @app.post("/analyze")
 def analyze_api(
-    authorization: str = Header(None),
-    file1: UploadFile = File(...),
-    file2: UploadFile = File(...),
-    b1: str = Form(...),
-    b2: str = Form(...)
+file1: UploadFile = File(...),
+file2: UploadFile = File(...),
+b1: str = Form(...),
+b2: str = Form(...)
 ):
-    # 🔥 حماية بدون ما يطيح
-    if not authorization:
-        raise HTTPException(401, "Missing token")
+    try:
+        file1.file.seek(0)
+        file2.file.seek(0)
 
-    parts = authorization.split()
+        d1=process(file1.file,file1.filename,b1)
+        d2=process(file2.file,file2.filename,b2)
 
-    if len(parts) != 2:
-        raise HTTPException(401, "Invalid token format")
+        errors,counts=analyze(d1,d2)
 
-    scheme, token = parts
+        global last_errors
+        last_errors=errors
 
-    check_auth(token)
+        return {"errors":errors,"counts":counts}
 
-    d1 = process(file1.file, file1.filename, b1)
-    d2 = process(file2.file, file2.filename, b2)
+    except Exception as e:
+        return {"error":str(e)}
 
-    errors, counts = analyze(d1, d2)
-
-    global last_errors
-    last_errors = errors
-
-    totals = {
-        b1: len(d1),
-        b2: len(d2)
-    }
-
-    return {"errors": errors, "counts": counts, "totals": totals}
-    
 @app.get("/download")
-def download(authorization: str = Header(None)):
-    # 🔥 حماية بدون crash
-    if not authorization:
-        raise HTTPException(401, "Missing token")
-
-    parts = authorization.split()
-
-    if len(parts) != 2:
-        raise HTTPException(401, "Invalid token format")
-
-    scheme, token = parts
-
-    check_auth(token)
-
-    df = pd.DataFrame(last_errors)
-    name = f"report_{uuid.uuid4().hex}.xlsx"
-    df.to_excel(name, index=False)
-
-    return FileResponse(name, filename="report.xlsx")
+def download():
+    df=pd.DataFrame(last_errors)
+    name=f"{uuid.uuid4().hex}.xlsx"
+    df.to_excel(name,index=False)
+    return FileResponse(name,filename="report.xlsx")
