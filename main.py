@@ -135,7 +135,7 @@ def process(file, filename, branch):
 
     debit_col, credit_col, date_col = detect_columns(df)
 
-    # 👇 تحديد عمود المستند (ذكي)
+    # 👇 تحديد عمود المستند
     doc_col = None
     for col in df.columns:
         name = str(col).lower()
@@ -150,13 +150,19 @@ def process(file, filename, branch):
 
     for _, row in df.iterrows():
 
-        # 🔥 تجاهل الصفوف الفاضية بالكامل
+        # 🔥 تجاهل الصفوف الفاضية
         if row.isna().all():
             continue
 
         debit  = safe(row[debit_col]) if debit_col else 0
         credit = safe(row[credit_col]) if credit_col else 0
-        date   = str(row[date_col]) if date_col else ""
+
+        # 🔥 إصلاح التاريخ (المهم جداً)
+        date_val = row[date_col] if date_col else None
+        try:
+            date = pd.to_datetime(date_val, errors='coerce')
+        except:
+            date = None
 
         # 👇 قراءة المستند
         doc = str(row[doc_col]).strip() if doc_col else ""
@@ -183,7 +189,17 @@ def process(file, filename, branch):
                 "doc": doc
             })
 
-    return data
+    # 🔥 إزالة التكرار (مهم جداً)
+    seen = set()
+    cleaned = []
+
+    for x in data:
+        key = (x["amount"], x["type"], x["doc"], str(x["date"]))
+        if key not in seen:
+            seen.add(key)
+            cleaned.append(x)
+
+    return cleaned
     
 # ================= ANALYZE =================
 # ================= ANALYZE =================
