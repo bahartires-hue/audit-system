@@ -159,16 +159,19 @@ def process(file, filename, branch):
         date_val = row[date_col] if date_col else None
 
         try:
-            if isinstance(date_val, (int, float)):
-                date = pd.to_datetime(date_val, unit='d', origin='1899-12-30')
-            else:
-                date = pd.to_datetime(date_val, errors='coerce', dayfirst=True)
+    if isinstance(date_val, (int, float)):
+        date = pd.to_datetime(date_val, unit='d', origin='1899-12-30')
+    else:
+        date = pd.to_datetime(str(date_val), errors='coerce', dayfirst=True)
 
-            if pd.isna(date):
-                date = None
-        except:
-            date = None
+    if pd.isna(date):
+        date = str(date_val)  # 👈 رجّع النص بدل ما يكون None
+    else:
+        date = date.strftime("%Y-%m-%d")
 
+except:
+    date = str(date_val)
+    
         doc = str(row[doc_col]).strip() if doc_col else ""
 
         # تجاهل الصفوف بدون مبلغ
@@ -525,20 +528,32 @@ let USERNAME=""
 let ALL_ERRORS=[]
 
 function applyFilter(){
-    let type = document.getElementById("filterType").value
+
+    let doc = document.getElementById("filterDoc").value.toLowerCase().trim()
+    let amount = document.getElementById("filterAmount").value.trim()
 
     let filtered = ALL_ERRORS
 
-    if(type !== "all"){
-        filtered = ALL_ERRORS.filter(x => x.type === type)
+    if(doc){
+        filtered = filtered.filter(x => 
+            (x.doc || "").toLowerCase().includes(doc)
+        )
     }
 
-    renderErrors(filtered)
+    if(amount){
+        filtered = filtered.filter(x => 
+            String(x.amount) === amount
+        )
+    }
+
+    render(filtered)
 }
 
 function resetFilter(){
-    document.getElementById("filterType").value = "all"
-    renderErrors(ALL_ERRORS)
+    document.getElementById("filterDoc").value = ""
+    document.getElementById("filterAmount").value = ""
+
+    render(ALL_ERRORS)
 }
 
 
@@ -615,26 +630,31 @@ showToast("فشل تسجيل الدخول","#ef4444")
 }
 
 function render(errors){
-right.innerHTML = `<h4>${b1.value}</h4>`
-left.innerHTML  = `<h4>${b2.value}</h4>`
 
-errors.filter(x=>x.branch==b1.value).forEach(x=>{
-right.innerHTML+=`
-<div class="error">
-<div>المبلغ: ${x.amount}</div>
-<div>نوع المستند: ${x.doc || "-"}</div>
-<div>التاريخ: ${x.date ? new Date(x.date).toISOString().split('T')[0] : "-"}</div>
-</div>`
-})
+    right.innerHTML = `<h4>${b1.value}</h4>`
+    left.innerHTML  = `<h4>${b2.value}</h4>`
 
-errors.filter(x=>x.branch==b2.value).forEach(x=>{
-left.innerHTML+=`
-<div class="error">
-<div>المبلغ: ${x.amount}</div>
-<div>نوع المستند: ${x.doc || "-"}</div>
-<div>التاريخ: ${x.date ? new Date(x.date).toISOString().split('T')[0] : "-"}</div>
-</div>`
-})
+    errors
+    .filter(x => x.branch == b1.value)
+    .forEach(x => {
+        right.innerHTML += `
+        <div class="error">
+            <div>المبلغ: ${x.amount}</div>
+            <div>نوع المستند: ${x.doc || "-"}</div>
+            <div>التاريخ: ${x.date ? new Date(x.date).toISOString().split('T')[0] : "-"}</div>
+        </div>`
+    })
+
+    errors
+    .filter(x => x.branch == b2.value)
+    .forEach(x => {
+        left.innerHTML += `
+        <div class="error">
+            <div>المبلغ: ${x.amount}</div>
+            <div>نوع المستند: ${x.doc || "-"}</div>
+            <div>التاريخ: ${x.date ? new Date(x.date).toISOString().split('T')[0] : "-"}</div>
+        </div>`
+    })
 }
 async function upload(){
 
