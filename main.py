@@ -45,32 +45,63 @@ def get_db():
     finally: db.close()
 
 def safe(v):
-    try: return round(float(v),2)
-    except: return 0
+    try:
+        v = str(v).replace(",", "").strip()
+        return round(float(v), 2)
+    except:
+        return 0
 
 # ================= SMART DETECTION =================
 def detect_columns(df):
+    debit_col = None
+    credit_col = None
     date_col = None
-    numeric_cols = []
 
     for col in df.columns:
-        sample = df[col].dropna().head(20)
+        name = str(col).strip().lower()
 
-        parsed = pd.to_datetime(sample, errors='coerce')
-        if parsed.notna().sum() > len(sample)*0.6:
+        # 👇 تحديد بالاسم (الأهم)
+        if "مدين" in name or "debit" in name:
+            debit_col = col
+            continue
+
+        if "دائن" in name or "credit" in name:
+            credit_col = col
+            continue
+
+        if "تاريخ" in name or "date" in name:
             date_col = col
             continue
 
+    # 👇 fallback لو الاسم فشل
+    numeric_cols = []
+    for col in df.columns:
+        sample = df[col].dropna().head(20)
         nums = pd.to_numeric(sample, errors='coerce')
+
         if nums.notna().sum() > len(sample)*0.6:
             numeric_cols.append(col)
 
-    debit = numeric_cols[0] if len(numeric_cols)>0 else None
-    credit = numeric_cols[1] if len(numeric_cols)>1 else None
+    if not debit_col and len(numeric_cols) > 0:
+        debit_col = numeric_cols[0]
 
-    return debit, credit, date_col
+    if not credit_col and len(numeric_cols) > 1:
+        credit_col = numeric_cols[1]
 
+    # 👇 fallback للتاريخ
+    if not date_col:
+        for col in df.columns:
+            sample = df[col].dropna().head(20)
+            parsed = pd.to_datetime(sample, errors='coerce')
+
+            if parsed.notna().sum() > len(sample)*0.6:
+                date_col = col
+                break
+
+    return debit_col, credit_col, date_col
+    
 # ================= READ =================
+
 def read_excel(file):
     return pd.read_excel(file)
 
@@ -89,43 +120,120 @@ def read_pdf(file):
     df=df[1:]
     return df
 
+# 👇 هذا اللي ناقصك (المهم جداً)
+def read_any(file, filename):
+    if filename.endswith(".xlsx") or filename.endswith(".xls"):
+        return read_excel(file)
+    elif filename.endswith(".pdf"):
+        return read_pdf(file)
+    else:
+        raise Exception("نوع الملف غير مدعوم")
+
 def process(file, filename, branch):
     df = read_any(file, filename)
     df.columns = df.columns.astype(str).str.strip()
 
-    data = []
+    debit_col, credit_col, date_col = detect_columns(df)
 
-    debit_col = None
-    credit_col = None
-    date_col = None
-
+    # 👇 تحديد عمود المستند (ذكي)
+    doc_col = None
     for col in df.columns:
         name = str(col).lower()
+        if any(x in name for x in ["مستند", "doc", "نوع", "بيان", "الوصف", "description"]):
+            doc_col = col
 
-        if "مدين" in name or "debit" in name:
-            debit_col = col
-        elif "دائن" in name or "credit" in name:
-            credit_col = col
-        elif "تاريخ" in name or "date" in name:
-            date_col = col
+    # 🔥 حماية
+    if not debit_col and not credit_col:
+        raise Exception("❌ لم يتم التعرف على الأعمدة (مدين/دائن)")
 
-    print("DETECTED:", debit_col, credit_col, date_col)
+    data = []
 
     for _, row in df.iterrows():
-        debit  = safe(row.get(debit_col, 0))
-        credit = safe(row.get(credit_col, 0))
-        date   = str(row.get(date_col, ""))
+
+        # 🔥 تجاهل الصفوف الفاضية بالكامل
+        if row.isna().all():
+            continue
+
+        debit  = safe(row[debit_col]) if debit_col else 0
+        credit = safe(row[credit_col]) if credit_col else 0
+        date   = str(row[date_col]) if date_col else ""
+
+        # 👇 قراءة المستند
+        doc = str(row[doc_col]).strip() if doc_col else ""
+
+        # 🔥 تجاهل الصفوف بدون مبلغ
+        if debit == 0 and credit == 0:
+            continue
 
         if debit > 0:
-            data.append({"amount": debit, "branch": branch, "date": date, "doc": ""})
-        elif credit > 0:
-            data.append({"amount": credit, "branch": branch, "date": date, "doc": ""})
+            data.append({
+                "amount": debit,
+                "type": "debit",
+                "branch": branch,
+                "date": date,
+                "doc": doc
+            })
+
+        if credit > 0:
+            data.append({
+                "amount": credit,
+                "type": "credit",
+                "branch": branch,
+                "date": date,
+                "doc": doc
+            })
 
     return data
-
+    
 # ================= ANALYZE =================
 # ================= ANALYZE =================
 
+doc_map = {
+    "مردود مبيعات": "مردود مشتريات",
+    "مردود مشتريات": "مردود مبيعات",
+
+    "سند قبض": "سند صرف",
+    "سند صرف": "سند قبض",
+
+    "تحويل مخزني": "تحويل مخزني",
+    "توريد مخزني": "صرف مخزني",
+    "صرف مخزني": "توريد مخزني",
+
+    "قيد يومية": "قيد يومية",
+    "قيد افتتاحي": "قيد افتتاحي",
+
+    "مبيعات": "مشتريات",
+    "مشتريات": "مبيعات"
+}
+
+def clean(s):
+    s = str(s).strip().lower()
+    s = s.replace(" ", "")
+    s = s.replace("-", "")
+    s = s.replace("_", "")
+    return s
+
+def match_doc(d1, d2):
+    if not d1 or not d2:
+        return False
+
+    d1 = clean(d1)
+    d2 = clean(d2)
+
+    for key, val in doc_map.items():
+        k = clean(key)
+        v = clean(val)
+
+        # 👇 تطابق مرن
+        if k in d1 and v in d2:
+            return True
+
+        # 👇 دعم الاتجاه العكسي (احتياط)
+        if v in d1 and k in d2:
+            return True
+
+    return False
+    
 def analyze(d1, d2):
     res = []
     used = [False] * len(d2)
@@ -139,26 +247,34 @@ def analyze(d1, d2):
             if used[i]:
                 continue
 
-            # فرق المبلغ (نفس طريقتك المرنة)
-            amount_diff = abs(x1["amount"] - x2["amount"])
-
-            if amount_diff > 0.05:
+            if not match_doc(x1.get("doc",""), x2.get("doc","")):
                 continue
 
-            # فرق التاريخ (اختياري)
+            if x1.get("type") == x2.get("type"):
+                continue
+
+            amount1 = x1.get("amount") or 0
+            amount2 = x2.get("amount") or 0
+            amount_diff = abs(amount1 - amount2)
+
+            if amount_diff > 1:
+                continue
+
             try:
-                d1_date = pd.to_datetime(x1["date"], errors='coerce')
-                d2_date = pd.to_datetime(x2["date"], errors='coerce')
+                d1_date = pd.to_datetime(x1.get("date"), errors='coerce', dayfirst=True)
+                d2_date = pd.to_datetime(x2.get("date"), errors='coerce', dayfirst=True)
 
                 if pd.notna(d1_date) and pd.notna(d2_date):
                     date_diff = abs((d1_date - d2_date).days)
                 else:
-                    date_diff = 1
+                    date_diff = 30
             except:
-                date_diff = 1
+                date_diff = 30
 
-            # اختيار أفضل تطابق
-            score = amount_diff + (date_diff * 0.01)
+            if date_diff > 30:
+                continue
+
+            score = amount_diff + (date_diff * 0.1)
 
             if score < best_score:
                 best_score = score
@@ -168,16 +284,17 @@ def analyze(d1, d2):
             used[best_i] = True
         else:
             res.append(x1)
-            counts[x1["branch"]] = counts.get(x1["branch"], 0) + 1
+            branch1 = x1.get("branch") or "unknown"
+            counts[branch1] = counts.get(branch1, 0) + 1
 
-    # العناصر المتبقية من الملف الثاني
     for i, x in enumerate(d2):
         if not used[i]:
             res.append(x)
-            counts[x["branch"]] = counts.get(x["branch"], 0) + 1
+            branch2 = x.get("branch") or "unknown"
+            counts[branch2] = counts.get(branch2, 0) + 1
 
     return res, counts
-
+    
 # ================= FRONTEND (نفس واجهتك) =================
 @app.get("/", response_class=HTMLResponse)
 def home():
@@ -371,6 +488,10 @@ z-index:999;
 let TOKEN=""
 let USERNAME=""
 let ALL_ERRORS=[]
+
+function applyFilter(){}
+function resetFilter(){}
+
 
 function showToast(msg,color="#22c55e"){
 let t=document.getElementById("toast")
