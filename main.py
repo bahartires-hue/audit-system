@@ -135,71 +135,63 @@ def process(file, filename, branch):
 
     debit_col, credit_col, date_col = detect_columns(df)
 
-    # 👇 تحديد عمود المستند
+    # عمود المستند (اختياري)
     doc_col = None
     for col in df.columns:
         name = str(col).lower()
         if any(x in name for x in ["مستند", "doc", "نوع", "بيان", "الوصف", "description"]):
             doc_col = col
 
-    # 🔥 حماية
     if not debit_col and not credit_col:
-        raise Exception("❌ لم يتم التعرف على الأعمدة (مدين/دائن)")
+        raise Exception("❌ لم يتم التعرف على الأعمدة")
 
     data = []
 
     for _, row in df.iterrows():
 
-        # 🔥 تجاهل الصفوف الفاضية
         if row.isna().all():
             continue
 
         debit  = safe(row[debit_col]) if debit_col else 0
         credit = safe(row[credit_col]) if credit_col else 0
 
-        # 🔥 إصلاح التاريخ (المهم جداً)
+        # 🔥 إصلاح التاريخ (Excel + نص)
         date_val = row[date_col] if date_col else None
+
         try:
-            date = pd.to_datetime(date_val, errors='coerce')
+            if isinstance(date_val, (int, float)):
+                date = pd.to_datetime(date_val, unit='d', origin='1899-12-30')
+            else:
+                date = pd.to_datetime(date_val, errors='coerce', dayfirst=True)
+
+            if pd.isna(date):
+                date = None
         except:
             date = None
 
-        # 👇 قراءة المستند
         doc = str(row[doc_col]).strip() if doc_col else ""
 
-        # 🔥 تجاهل الصفوف بدون مبلغ
+        # تجاهل الصفوف بدون مبلغ
         if debit == 0 and credit == 0:
             continue
 
-        if debit > 0:
-            data.append({
-                "amount": debit,
-                "type": "debit",
-                "branch": branch,
-                "date": date,
-                "doc": doc
-            })
-
+        # 🔥 مهم: لا نكرر الصف (نأخذ طرف واحد فقط)
         if credit > 0:
-            data.append({
-                "amount": credit,
-                "type": "credit",
-                "branch": branch,
-                "date": date,
-                "doc": doc
-            })
+            amount = credit
+            t = "credit"
+        else:
+            amount = debit
+            t = "debit"
 
-    # 🔥 إزالة التكرار (مهم جداً)
-    seen = set()
-    cleaned = []
+        data.append({
+            "amount": float(amount),
+            "type": t,
+            "branch": branch,
+            "date": date,
+            "doc": doc
+        })
 
-    for x in data:
-        key = (x["amount"], x["type"], x["doc"], str(x["date"]))
-        if key not in seen:
-            seen.add(key)
-            cleaned.append(x)
-
-    return cleaned
+    return data
     
 # ================= ANALYZE =================
 # ================= ANALYZE =================
@@ -267,31 +259,25 @@ def analyze(d1, d2):
             if x1.get("type") == x2.get("type"):
                 continue
 
-            # ✔ مقارنة المبلغ
             amount1 = float(x1.get("amount") or 0)
             amount2 = float(x2.get("amount") or 0)
 
             diff = abs(amount1 - amount2)
 
-            # ✔ لو الفرق كبير نرفض
             if diff > 1:
                 continue
 
-            # ✔ نختار أقرب تطابق
             if diff < best_diff:
                 best_diff = diff
                 best_i = i
 
-        # ✔ لو لقينا تطابق → نحذفه
         if best_i != -1:
             used[best_i] = True
         else:
-            # ❌ هذا خطأ
             res.append(x1)
             b = x1.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
 
-    # ✔ الباقي في الملف الثاني = أخطاء
     for i, x in enumerate(d2):
         if not used[i]:
             res.append(x)
