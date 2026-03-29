@@ -257,46 +257,46 @@ def analyze(d1, d2):
 
     for x1 in d1:
         best_i = -1
-        best_score = 999999
+        best_diff = 999999
 
         for i, x2 in enumerate(d2):
             if used[i]:
                 continue
 
-            # ✔ المستند لازم يكون عكسي
-            if not match_doc(x1.get("doc",""), x2.get("doc","")):
-                continue
-
-            # ✔ مدين مقابل دائن
+            # ✔ لازم مدين مقابل دائن
             if x1.get("type") == x2.get("type"):
                 continue
 
-            amount1 = x1.get("amount") or 0
-            amount2 = x2.get("amount") or 0
-            amount_diff = abs(amount1 - amount2)
+            # ✔ مقارنة المبلغ
+            amount1 = float(x1.get("amount") or 0)
+            amount2 = float(x2.get("amount") or 0)
 
-            # ✔ مرونة بسيطة
-            if amount_diff > 1:
+            diff = abs(amount1 - amount2)
+
+            # ✔ لو الفرق كبير نرفض
+            if diff > 1:
                 continue
 
-            score = amount_diff  # 👈 فقط المبلغ
-
-            if score < best_score:
-                best_score = score
+            # ✔ نختار أقرب تطابق
+            if diff < best_diff:
+                best_diff = diff
                 best_i = i
 
+        # ✔ لو لقينا تطابق → نحذفه
         if best_i != -1:
             used[best_i] = True
         else:
+            # ❌ هذا خطأ
             res.append(x1)
-            branch1 = x1.get("branch") or "unknown"
-            counts[branch1] = counts.get(branch1, 0) + 1
+            b = x1.get("branch") or "unknown"
+            counts[b] = counts.get(b, 0) + 1
 
+    # ✔ الباقي في الملف الثاني = أخطاء
     for i, x in enumerate(d2):
         if not used[i]:
             res.append(x)
-            branch2 = x.get("branch") or "unknown"
-            counts[branch2] = counts.get(branch2, 0) + 1
+            b = x.get("branch") or "unknown"
+            counts[b] = counts.get(b, 0) + 1
 
     return res, counts
     
