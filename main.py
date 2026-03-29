@@ -263,9 +263,11 @@ def analyze(d1, d2):
             if used[i]:
                 continue
 
+            # ✔ المستند لازم يكون عكسي
             if not match_doc(x1.get("doc",""), x2.get("doc","")):
                 continue
 
+            # ✔ مدين مقابل دائن
             if x1.get("type") == x2.get("type"):
                 continue
 
@@ -273,24 +275,11 @@ def analyze(d1, d2):
             amount2 = x2.get("amount") or 0
             amount_diff = abs(amount1 - amount2)
 
+            # ✔ مرونة بسيطة
             if amount_diff > 1:
                 continue
 
-            try:
-                d1_date = pd.to_datetime(x1.get("date"), errors='coerce', dayfirst=True)
-                d2_date = pd.to_datetime(x2.get("date"), errors='coerce', dayfirst=True)
-
-                if pd.notna(d1_date) and pd.notna(d2_date):
-                    date_diff = abs((d1_date - d2_date).days)
-                else:
-                    date_diff = 30
-            except:
-                date_diff = 30
-
-            if date_diff > 30:
-                continue
-
-            score = amount_diff + (date_diff * 0.1)
+            score = amount_diff  # 👈 فقط المبلغ
 
             if score < best_score:
                 best_score = score
@@ -505,8 +494,22 @@ let TOKEN=""
 let USERNAME=""
 let ALL_ERRORS=[]
 
-function applyFilter(){}
-function resetFilter(){}
+function applyFilter(){
+    let type = document.getElementById("filterType").value
+
+    let filtered = ALL_ERRORS
+
+    if(type !== "all"){
+        filtered = ALL_ERRORS.filter(x => x.type === type)
+    }
+
+    renderErrors(filtered)
+}
+
+function resetFilter(){
+    document.getElementById("filterType").value = "all"
+    renderErrors(ALL_ERRORS)
+}
 
 
 function showToast(msg,color="#22c55e"){
