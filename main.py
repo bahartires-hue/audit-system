@@ -373,15 +373,15 @@ def analyze(d1, d2):
                 best_score = score
                 best_i = i
 
-        if best_i != -1:
-    used[best_i] = True
-else:
-    res.append({
-        **x1,
-        "reason": "لا يوجد عملية مطابقة في الفرع الآخر"
-    })
-    b = x1.get("branch") or "unknown"
-    counts[b] = counts.get(b, 0) + 1
+     if best_i != -1:
+         used[best_i] = True
+     else:
+      res.append({
+          **x1,
+          "reason": "لا يوجد عملية مطابقة في الفرع الآخر"
+      })
+      b = x1.get("branch") or "unknown"
+      counts[b] = counts.get(b, 0) + 1
     
     # الباقي من الفرع الثاني
     for i, x in enumerate(d2):
