@@ -247,6 +247,50 @@ def analyze(d1, d2):
     used = [False] * len(d2)
     counts = {}
 
+    # 🔥 خطوة 1: حذف العمليات العكسية داخل نفس الفرع
+    def remove_internal_matches(data):
+        cleaned = []
+        used_local = [False] * len(data)
+
+        for i, x1 in enumerate(data):
+            if used_local[i]:
+                continue
+
+            found = False
+
+            for j, x2 in enumerate(data):
+                if i == j or used_local[j]:
+                    continue
+
+                # نفس الفرع
+                if x1["branch"] != x2["branch"]:
+                    continue
+
+                # نفس التاريخ
+                if str(x1["date"]) != str(x2["date"]):
+                    continue
+
+                # نفس المبلغ
+                if abs(x1["amount"] - x2["amount"]) > 1:
+                    continue
+
+                # عكس النوع
+                if x1["type"] != x2["type"]:
+                    used_local[i] = True
+                    used_local[j] = True
+                    found = True
+                    break
+
+            if not found:
+                cleaned.append(x1)
+
+        return cleaned
+
+    # 🔥 تنظيف داخلي
+    d1 = remove_internal_matches(d1)
+    d2 = remove_internal_matches(d2)
+
+    # 🔥 خطوة 2: المطابقة بين الفرعين
     for x1 in d1:
         best_i = -1
         best_diff = 999999
@@ -255,7 +299,7 @@ def analyze(d1, d2):
             if used[i]:
                 continue
 
-            # ✔ لازم مدين مقابل دائن
+            # مدين مقابل دائن
             if x1.get("type") == x2.get("type"):
                 continue
 
@@ -579,7 +623,7 @@ right.innerHTML+=`
 <div class="error">
 <div>المبلغ: ${x.amount}</div>
 <div>نوع المستند: ${x.doc || "-"}</div>
-<div>التاريخ: ${x.date || "-"}</div>
+<div>التاريخ: ${x.date ? new Date(x.date).toISOString().split('T')[0] : "-"}</div>
 </div>`
 })
 
@@ -588,7 +632,7 @@ left.innerHTML+=`
 <div class="error">
 <div>المبلغ: ${x.amount}</div>
 <div>نوع المستند: ${x.doc || "-"}</div>
-<div>التاريخ: ${x.date || "-"}</div>
+<div>التاريخ: ${x.date ? new Date(x.date).toISOString().split('T')[0] : "-"}</div>
 </div>`
 })
 }
