@@ -248,7 +248,7 @@ def process(file, filename, branch):
             continue
 
         # خطأ مدين + دائن
-        if debit and credit and debit > 0 and credit > 0:
+if debit and credit and debit > 0 and credit > 0:
     amount = max(debit, credit)
 
     # 🔥 خذ التاريخ الحقيقي
@@ -267,7 +267,7 @@ def process(file, filename, branch):
     if doc_col and doc_col in df.columns:
         val = row[doc_col]
         if pd.notna(val):
-            doc = classify_doc(val)  # 👈 مهم
+            doc = classify_doc(val)
 
     data.append({
         "amount": float(amount),
