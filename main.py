@@ -359,6 +359,9 @@ def classify_doc(text):
 
     t = str(text).lower()
 
+    # 🔥 تنظيف بسيط
+    t = t.replace("فاتورة", "").replace("نقدا", "").replace("نقدي", "").strip()
+
     if "مردود" in t and "مبيعات" in t:
         return "مردود مبيعات"
 
@@ -380,8 +383,7 @@ def classify_doc(text):
     if "تحويل" in t:
         return "تحويل مخزني"
 
-    return text
-
+    return t
 def match_doc(d1, d2):
 
     # 🔥 تصحيح منطقي
