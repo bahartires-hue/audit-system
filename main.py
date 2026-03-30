@@ -249,18 +249,36 @@ def process(file, filename, branch):
 
         # خطأ مدين + دائن
         if debit and credit and debit > 0 and credit > 0:
-            amount = max(debit, credit)
+    amount = max(debit, credit)
 
-            data.append({
-                "amount": float(amount),
-                "type": "error",
-                "branch": branch,
-                "date": None,
-                "doc": "",
-                "reason": "خطأ: الصف يحتوي مدين ودائن"
-            })
-            continue
+    # 🔥 خذ التاريخ الحقيقي
+    date = None
+    if date_col and date_col in df.columns:
+        try:
+            val = row[date_col]
+            d = pd.to_datetime(val, errors='coerce', dayfirst=True)
+            if not pd.isna(d):
+                date = d.strftime("%Y-%m-%d")
+        except:
+            date = str(row[date_col])
 
+    # 🔥 خذ المستند الحقيقي
+    doc = None
+    if doc_col and doc_col in df.columns:
+        val = row[doc_col]
+        if pd.notna(val):
+            doc = classify_doc(val)  # 👈 مهم
+
+    data.append({
+        "amount": float(amount),
+        "type": "error",
+        "branch": branch,
+        "date": date,
+        "doc": doc,
+        "reason": "خطأ: الصف يحتوي مدين ودائن"
+    })
+    continue
+    
         # تحديد النوع
         if credit and credit > 0:
             amount = credit
