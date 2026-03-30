@@ -79,7 +79,7 @@ def detect_columns(df):
         if any(x in name for x in ["دائن", "credit", "cr"]):
             credit_col = col
 
-        if any(x in name for x in ["تاريخ", "date"]):
+        if any(x in name for x in ["تاريخ","التاريخ","التأريخ","date"]):
             date_col = col
 
     # =========================================
@@ -202,14 +202,12 @@ def process(file, filename, branch):
         name = str(col).lower().strip()
 
         if any(x in name for x in [
-            "مستند","نوع","بيان","وصف",
+            "مستند","المستند","نوع","بيان","وصف",
             "description","desc","document"
         ]):
             doc_col = col
             break
 
-    if not doc_col and len(df.columns) > 0:
-        doc_col = df.columns[0]
 
     # =========================================
     # fallback الأعمدة
@@ -285,16 +283,16 @@ def process(file, filename, branch):
                 if pd.isna(val):
                     date = None
                 else:
-                    d = pd.to_datetime(val, errors='coerce')
+                    d = pd.to_datetime(val, errors='coerce', dayfirst=False)
                     if not pd.isna(d):
                         date = d.strftime("%Y-%m-%d")
                     else:
-                        date = str(val)
+                        date = None
             except:
                 date = str(row[date_col])
 
         # المستند
-        doc = ""
+        doc = None
 
         if doc_col and doc_col in df.columns:
             val = row[doc_col]
@@ -498,50 +496,69 @@ def analyze(d1, d2):
     # 🔥 نظام التقييم
     # =========================================
     def match_score(x1, x2):
-        score = 0
-        reasons = []
+    score = 0
+    reasons = []
 
-        diff = abs(x1["amount"] - x2["amount"])
-        if diff < 0.01:
-            score += 50
-            reasons.append("نفس المبلغ")
-        elif diff < 1:
-            score += 30
-            reasons.append("مبلغ قريب")
-        else:
-            return 0, ["فرق مبلغ كبير"]
+    # =========================
+    # 1. المبلغ
+    # =========================
+    diff = abs(x1["amount"] - x2["amount"])
+    if diff < 0.01:
+        score += 50
+        reasons.append("نفس المبلغ")
+    elif diff < 1:
+        score += 30
+        reasons.append("مبلغ قريب")
+    else:
+        return 0, ["فرق مبلغ كبير"]
 
-        if (
-            (x1["type"] == "credit" and x2["type"] == "debit") or
-            (x1["type"] == "debit" and x2["type"] == "credit")
-        ):
-            score += 30
-            reasons.append("اتجاه عكسي صحيح")
-        else:
-            return 0, ["نفس الاتجاه"]
+    # =========================
+    # 2. الاتجاه
+    # =========================
+    if (
+        (x1["type"] == "credit" and x2["type"] == "debit") or
+        (x1["type"] == "debit" and x2["type"] == "credit")
+    ):
+        score += 30
+        reasons.append("اتجاه عكسي صحيح")
+    else:
+        return 0, ["نفس الاتجاه"]
 
-        days = date_diff_days(x1["date"], x2["date"])
-        if days is None:
-            score -= 10
-            reasons.append("تاريخ غير واضح")
-        elif days == 0:
-            score += 20
-            reasons.append("نفس اليوم")
-        elif days <= 2:
-            score += 10
-            reasons.append("تاريخ قريب")
-        else:
-            score -= 10
-            reasons.append("تاريخ بعيد")
+    # =========================
+    # 🔥 3. شرط المستند (صارم)
+    # =========================
+    if x1.get("doc") and x2.get("doc"):
+        if not match_doc(x1["doc"], x2["doc"]):
+            return 0, ["اختلاف نوع المستند"]
 
-        if match_doc(x1.get("doc"), x2.get("doc")):
-            score += 20
-            reasons.append("نوع مستند مطابق")
-        else:
-            score -= 10
-            reasons.append("اختلاف نوع المستند")
+    # =========================
+    # 4. التاريخ
+    # =========================
+    days = date_diff_days(x1["date"], x2["date"])
+    if days is None:
+        score -= 10
+        reasons.append("تاريخ غير واضح")
+    elif days == 0:
+        score += 20
+        reasons.append("نفس اليوم")
+    elif days <= 2:
+        score += 10
+        reasons.append("تاريخ قريب")
+    else:
+        score -= 10
+        reasons.append("تاريخ بعيد")
 
-        return score, reasons
+    # =========================
+    # 5. تقييم المستند (نقاط)
+    # =========================
+    if match_doc(x1.get("doc"), x2.get("doc")):
+        score += 20
+        reasons.append("نوع مستند مطابق")
+    else:
+        score -= 10
+        reasons.append("اختلاف نوع المستند")
+
+    return score, reasons
 
     # =========================================
     # 🔥 المطابقة
@@ -572,15 +589,11 @@ def analyze(d1, d2):
                 best_reason = reasons
 
         threshold = 60
-        if x1.get("doc"):
-            threshold += 5
-        if x1.get("date"):
-            threshold += 5
 
-        if best_score >= threshold + 15 and best_i != -1:
+        if best_score >= 80 and best_i != -1:
             used[best_i] = True
 
-        elif best_score >= threshold and best_i != -1:
+        elif best_score >= 60 and best_i != -1:
             res.append({
                 **x1,
                 "reason": f"تطابق ضعيف ⚠️ | score={best_score} | {' , '.join(best_reason)}"
