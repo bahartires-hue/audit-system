@@ -700,7 +700,7 @@ input{width:100%;padding:10px;margin:5px 0 10px;border-radius:8px;border:1px sol
 <input type="file" id="f2">
 
 <div style="display:flex;gap:10px;justify-content:center;margin-top:10px">
-<button class="analyze-btn" onclick="upload()">تحليل</button>
+<button id="analyzeBtn" class="analyze-btn" onclick="upload()">تحليل</button>
 <button class="analyze-btn" style="background:#10b981" onclick="download()">تحميل التقرير</button>
 </div>
 </div>
@@ -782,7 +782,6 @@ function resetFilter(){
     render(ALL_ERRORS)
 }
 
-</script>
 
 // ================= UI =================
 function showToast(msg,color="#22c55e"){
@@ -839,11 +838,14 @@ showToast("فشل تسجيل الدخول","#ef4444")
 // ================= RENDER =================
 function render(errors){
 
-    errors.sort((a, b) => new Date(b.date) - new Date(a.date))
+    let right = document.getElementById("right")
+    let left  = document.getElementById("left")
+
+    errors.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
 
     right.innerHTML = `<h4>${b1.value}</h4>`
     left.innerHTML  = `<h4>${b2.value}</h4>`
-    
+
     errors.filter(x => x.branch == b1.value).forEach(x=>{
         right.innerHTML+=`
         <div class="error">
@@ -866,11 +868,14 @@ function render(errors){
 }
 
 
-// 🔥 متغير عام
-let ALL_ERRORS = []
-
 // ================= UPLOAD (FINAL) =================
 async function upload(){
+
+    // 🔥 إضافة فقط (ما غيرنا شيء)
+    if(!TOKEN){
+        showToast("يجب تسجيل الدخول أولاً","#ef4444")
+        return
+    }
 
     let btn = document.getElementById("analyzeBtn")
 
@@ -906,6 +911,13 @@ async function upload(){
                 "Authorization":"Bearer "+TOKEN
             }
         })
+
+        // 🔥 إضافة فقط
+        if(r.status === 401){
+            showToast("انتهت الجلسة، سجل دخول مرة ثانية","#ef4444")
+            logout()
+            return
+        }
 
         if(!r.ok){
             let text = await r.text()
@@ -949,21 +961,23 @@ async function upload(){
         let p1 = Math.round((c1 / totalErrors) * 100)
         let p2 = Math.round((c2 / totalErrors) * 100)
 
-        stats.innerHTML = `
-        <div class="stat">
-            <span>${b1.value}</span>
-            <b>${c1}</b>
-            <span>عدد الأخطاء</span>
-            <small>${p1}%</small>
-        </div>
+        let stats = document.getElementById("stats")
 
-        <div class="stat">
-            <span>${b2.value}</span>
-            <b>${c2}</b>
-            <span>عدد الأخطاء</span>
-            <small>${p2}%</small>
-        </div>
-        `
+        stats.innerHTML = `
+<div class="stat">
+    <span>${b1.value}</span>
+    <b>${c1}</b>
+    <span>عدد الأخطاء</span>
+    <small>${p1}%</small>
+</div>
+
+<div class="stat">
+    <span>${b2.value}</span>
+    <b>${c2}</b>
+    <span>عدد الأخطاء</span>
+    <small>${p2}%</small>
+</div>
+`
 
         // 🔥 عرض الكل
         render(ALL_ERRORS)
@@ -980,7 +994,6 @@ async function upload(){
     btn.innerText = "تحليل"
     btn.style.opacity = "1"
 }
-
 
 // ================= FILTER ERRORS =================
 function filterErrors(){
