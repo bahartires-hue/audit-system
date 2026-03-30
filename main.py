@@ -428,7 +428,7 @@ def analyze(d1, d2):
     counts = {}
 
     # =========================================
-    # 🔥 حذف العمليات العكسية (STRICT)
+    # حذف العمليات العكسية
     # =========================================
     def remove_reversals(data):
         cleaned = []
@@ -444,27 +444,23 @@ def analyze(d1, d2):
                 if i == j or used_local[j]:
                     continue
 
-                # نفس الفرع
                 if x1["branch"] != x2["branch"]:
                     continue
 
-                # عكس الاتجاه فقط
                 if x1["type"] == x2["type"]:
                     continue
 
-                # نفس المبلغ (دقة عالية)
-                if abs(x1["amount"] - x2["amount"]) > 0.001:
+                if abs(x1["amount"] - x2["amount"]) > 0.01:
                     continue
 
-                # نفس اليوم بالضبط
-                if x1["date"] != x2["date"]:
+                days = date_diff_days(x1["date"], x2["date"])
+                if days is None or days > 1:
                     continue
 
-                # نفس نوع المستند
-                if not match_doc(x1.get("doc"), x2.get("doc")):
-                    continue
+                if x1.get("doc") and x2.get("doc"):
+                    if not match_doc(x1["doc"], x2["doc"]):
+                        continue
 
-                # 🔥 حذف الاثنين
                 used_local[i] = True
                 used_local[j] = True
                 found = True
@@ -475,12 +471,12 @@ def analyze(d1, d2):
 
         return cleaned
 
-    # 🔥 تطبيق الحذف قبل التحليل
+    # تطبيق الحذف
     d1 = remove_reversals(d1)
     d2 = remove_reversals(d2)
 
     # =========================================
-    # 🔥 إذا الفرع الثاني فاضي
+    # لو الفرع الثاني فاضي
     # =========================================
     if not d2:
         for x in d1:
@@ -493,75 +489,65 @@ def analyze(d1, d2):
         return res, counts
 
     # =========================================
-    # 🔥 نظام التقييم
+    # نظام التقييم
     # =========================================
-def match_score(x1, x2):
-    score = 0
-    reasons = []
+    def match_score(x1, x2):
+        score = 0
+        reasons = []
 
-    # =========================
-    # 1. المبلغ
-    # =========================
-    diff = abs(x1["amount"] - x2["amount"])
-    if diff < 0.01:
-        score += 50
-        reasons.append("نفس المبلغ")
-    elif diff < 1:
-        score += 30
-        reasons.append("مبلغ قريب")
-    else:
-        return 0, ["فرق مبلغ كبير"]
+        # المبلغ
+        diff = abs(x1["amount"] - x2["amount"])
+        if diff < 0.01:
+            score += 50
+            reasons.append("نفس المبلغ")
+        elif diff < 1:
+            score += 30
+            reasons.append("مبلغ قريب")
+        else:
+            return 0, ["فرق مبلغ كبير"]
 
-    # =========================
-    # 2. الاتجاه
-    # =========================
-    if (
-        (x1["type"] == "credit" and x2["type"] == "debit") or
-        (x1["type"] == "debit" and x2["type"] == "credit")
-    ):
-        score += 30
-        reasons.append("اتجاه عكسي صحيح")
-    else:
-        return 0, ["نفس الاتجاه"]
+        # الاتجاه
+        if (
+            (x1["type"] == "credit" and x2["type"] == "debit") or
+            (x1["type"] == "debit" and x2["type"] == "credit")
+        ):
+            score += 30
+            reasons.append("اتجاه عكسي صحيح")
+        else:
+            return 0, ["نفس الاتجاه"]
 
-    # =========================
-    # شرط المستند
-    # =========================
-    if x1.get("doc") and x2.get("doc"):
-        if not match_doc(x1["doc"], x2["doc"]):
-            return 0, ["اختلاف نوع المستند"]
+        # 🔥 شرط المستند
+        if x1.get("doc") and x2.get("doc"):
+            if not match_doc(x1["doc"], x2["doc"]):
+                return 0, ["اختلاف نوع المستند"]
 
-    # =========================
-    # 3. التاريخ
-    # =========================
-    days = date_diff_days(x1["date"], x2["date"])
-    if days is None:
-        score -= 10
-        reasons.append("تاريخ غير واضح")
-    elif days == 0:
-        score += 20
-        reasons.append("نفس اليوم")
-    elif days <= 2:
-        score += 10
-        reasons.append("تاريخ قريب")
-    else:
-        score -= 10
-        reasons.append("تاريخ بعيد")
+        # التاريخ
+        days = date_diff_days(x1["date"], x2["date"])
+        if days is None:
+            score -= 10
+            reasons.append("تاريخ غير واضح")
+        elif days == 0:
+            score += 20
+            reasons.append("نفس اليوم")
+        elif days <= 2:
+            score += 10
+            reasons.append("تاريخ قريب")
+        else:
+            score -= 10
+            reasons.append("تاريخ بعيد")
 
-    # =========================
-    # 4. تقييم المستند
-    # =========================
-    if match_doc(x1.get("doc"), x2.get("doc")):
-        score += 20
-        reasons.append("نوع مستند مطابق")
-    else:
-        score -= 10
-        reasons.append("اختلاف نوع المستند")
+        # تقييم المستند
+        if match_doc(x1.get("doc"), x2.get("doc")):
+            score += 20
+            reasons.append("نوع مستند مطابق")
+        else:
+            score -= 10
+            reasons.append("اختلاف نوع المستند")
 
-    return score, reasons
-    
+        return score, reasons
+
     # =========================================
-    # 🔥 المطابقة
+    # المطابقة
     # =========================================
     for x1 in d1:
 
@@ -588,8 +574,6 @@ def match_score(x1, x2):
                 best_i = i
                 best_reason = reasons
 
-        threshold = 60
-
         if best_score >= 80 and best_i != -1:
             used[best_i] = True
 
@@ -609,7 +593,7 @@ def match_score(x1, x2):
             counts[b] = counts.get(b, 0) + 1
 
     # =========================================
-    # 🔥 الباقي من الفرع الثاني
+    # الباقي من الفرع الثاني
     # =========================================
     for i, x in enumerate(d2):
         if not used[i]:
