@@ -505,194 +505,123 @@ def clean_doc(s):
 
 # ================= ANALYZE =================
 
+from collections import defaultdict
+import pandas as pd
+
 def analyze(d1, d2):
+
     res = []
-    used = [False] * len(d2)
     counts = {}
 
     # =========================================
-    # حذف العمليات العكسية
+    # تجهيز التاريخ
     # =========================================
-    def remove_reversals(data):
-        cleaned = []
-        used_local = [False] * len(data)
-
-        for i, x1 in enumerate(data):
-            if used_local[i]:
-                continue
-
-            found = False
-
-            for j, x2 in enumerate(data):
-                if i == j or used_local[j]:
-                    continue
-
-                if x1["branch"] != x2["branch"]:
-                    continue
-
-                if x1["type"] == x2["type"]:
-                    continue
-
-                if abs(x1["amount"] - x2["amount"]) > 0.01:
-                    continue
-
-                days = date_diff_days(x1["date"], x2["date"])
-                if days is None or days > 1:
-                    continue
-
-                if x1.get("doc") and x2.get("doc"):
-                    if not match_doc(x1["doc"], x2["doc"]):
-                        continue
-
-                used_local[i] = True
-                used_local[j] = True
-                found = True
-                break
-
-            if not found:
-                cleaned.append(x1)
-
-        return cleaned
-
-    # تطبيق الحذف
-    d1 = remove_reversals(d1)
-    d2 = remove_reversals(d2)
+    def normalize_date(d):
+        try:
+            d = pd.to_datetime(d, errors='coerce')
+            if pd.isna(d):
+                return None
+            return d.date()
+        except:
+            return None
 
     # =========================================
-    # لو الفرع الثاني فاضي
+    # نافذة تاريخ (±2 أيام)
     # =========================================
-    if not d2:
-        for x in d1:
-            res.append({
-                **x,
-                "reason": "لا يوجد مقابل ❌ (الفرع الثاني فارغ)"
-            })
-            b = x.get("branch") or "unknown"
-            counts[b] = counts.get(b, 0) + 1
-        return res, counts
+    def date_key(d):
+        d = normalize_date(d)
+        return d
 
     # =========================================
-    # نظام التقييم
+    # مفتاح التجميع
     # =========================================
-    def match_score(x1, x2):
-        score = 0
-        reasons = []
-
-        # المبلغ
-        diff = abs(x1["amount"] - x2["amount"])
-        if diff < 0.01:
-            score += 50
-            reasons.append("نفس المبلغ")
-        elif diff < 1:
-            score += 30
-            reasons.append("مبلغ قريب")
-        else:
-            return 0, ["فرق مبلغ كبير"]
-
-        # الاتجاه
-        if (
-            (x1["type"] == "credit" and x2["type"] == "debit") or
-            (x1["type"] == "debit" and x2["type"] == "credit")
-        ):
-            score += 30
-            reasons.append("اتجاه عكسي صحيح")
-        else:
-            return 0, ["نفس الاتجاه"]
-
-        # 🔥 شرط المستند
-        if x1.get("doc") and x2.get("doc"):
-            if not match_doc(x1["doc"], x2["doc"]):
-                return 0, ["اختلاف نوع المستند"]
-
-        # التاريخ
-        days = date_diff_days(x1["date"], x2["date"])
-        if days is None:
-            score -= 10
-            reasons.append("تاريخ غير واضح")
-        elif days == 0:
-            score += 20
-            reasons.append("نفس اليوم")
-        elif days <= 2:
-            score += 10
-            reasons.append("تاريخ قريب")
-        else:
-            score -= 10
-            reasons.append("تاريخ بعيد")
-
-        # تقييم المستند
-        if match_doc(x1.get("doc"), x2.get("doc")):
-            score += 20
-            reasons.append("نوع مستند مطابق")
-        else:
-            score -= 10
-            reasons.append("اختلاف نوع المستند")
-
-        return score, reasons
+    def build_key(x):
+        return (
+            round(x.get("amount", 0), 2),
+            x.get("doc"),   # ممكن None
+            date_key(x.get("date"))
+        )
 
     # =========================================
-    # المطابقة
+    # تقسيم البيانات
     # =========================================
-    for x1 in d1:
+    bucket1 = defaultdict(list)
+    bucket2 = defaultdict(list)
 
-        if x1.get("type") == "error":
-            res.append(x1)
-            b = x1.get("branch") or "unknown"
-            counts[b] = counts.get(b, 0) + 1
+    errors_only = []
+
+    for x in d1:
+        if x.get("type") == "error":
+            errors_only.append(x)
             continue
+        bucket1[build_key(x)].append(x)
 
-        best_i = -1
-        best_score = -1
-        best_reason = []
-
-        for i, x2 in enumerate(d2):
-            if used[i]:
-                continue
-            if x2.get("type") == "error":
-                continue
-
-            score, reasons = match_score(x1, x2)
-
-            if score > best_score:
-                best_score = score
-                best_i = i
-                best_reason = reasons
-
-        if best_score >= 80 and best_i != -1:
-            used[best_i] = True
-
-        elif best_score >= 60 and best_i != -1:
-            res.append({
-                **x1,
-                "reason": f"تطابق ضعيف ⚠️ | score={best_score} | {' , '.join(best_reason)}"
-            })
-            used[best_i] = True
-
-        else:
-            res.append({
-                **x1,
-                "reason": f"لا يوجد مقابل ❌ | score={best_score} | {' , '.join(best_reason)}"
-            })
-            b = x1.get("branch") or "unknown"
-            counts[b] = counts.get(b, 0) + 1
+    for x in d2:
+        if x.get("type") == "error":
+            errors_only.append(x)
+            continue
+        bucket2[build_key(x)].append(x)
 
     # =========================================
-    # الباقي من الفرع الثاني
+    # المطابقة الرئيسية (بدون عشوائية)
     # =========================================
-    for i, x in enumerate(d2):
-        if not used[i]:
+    all_keys = set(bucket1.keys()) | set(bucket2.keys())
 
-            if x.get("type") == "error":
-                res.append(x)
-                b = x.get("branch") or "unknown"
-                counts[b] = counts.get(b, 0) + 1
-                continue
+    for key in all_keys:
 
+        list1 = bucket1.get(key, [])
+        list2 = bucket2.get(key, [])
+
+        # فصل حسب الاتجاه (لو موجود)
+        def split_direction(lst):
+            debit = []
+            credit = []
+            for x in lst:
+                if x.get("type") == "debit":
+                    debit.append(x)
+                elif x.get("type") == "credit":
+                    credit.append(x)
+                else:
+                    debit.append(x)
+            return debit, credit
+
+        d1_debit, d1_credit = split_direction(list1)
+        d2_debit, d2_credit = split_direction(list2)
+
+        # =====================================
+        # مطابقة عكسية فقط
+        # =====================================
+        def match_lists(l1, l2):
+            matched = min(len(l1), len(l2))
+
+            for i in range(matched):
+                l1[i]["matched"] = True
+                l2[i]["matched"] = True
+
+            return l1[matched:], l2[matched:]
+
+        # debit ↔ credit
+        rem1_a, rem2_a = match_lists(d1_debit, d2_credit)
+        rem1_b, rem2_b = match_lists(d1_credit, d2_debit)
+
+        # الباقي (غير مطابق)
+        remaining = rem1_a + rem1_b + rem2_a + rem2_b
+
+        for x in remaining:
             res.append({
                 **x,
-                "reason": "لا يوجد مقابل ❌ (من الفرع الآخر)"
+                "reason": "لا يوجد مقابل ❌ (فرق في العدد داخل نفس المجموعة)"
             })
             b = x.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
+
+    # =========================================
+    # إضافة الأخطاء الأصلية
+    # =========================================
+    for x in errors_only:
+        res.append(x)
+        b = x.get("branch") or "unknown"
+        counts[b] = counts.get(b, 0) + 1
 
     return res, counts
     
