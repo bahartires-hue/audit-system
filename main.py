@@ -1028,7 +1028,7 @@ async function upload(){
 function filterErrors(){
 
     if (!ALL_ERRORS || !Array.isArray(ALL_ERRORS)) {
-        console.log("مافي بيانات للفلترة")
+        console.log("لا توجد بيانات للفلترة")
         return
     }
 
