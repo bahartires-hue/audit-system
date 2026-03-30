@@ -193,7 +193,9 @@ def process(file, filename, branch):
 
     debit_col, credit_col, date_col = detect_columns(df)
 
-    # ================= كشف المستند =================
+    # =========================================
+    # 🔥 كشف عمود المستند
+    # =========================================
     doc_col = None
 
     for col in df.columns:
@@ -206,7 +208,10 @@ def process(file, filename, branch):
             doc_col = col
             break
 
-    # ================= fallback =================
+
+    # =========================================
+    # fallback الأعمدة
+    # =========================================
     if not debit_col and not credit_col:
         numeric_cols = []
 
@@ -242,37 +247,21 @@ def process(file, filename, branch):
         if debit is None and credit is None:
             continue
 
-        # ===== خطأ =====
+        # خطأ مدين + دائن
         if debit and credit and debit > 0 and credit > 0:
             amount = max(debit, credit)
-
-            date = None
-            if date_col and date_col in df.columns:
-                try:
-                    val = row[date_col]
-                    d = pd.to_datetime(val, errors='coerce', dayfirst=True)
-                    if not pd.isna(d):
-                        date = d.strftime("%Y-%m-%d")
-                except:
-                    date = str(row[date_col])
-
-            doc = None
-            if doc_col and doc_col in df.columns:
-                val = row[doc_col]
-                if pd.notna(val):
-                    doc = classify_doc(val)
 
             data.append({
                 "amount": float(amount),
                 "type": "error",
                 "branch": branch,
-                "date": date,
-                "doc": doc,
+                "date": None,
+                "doc": "",
                 "reason": "خطأ: الصف يحتوي مدين ودائن"
             })
             continue
 
-        # ===== تحديد النوع =====
+        # تحديد النوع
         if credit and credit > 0:
             amount = credit
             t = "credit"
@@ -284,23 +273,31 @@ def process(file, filename, branch):
         else:
             continue
 
-        # ===== التاريخ =====
+        # التاريخ
         date = None
+
         if date_col and date_col in df.columns:
             try:
                 val = row[date_col]
-                d = pd.to_datetime(val, errors='coerce', dayfirst=True)
-                if not pd.isna(d):
-                    date = d.strftime("%Y-%m-%d")
+
+                if pd.isna(val):
+                    date = None
+                else:
+                    d = pd.to_datetime(val, errors='coerce', dayfirst=False)
+                    if not pd.isna(d):
+                        date = d.strftime("%Y-%m-%d")
+                    else:
+                        date = None
             except:
                 date = str(row[date_col])
 
-        # ===== المستند =====
+        # المستند
         doc = None
+
         if doc_col and doc_col in df.columns:
             val = row[doc_col]
             if pd.notna(val):
-                doc = classify_doc(val)
+                doc = str(val).strip()
 
         data.append({
             "amount": float(amount),
@@ -318,12 +315,6 @@ doc_map = {
     "مردود مبيعات": "مردود مشتريات",
     "مردود مشتريات": "مردود مبيعات",
 
-    "فاتوره مبيعات": "فاتوره مشتريات",
-    "فاتوره مشتريات": "فاتوره مبيعات",
-
-    "مبيعات نقدي": "مشتريات نقدي",
-    "مشتريات نقدي": "مبيعات نقدي",
-
     "سند قبض": "سند صرف",
     "سند صرف": "سند قبض",
 
@@ -332,8 +323,12 @@ doc_map = {
     "صرف مخزني": "توريد مخزني",
 
     "قيد يومية": "قيد يومية",
-    "قيد افتتاحي": "قيد افتتاحي"
+    "قيد افتتاحي": "قيد افتتاحي",
+
+    "مبيعات": "مشتريات",
+    "مشتريات": "مبيعات"
 }
+
 import re
 from difflib import SequenceMatcher
 
@@ -343,98 +338,20 @@ def clean(s):
 
     s = str(s).lower().strip()
 
+    # إزالة كلمات مزعجة
     for w in ["رقم", "no", "doc", "ref"]:
         s = s.replace(w, "")
 
+    # حذف الأرقام 🔥
     s = re.sub(r'\d+', '', s)
 
+    # إزالة رموز
     for ch in [" ", "-", "_", "/", "\\", ".", ","]:
         s = s.replace(ch, "")
 
     return s
 
 
-# 🔥 هنا بالضبط تضيفها
-def classify_doc(text):
-    if not text:
-        return None
-
-    t = str(text).lower().strip()
-
-    # 🔥 تنظيف بدون تخريب
-    for w in ["رقم", "no", "doc", "ref"]:
-        t = t.replace(w, "")
-
-    t = t.replace("نقدا", "").replace("نقدي", "").strip()
-
-    # =====================================
-    # 🔥 1. مردودات (أهم شيء)
-    # =====================================
-    if "مردود" in t and "مبيعات" in t:
-        return "مردود مبيعات"
-
-    if "مردود" in t and "مشتريات" in t:
-        return "مردود مشتريات"
-
-    # =====================================
-    # 🔥 2. الفواتير
-    # =====================================
-    if ("فاتوره" in t or "فاتورة" in t or "invoice" in t) and "مبيعات" in t:
-        return "فاتوره مبيعات"
-
-    if ("فاتوره" in t or "فاتورة" in t or "invoice" in t) and "مشتريات" in t:
-        return "فاتوره مشتريات"
-
-    # =====================================
-    # 🔥 3. كاش / نقدي
-    # =====================================
-    if "مبيعات" in t and ("نقد" in t or "cash" in t):
-        return "مبيعات نقدي"
-
-    if "مشتريات" in t and ("نقد" in t or "cash" in t):
-        return "مشتريات نقدي"
-
-    # =====================================
-    # 🔥 4. سندات
-    # =====================================
-    if "قبض" in t or "receipt" in t:
-        return "سند قبض"
-
-    if "صرف" in t or "payment" in t:
-        return "سند صرف"
-
-    # =====================================
-    # 🔥 5. قيود
-    # =====================================
-    if "قيد افتتاحي" in t:
-        return "قيد افتتاحي"
-
-    if "قيد" in t or "journal" in t:
-        return "قيد يومية"
-
-    # =====================================
-    # 🔥 6. مخزون
-    # =====================================
-    if "تحويل" in t:
-        return "تحويل مخزني"
-
-    if "توريد" in t:
-        return "توريد مخزني"
-
-    if "صرف مخزني" in t:
-        return "صرف مخزني"
-
-    # =====================================
-    # 🔥 7. fallback (آخر حل)
-    # =====================================
-    if "مبيعات" in t:
-        return "مبيعات"
-
-    if "مشتريات" in t:
-        return "مشتريات"
-
-    # لو ما عرفه → رجع النص نفسه
-    return t
 def match_doc(d1, d2):
 
     # 🔥 تصحيح منطقي
@@ -505,123 +422,194 @@ def clean_doc(s):
 
 # ================= ANALYZE =================
 
-from collections import defaultdict
-import pandas as pd
-
 def analyze(d1, d2):
-
     res = []
+    used = [False] * len(d2)
     counts = {}
 
     # =========================================
-    # تجهيز التاريخ
+    # حذف العمليات العكسية
     # =========================================
-    def normalize_date(d):
-        try:
-            d = pd.to_datetime(d, errors='coerce')
-            if pd.isna(d):
-                return None
-            return d.date()
-        except:
-            return None
+    def remove_reversals(data):
+        cleaned = []
+        used_local = [False] * len(data)
+
+        for i, x1 in enumerate(data):
+            if used_local[i]:
+                continue
+
+            found = False
+
+            for j, x2 in enumerate(data):
+                if i == j or used_local[j]:
+                    continue
+
+                if x1["branch"] != x2["branch"]:
+                    continue
+
+                if x1["type"] == x2["type"]:
+                    continue
+
+                if abs(x1["amount"] - x2["amount"]) > 0.01:
+                    continue
+
+                days = date_diff_days(x1["date"], x2["date"])
+                if days is None or days > 1:
+                    continue
+
+                if x1.get("doc") and x2.get("doc"):
+                    if not match_doc(x1["doc"], x2["doc"]):
+                        continue
+
+                used_local[i] = True
+                used_local[j] = True
+                found = True
+                break
+
+            if not found:
+                cleaned.append(x1)
+
+        return cleaned
+
+    # تطبيق الحذف
+    d1 = remove_reversals(d1)
+    d2 = remove_reversals(d2)
 
     # =========================================
-    # نافذة تاريخ (±2 أيام)
+    # لو الفرع الثاني فاضي
     # =========================================
-    def date_key(d):
-        d = normalize_date(d)
-        return d
-
-    # =========================================
-    # مفتاح التجميع
-    # =========================================
-    def build_key(x):
-        return (
-            round(x.get("amount", 0), 2),
-            x.get("doc"),   # ممكن None
-            date_key(x.get("date"))
-        )
-
-    # =========================================
-    # تقسيم البيانات
-    # =========================================
-    bucket1 = defaultdict(list)
-    bucket2 = defaultdict(list)
-
-    errors_only = []
-
-    for x in d1:
-        if x.get("type") == "error":
-            errors_only.append(x)
-            continue
-        bucket1[build_key(x)].append(x)
-
-    for x in d2:
-        if x.get("type") == "error":
-            errors_only.append(x)
-            continue
-        bucket2[build_key(x)].append(x)
-
-    # =========================================
-    # المطابقة الرئيسية (بدون عشوائية)
-    # =========================================
-    all_keys = set(bucket1.keys()) | set(bucket2.keys())
-
-    for key in all_keys:
-
-        list1 = bucket1.get(key, [])
-        list2 = bucket2.get(key, [])
-
-        # فصل حسب الاتجاه (لو موجود)
-        def split_direction(lst):
-            debit = []
-            credit = []
-            for x in lst:
-                if x.get("type") == "debit":
-                    debit.append(x)
-                elif x.get("type") == "credit":
-                    credit.append(x)
-                else:
-                    debit.append(x)
-            return debit, credit
-
-        d1_debit, d1_credit = split_direction(list1)
-        d2_debit, d2_credit = split_direction(list2)
-
-        # =====================================
-        # مطابقة عكسية فقط
-        # =====================================
-        def match_lists(l1, l2):
-            matched = min(len(l1), len(l2))
-
-            for i in range(matched):
-                l1[i]["matched"] = True
-                l2[i]["matched"] = True
-
-            return l1[matched:], l2[matched:]
-
-        # debit ↔ credit
-        rem1_a, rem2_a = match_lists(d1_debit, d2_credit)
-        rem1_b, rem2_b = match_lists(d1_credit, d2_debit)
-
-        # الباقي (غير مطابق)
-        remaining = rem1_a + rem1_b + rem2_a + rem2_b
-
-        for x in remaining:
+    if not d2:
+        for x in d1:
             res.append({
                 **x,
-                "reason": "لا يوجد مقابل ❌ (فرق في العدد داخل نفس المجموعة)"
+                "reason": "لا يوجد مقابل ❌ (الفرع الثاني فارغ)"
             })
             b = x.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
+        return res, counts
 
     # =========================================
-    # إضافة الأخطاء الأصلية
+    # نظام التقييم
     # =========================================
-    for x in errors_only:
-        res.append(x)
-        b = x.get("branch") or "unknown"
-        counts[b] = counts.get(b, 0) + 1
+    def match_score(x1, x2):
+        score = 0
+        reasons = []
+
+        # المبلغ
+        diff = abs(x1["amount"] - x2["amount"])
+        if diff < 0.01:
+            score += 50
+            reasons.append("نفس المبلغ")
+        elif diff < 1:
+            score += 30
+            reasons.append("مبلغ قريب")
+        else:
+            return 0, ["فرق مبلغ كبير"]
+
+        # الاتجاه
+        if (
+            (x1["type"] == "credit" and x2["type"] == "debit") or
+            (x1["type"] == "debit" and x2["type"] == "credit")
+        ):
+            score += 30
+            reasons.append("اتجاه عكسي صحيح")
+        else:
+            return 0, ["نفس الاتجاه"]
+
+        # 🔥 شرط المستند
+        if x1.get("doc") and x2.get("doc"):
+            if not match_doc(x1["doc"], x2["doc"]):
+                return 0, ["اختلاف نوع المستند"]
+
+        # التاريخ
+        days = date_diff_days(x1["date"], x2["date"])
+        if days is None:
+            score -= 10
+            reasons.append("تاريخ غير واضح")
+        elif days == 0:
+            score += 20
+            reasons.append("نفس اليوم")
+        elif days <= 2:
+            score += 10
+            reasons.append("تاريخ قريب")
+        else:
+            score -= 10
+            reasons.append("تاريخ بعيد")
+
+        # تقييم المستند
+        if match_doc(x1.get("doc"), x2.get("doc")):
+            score += 20
+            reasons.append("نوع مستند مطابق")
+        else:
+            score -= 10
+            reasons.append("اختلاف نوع المستند")
+
+        return score, reasons
+
+    # =========================================
+    # المطابقة
+    # =========================================
+    for x1 in d1:
+
+        if x1.get("type") == "error":
+            res.append(x1)
+            b = x1.get("branch") or "unknown"
+            counts[b] = counts.get(b, 0) + 1
+            continue
+
+        best_i = -1
+        best_score = -1
+        best_reason = []
+
+        for i, x2 in enumerate(d2):
+            if used[i]:
+                continue
+            if x2.get("type") == "error":
+                continue
+
+            score, reasons = match_score(x1, x2)
+
+            if score > best_score:
+                best_score = score
+                best_i = i
+                best_reason = reasons
+
+        if best_score >= 80 and best_i != -1:
+            used[best_i] = True
+
+        elif best_score >= 60 and best_i != -1:
+            res.append({
+                **x1,
+                "reason": f"تطابق ضعيف ⚠️ | score={best_score} | {' , '.join(best_reason)}"
+            })
+            used[best_i] = True
+
+        else:
+            res.append({
+                **x1,
+                "reason": f"لا يوجد مقابل ❌ | score={best_score} | {' , '.join(best_reason)}"
+            })
+            b = x1.get("branch") or "unknown"
+            counts[b] = counts.get(b, 0) + 1
+
+    # =========================================
+    # الباقي من الفرع الثاني
+    # =========================================
+    for i, x in enumerate(d2):
+        if not used[i]:
+
+            if x.get("type") == "error":
+                res.append(x)
+                b = x.get("branch") or "unknown"
+                counts[b] = counts.get(b, 0) + 1
+                continue
+
+            res.append({
+                **x,
+                "reason": "لا يوجد مقابل ❌ (من الفرع الآخر)"
+            })
+            b = x.get("branch") or "unknown"
+            counts[b] = counts.get(b, 0) + 1
 
     return res, counts
     
@@ -1008,7 +996,7 @@ async function upload(){
 function filterErrors(){
 
     if (!ALL_ERRORS || !Array.isArray(ALL_ERRORS)) {
-        console.log("لا توجد بيانات للفلترة")
+        console.log("مافي بيانات للفلترة")
         return
     }
 
