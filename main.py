@@ -212,58 +212,113 @@ def process(file, filename, branch):
     # =========================================
     # fallback الأعمدة
     # =========================================
-    if not debit_col and not credit_col:
-        numeric_cols = []
+if not debit_col and not credit_col:
+    numeric_cols = []
 
-        for col in df.columns:
-            nums = pd.to_numeric(df[col], errors='coerce').dropna()
+    for col in df.columns:
+        nums = pd.to_numeric(df[col], errors='coerce').dropna()
 
-            if len(nums) < len(df) * 0.3:
-                continue
-
-            if nums.mean() < 10:
-                continue
-
-            numeric_cols.append((col, nums.mean()))
-
-        numeric_cols.sort(key=lambda x: x[1], reverse=True)
-
-        if len(numeric_cols) >= 1:
-            debit_col = numeric_cols[0][0]
-
-        if len(numeric_cols) >= 2:
-            credit_col = numeric_cols[1][0]
-
-    data = []
-
-    for _, row in df.iterrows():
-
-        if row.isna().all():
+        if len(nums) < len(df) * 0.3:
             continue
 
-        debit  = safe(row[debit_col]) if debit_col in df.columns else None
-        credit = safe(row[credit_col]) if credit_col in df.columns else None
-
-        if debit is None and credit is None:
+        if nums.mean() < 10:
             continue
 
-        # خطأ مدين + دائن
-if debit and credit and debit > 0 and credit > 0:
-    amount = max(debit, credit)
+        numeric_cols.append((col, nums.mean()))
 
-    # 🔥 خذ التاريخ الحقيقي
+    numeric_cols.sort(key=lambda x: x[1], reverse=True)
+
+    if len(numeric_cols) >= 1:
+        debit_col = numeric_cols[0][0]
+
+    if len(numeric_cols) >= 2:
+        credit_col = numeric_cols[1][0]
+
+
+data = []
+
+for _, row in df.iterrows():
+
+    if row.isna().all():
+        continue
+
+    debit  = safe(row[debit_col]) if debit_col in df.columns else None
+    credit = safe(row[credit_col]) if credit_col in df.columns else None
+
+    if debit is None and credit is None:
+        continue
+
+    # =========================================
+    # 🔥 خطأ مدين + دائن
+    # =========================================
+    if debit and credit and debit > 0 and credit > 0:
+        amount = max(debit, credit)
+
+        # التاريخ
+        date = None
+        if date_col and date_col in df.columns:
+            try:
+                val = row[date_col]
+                d = pd.to_datetime(val, errors='coerce', dayfirst=True)
+                if not pd.isna(d):
+                    date = d.strftime("%Y-%m-%d")
+            except:
+                date = str(row[date_col])
+
+        # المستند
+        doc = None
+        if doc_col and doc_col in df.columns:
+            val = row[doc_col]
+            if pd.notna(val):
+                doc = classify_doc(val)
+
+        data.append({
+            "amount": float(amount),
+            "type": "error",
+            "branch": branch,
+            "date": date,
+            "doc": doc,
+            "reason": "خطأ: الصف يحتوي مدين ودائن"
+        })
+        continue
+
+    # =========================================
+    # تحديد النوع
+    # =========================================
+    if credit and credit > 0:
+        amount = credit
+        t = "credit"
+
+    elif debit and debit > 0:
+        amount = debit
+        t = "debit"
+
+    else:
+        continue
+
+    # =========================================
+    # التاريخ
+    # =========================================
     date = None
+
     if date_col and date_col in df.columns:
         try:
             val = row[date_col]
-            d = pd.to_datetime(val, errors='coerce', dayfirst=True)
-            if not pd.isna(d):
-                date = d.strftime("%Y-%m-%d")
+
+            if pd.isna(val):
+                date = None
+            else:
+                d = pd.to_datetime(val, errors='coerce', dayfirst=True)
+                if not pd.isna(d):
+                    date = d.strftime("%Y-%m-%d")
         except:
             date = str(row[date_col])
 
-    # 🔥 خذ المستند الحقيقي
+    # =========================================
+    # المستند
+    # =========================================
     doc = None
+
     if doc_col and doc_col in df.columns:
         val = row[doc_col]
         if pd.notna(val):
@@ -271,61 +326,13 @@ if debit and credit and debit > 0 and credit > 0:
 
     data.append({
         "amount": float(amount),
-        "type": "error",
+        "type": t,
         "branch": branch,
         "date": date,
-        "doc": doc,
-        "reason": "خطأ: الصف يحتوي مدين ودائن"
+        "doc": doc
     })
-    continue
-    
-        # تحديد النوع
-        if credit and credit > 0:
-            amount = credit
-            t = "credit"
 
-        elif debit and debit > 0:
-            amount = debit
-            t = "debit"
-
-        else:
-            continue
-
-        # التاريخ
-        date = None
-
-        if date_col and date_col in df.columns:
-            try:
-                val = row[date_col]
-
-                if pd.isna(val):
-                    date = None
-                else:
-                    d = pd.to_datetime(val, errors='coerce', dayfirst=False)
-                    if not pd.isna(d):
-                        date = d.strftime("%Y-%m-%d")
-                    else:
-                        date = None
-            except:
-                date = str(row[date_col])
-
-        # المستند
-        doc = None
-
-        if doc_col and doc_col in df.columns:
-            val = row[doc_col]
-            if pd.notna(val):
-                doc = str(val).strip()
-
-        data.append({
-            "amount": float(amount),
-            "type": t,
-            "branch": branch,
-            "date": date,
-            "doc": doc
-        })
-
-    return data
+return data
     
 # ================= ANALYZE =================
 
