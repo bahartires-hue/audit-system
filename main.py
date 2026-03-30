@@ -194,124 +194,141 @@ def process(file, filename, branch):
     debit_col, credit_col, date_col = detect_columns(df)
 
     # =========================================
-    # عمود المستند
-    # =========================================
-    doc_col = None
+# 🔥 كشف عمود المستند (محسن)
+# =========================================
+doc_col = None
+
+for col in df.columns:
+    name = str(col).lower().strip()
+
+    if any(x in name for x in [
+        "مستند","نوع","بيان","وصف",
+        "description","desc","document"
+    ]):
+        doc_col = col
+        break
+
+# 🔥 fallback لو ما لقى
+if not doc_col and len(df.columns) > 0:
+    doc_col = df.columns[0]
+
+
+# =========================================
+# fallback الأعمدة (لو detection فشل)
+# =========================================
+if not debit_col and not credit_col:
+    numeric_cols = []
+
     for col in df.columns:
-        name = str(col).lower()
-        if any(x in name for x in ["مستند", "doc", "نوع", "بيان", "الوصف", "description"]):
-            doc_col = col
-            break
+        nums = pd.to_numeric(df[col], errors='coerce').dropna()
+
+        if len(nums) < len(df) * 0.3:
+            continue
+
+        if nums.mean() < 10:
+            continue
+
+        numeric_cols.append((col, nums.mean()))
+
+    numeric_cols.sort(key=lambda x: x[1], reverse=True)
+
+    if len(numeric_cols) >= 1:
+        debit_col = numeric_cols[0][0]
+
+    if len(numeric_cols) >= 2:
+        credit_col = numeric_cols[1][0]
+
+
+data = []
+
+for _, row in df.iterrows():
+
+    if row.isna().all():
+        continue
+
+    debit  = safe(row[debit_col]) if debit_col in df.columns else None
+    credit = safe(row[credit_col]) if credit_col in df.columns else None
+
+    if debit is None and credit is None:
+        continue
 
     # =========================================
-    # fallback الأعمدة (لو detection فشل)
+    # خطأ: مدين + دائن
     # =========================================
-    if not debit_col and not credit_col:
-        numeric_cols = []
-
-        for col in df.columns:
-            nums = pd.to_numeric(df[col], errors='coerce').dropna()
-
-            if len(nums) < len(df) * 0.3:
-                continue
-
-            if nums.mean() < 10:
-                continue
-
-            numeric_cols.append((col, nums.mean()))
-
-        numeric_cols.sort(key=lambda x: x[1], reverse=True)
-
-        if len(numeric_cols) >= 1:
-            debit_col = numeric_cols[0][0]
-
-        if len(numeric_cols) >= 2:
-            credit_col = numeric_cols[1][0]
-
-    data = []
-
-    for _, row in df.iterrows():
-
-        if row.isna().all():
-            continue
-
-        debit  = safe(row[debit_col]) if debit_col in df.columns else None
-        credit = safe(row[credit_col]) if credit_col in df.columns else None
-
-        # 🔥 لا تحذف بيانات بسبب 0
-        if debit is None and credit is None:
-            continue
-
-        # =========================================
-        # خطأ: مدين + دائن
-        # =========================================
-        if debit and credit and debit > 0 and credit > 0:
-            amount = max(debit, credit)
-
-            data.append({
-                "amount": float(amount),
-                "type": "error",
-                "branch": branch,
-                "date": None,
-                "doc": "",
-                "reason": "خطأ: الصف يحتوي مدين ودائن"
-            })
-            continue
-
-        # =========================================
-        # تحديد النوع
-        # =========================================
-        if credit and credit > 0:
-            amount = credit
-            t = "credit"
-
-        elif debit and debit > 0:
-            amount = debit
-            t = "debit"
-
-        else:
-            continue
-
-        # =========================================
-        # التاريخ (محسن)
-        # =========================================
-        date = None
-
-        if date_col and date_col in df.columns:
-            try:
-                val = row[date_col]
-
-                if pd.isna(val):
-                    date = None
-
-                elif isinstance(val, (int, float)):
-                    d = pd.to_datetime(val, unit='d', origin='1899-12-30', errors='coerce')
-
-                else:
-                    d = pd.to_datetime(str(val), errors='coerce', dayfirst=True)
-
-                if not pd.isna(d):
-                    date = d.strftime("%Y-%m-%d")
-
-            except:
-                date = None
-
-        # =========================================
-        # المستند
-        # =========================================
-        doc = ""
-        if doc_col and doc_col in df.columns:
-            doc = str(row[doc_col]).strip()
+    if debit and credit and debit > 0 and credit > 0:
+        amount = max(debit, credit)
 
         data.append({
             "amount": float(amount),
-            "type": t,
+            "type": "error",
             "branch": branch,
-            "date": date,
-            "doc": doc
+            "date": None,
+            "doc": "",
+            "reason": "خطأ: الصف يحتوي مدين ودائن"
         })
+        continue
 
-    return data
+    # =========================================
+    # تحديد النوع
+    # =========================================
+    if credit and credit > 0:
+        amount = credit
+        t = "credit"
+
+    elif debit and debit > 0:
+        amount = debit
+        t = "debit"
+
+    else:
+        continue
+
+    # =========================================
+    # 🔥 التاريخ (مصحح + fallback)
+    # =========================================
+    date = None
+
+    if date_col and date_col in df.columns:
+        try:
+            val = row[date_col]
+
+            if pd.isna(val):
+                date = None
+
+            elif isinstance(val, (int, float)):
+                d = pd.to_datetime(val, unit='d', origin='1899-12-30', errors='coerce')
+
+            else:
+                d = pd.to_datetime(str(val), errors='coerce', dayfirst=True)
+
+            if not pd.isna(d):
+                date = d.strftime("%Y-%m-%d")
+            else:
+                # 🔥 fallback لو فشل
+                date = str(val)
+
+        except:
+            date = str(row[date_col]) if date_col in df.columns else None
+
+    # =========================================
+    # 🔥 المستند (مصحح)
+    # =========================================
+    doc = ""
+
+    if doc_col and doc_col in df.columns:
+        val = row[doc_col]
+
+        if pd.notna(val):
+            doc = str(val).strip()
+
+    data.append({
+        "amount": float(amount),
+        "type": t,
+        "branch": branch,
+        "date": date,
+        "doc": doc
+    })
+
+return data
     
 # ================= ANALYZE =================
 # ================= ANALYZE =================
@@ -432,7 +449,61 @@ def analyze(d1, d2):
     used = [False] * len(d2)
     counts = {}
 
+    # =========================================
+    # 🔥 حذف العمليات العكسية (STRICT)
+    # =========================================
+    def remove_reversals(data):
+        cleaned = []
+        used_local = [False] * len(data)
+
+        for i, x1 in enumerate(data):
+            if used_local[i]:
+                continue
+
+            found = False
+
+            for j, x2 in enumerate(data):
+                if i == j or used_local[j]:
+                    continue
+
+                # نفس الفرع
+                if x1["branch"] != x2["branch"]:
+                    continue
+
+                # عكس الاتجاه فقط
+                if x1["type"] == x2["type"]:
+                    continue
+
+                # نفس المبلغ (دقة عالية)
+                if abs(x1["amount"] - x2["amount"]) > 0.001:
+                    continue
+
+                # نفس اليوم بالضبط
+                if x1["date"] != x2["date"]:
+                    continue
+
+                # نفس نوع المستند
+                if not match_doc(x1.get("doc"), x2.get("doc")):
+                    continue
+
+                # 🔥 حذف الاثنين
+                used_local[i] = True
+                used_local[j] = True
+                found = True
+                break
+
+            if not found:
+                cleaned.append(x1)
+
+        return cleaned
+
+    # 🔥 تطبيق الحذف قبل التحليل
+    d1 = remove_reversals(d1)
+    d2 = remove_reversals(d2)
+
+    # =========================================
     # 🔥 إذا الفرع الثاني فاضي
+    # =========================================
     if not d2:
         for x in d1:
             res.append({
@@ -450,7 +521,6 @@ def analyze(d1, d2):
         score = 0
         reasons = []
 
-        # المبلغ
         diff = abs(x1["amount"] - x2["amount"])
         if diff < 0.01:
             score += 50
@@ -461,7 +531,6 @@ def analyze(d1, d2):
         else:
             return 0, ["فرق مبلغ كبير"]
 
-        # الاتجاه
         if (
             (x1["type"] == "credit" and x2["type"] == "debit") or
             (x1["type"] == "debit" and x2["type"] == "credit")
@@ -471,7 +540,6 @@ def analyze(d1, d2):
         else:
             return 0, ["نفس الاتجاه"]
 
-        # التاريخ
         days = date_diff_days(x1["date"], x2["date"])
         if days is None:
             score -= 10
@@ -486,7 +554,6 @@ def analyze(d1, d2):
             score -= 10
             reasons.append("تاريخ بعيد")
 
-        # المستند
         if match_doc(x1.get("doc"), x2.get("doc")):
             score += 20
             reasons.append("نوع مستند مطابق")
@@ -524,24 +591,16 @@ def analyze(d1, d2):
                 best_i = i
                 best_reason = reasons
 
-        # =========================================
-        # 🔥 threshold
-        # =========================================
         threshold = 60
         if x1.get("doc"):
             threshold += 5
         if x1.get("date"):
             threshold += 5
 
-        # =========================================
-        # 🔥 القرار النهائي
-        # =========================================
         if best_score >= threshold + 15 and best_i != -1:
-            # ✔️ تطابق قوي (مخفي)
             used[best_i] = True
 
         elif best_score >= threshold and best_i != -1:
-            # ⚠️ تطابق ضعيف
             res.append({
                 **x1,
                 "reason": f"تطابق ضعيف ⚠️ | score={best_score} | {' , '.join(best_reason)}"
@@ -549,7 +608,6 @@ def analyze(d1, d2):
             used[best_i] = True
 
         else:
-            # ❌ خطأ
             res.append({
                 **x1,
                 "reason": f"لا يوجد مقابل ❌ | score={best_score} | {' , '.join(best_reason)}"
@@ -670,12 +728,19 @@ input{width:100%;padding:10px;margin:5px 0 10px;border-radius:8px;border:1px sol
 <div id="stats" class="stats"></div>
 <div id="totals" class="card"></div>
 
+
 <div class="card">
 <h3>فلترة الأخطاء</h3>
+
 <input id="filterDoc" placeholder="نوع المستند">
 <input id="filterAmount" placeholder="المبلغ">
+
+<!-- 🔥 جديد -->
+<input id="filterType" placeholder="نوع الخطأ (❌ أو ⚠️)">
+
 <button class="analyze-btn" onclick="applyFilter()">تطبيق</button>
 <button class="btn btn-mode" onclick="resetFilter()">إلغاء</button>
+
 </div>
 
 <div class="card">
@@ -690,37 +755,54 @@ input{width:100%;padding:10px;margin:5px 0 10px;border-radius:8px;border:1px sol
 </div>
 
 <script>
+
 let TOKEN=""
 let USERNAME=""
 let ALL_ERRORS=[]
 
 // ================= FILTER =================
 function applyFilter(){
+
     let doc = document.getElementById("filterDoc").value.toLowerCase().trim()
     let amount = document.getElementById("filterAmount").value.trim()
+    let type = document.getElementById("filterType").value.trim()
 
     let filtered = ALL_ERRORS
 
+    // فلترة بالمستند
     if(doc){
         filtered = filtered.filter(x => 
             (x.doc || "").toLowerCase().includes(doc)
         )
     }
 
+    // فلترة بالمبلغ
     if(amount){
         filtered = filtered.filter(x => 
             String(x.amount) === amount
         )
     }
 
+    // 🔥 فلترة بنوع الخطأ
+    if(type){
+        filtered = filtered.filter(x =>
+            (x.reason || "").includes(type)
+        )
+    }
+
     render(filtered)
 }
 
+
+// ================= RESET =================
 function resetFilter(){
     document.getElementById("filterDoc").value = ""
     document.getElementById("filterAmount").value = ""
+    document.getElementById("filterType").value = ""
     render(ALL_ERRORS)
 }
+
+</script>
 
 // ================= UI =================
 function showToast(msg,color="#22c55e"){
@@ -803,49 +885,142 @@ function render(errors){
     })
 }
 
-// ================= UPLOAD (FIXED) =================
+
+// 🔥 متغير عام
+let ALL_ERRORS = []
+
+// ================= UPLOAD (FINAL) =================
 async function upload(){
 
-let file1 = document.getElementById("f1").files[0]
-let file2 = document.getElementById("f2").files[0]
+    let btn = document.getElementById("analyzeBtn")
 
-if(!file1 || !file2){
-    showToast("اختار الملفين أولاً","#ef4444")
-    return
+    // 🔥 تشغيل loading
+    btn.disabled = true
+    btn.innerHTML = `جاري التحليل <span class="spinner"></span>`
+    btn.style.opacity = "0.6"
+
+    let file1 = document.getElementById("f1").files[0]
+    let file2 = document.getElementById("f2").files[0]
+
+    if(!file1 || !file2){
+        showToast("اختار الملفين أولاً","#ef4444")
+
+        btn.disabled = false
+        btn.innerText = "تحليل"
+        btn.style.opacity = "1"
+        return
+    }
+
+    let f=new FormData()
+    f.append("file1", file1)
+    f.append("file2", file2)
+    f.append("b1",b1.value)
+    f.append("b2",b2.value)
+
+    try{
+
+        let r=await fetch("/analyze",{
+            method:"POST",
+            body:f,
+            headers:{
+                "Authorization":"Bearer "+TOKEN
+            }
+        })
+
+        if(!r.ok){
+            let text = await r.text()
+            console.log("❌ response:", text)
+            showToast("خطأ في التحليل","#ef4444")
+
+            btn.disabled = false
+            btn.innerText = "تحليل"
+            btn.style.opacity = "1"
+            return
+        }
+
+        let d = await r.json()
+
+        // 🔥 حماية من crash
+        if (!d || !d.errors || !Array.isArray(d.errors)) {
+            console.log("❌ رد السيرفر غلط:", d)
+            showToast("التحليل رجع بيانات غير صحيحة","#ef4444")
+
+            btn.disabled = false
+            btn.innerText = "تحليل"
+            btn.style.opacity = "1"
+            return
+        }
+
+        if (!d.counts) {
+            d.counts = {}
+        }
+
+        // 🔥 تخزين الأخطاء
+        ALL_ERRORS = d.errors
+
+        // =========================================
+        // 🔥 stats (عدد + نسبة)
+        // =========================================
+        let c1 = d.counts?.[b1.value] || 0
+        let c2 = d.counts?.[b2.value] || 0
+
+        let totalErrors = ALL_ERRORS.length || 1
+
+        let p1 = Math.round((c1 / totalErrors) * 100)
+        let p2 = Math.round((c2 / totalErrors) * 100)
+
+        stats.innerHTML = `
+        <div class="stat">
+            <span>${b1.value}</span>
+            <b>${c1}</b>
+            <span>عدد الأخطاء</span>
+            <small>${p1}%</small>
+        </div>
+
+        <div class="stat">
+            <span>${b2.value}</span>
+            <b>${c2}</b>
+            <span>عدد الأخطاء</span>
+            <small>${p2}%</small>
+        </div>
+        `
+
+        // 🔥 عرض الكل
+        render(ALL_ERRORS)
+
+        showToast("تم التحليل ✔️")
+
+    } catch(e){
+        console.error("❌ error:", e)
+        showToast("حصل خطأ غير متوقع","#ef4444")
+    }
+
+    // 🔥 إرجاع الزر طبيعي
+    btn.disabled = false
+    btn.innerText = "تحليل"
+    btn.style.opacity = "1"
 }
 
-let f=new FormData()
-f.append("file1", file1)
-f.append("file2", file2)
-f.append("b1",b1.value)
-f.append("b2",b2.value)
 
-let r=await fetch("/analyze",{
-method:"POST",
-body:f,
-headers:{
-"Authorization":"Bearer "+TOKEN
-}
-})
+// ================= FILTER ERRORS =================
+function filterErrors(){
 
-if(!r.ok){
-    let text = await r.text()
-    console.log(text)
-    showToast("خطأ في التحليل","#ef4444")
-    return
+    if (!ALL_ERRORS || !Array.isArray(ALL_ERRORS)) {
+        console.log("مافي بيانات للفلترة")
+        return
+    }
+
+    let filtered = ALL_ERRORS.filter(x =>
+        x.reason && x.reason.includes("❌")
+    )
+
+    render(filtered)
 }
 
-let d=await r.json()
 
-ALL_ERRORS=d.errors
-
-stats.innerHTML=""
-[[b1.value, d.counts[b1.value]||0],[b2.value, d.counts[b2.value]||0]].forEach(([b,c])=>{
-stats.innerHTML+=`<div class="stat"><span>${b}</span><b>${c}</b><span>عدد الأخطاء</span></div>`
-})
-
-render(ALL_ERRORS)
-showToast("تم التحليل ✔️")
+// ================= SHOW ALL =================
+function showAll(){
+    render(ALL_ERRORS)
 }
 
 // ================= DOWNLOAD =================
