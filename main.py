@@ -814,22 +814,27 @@ goLogin()
 }
 
 async function login(){
-let f=new FormData()
-f.append("username",user.value)
-f.append("password",pass.value)
+    let f = new FormData()
+    f.append("username", user.value)
+    f.append("password", pass.value)
 
-let r=await fetch("/login",{method:"POST",body:f})
-let d=await r.json()
+    let r = await fetch("/login",{method:"POST",body:f})
+    let d = await r.json()
 
-if(d.token){
-TOKEN=d.token
-USERNAME=d.username
-loginBox.classList.add("hidden")
-systemBox.classList.remove("hidden")
-welcomeUser.innerText="مرحبًا "+USERNAME
-}else{
-showToast("فشل تسجيل الدخول","#ef4444")
-}
+    if(d.token){
+        TOKEN = d.token
+        USERNAME = d.username
+
+        // 🔥 تخزين التوكن في localStorage
+        localStorage.setItem("TOKEN", TOKEN)
+        localStorage.setItem("USERNAME", USERNAME)
+
+        loginBox.classList.add("hidden")
+        systemBox.classList.remove("hidden")
+        welcomeUser.innerText = "مرحبًا " + USERNAME
+    } else {
+        showToast("فشل تسجيل الدخول","#ef4444")
+    }
 }
 
 // ================= RENDER =================
@@ -1025,6 +1030,20 @@ a.download="report.xlsx"
 a.click()
 })
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+    const savedToken = localStorage.getItem("TOKEN");
+    const savedUser  = localStorage.getItem("USERNAME");
+
+    if (savedToken && savedUser) {
+        TOKEN = savedToken;
+        USERNAME = savedUser;
+
+        loginBox.classList.add("hidden");
+        systemBox.classList.remove("hidden");
+        welcomeUser.innerText = "مرحبًا " + USERNAME;
+    }
+});
 </script>
 
 </body>
