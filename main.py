@@ -470,31 +470,52 @@ def analyze(d1, d2):
     # =========================================
     # حذف المبيعات والمردود المرتبط بنفس المبلغ والتاريخ فقط
     # =========================================
-    def remove_sales_returns(data):
-        cleaned = []
-        skip_indexes = set()
-        for i, x1 in enumerate(data):
-            if i in skip_indexes:
+    def remove_sales_purchases_pair(data):
+    cleaned = []
+    used = [False] * len(data)
+
+    for i, x1 in enumerate(data):
+        if used[i]:
+            continue
+
+        type1 = x1.get("type_doc", "").lower()
+        if type1 not in ["فاتوره مبيعات اجل", "مردود مبيعات اجل",
+                         "فاتوره مشتريات اجل", "مردود مشتريات اجل"]:
+            cleaned.append(x1)
+            continue
+
+        found_pair = False
+        for j, x2 in enumerate(data):
+            if i == j or used[j]:
                 continue
-            is_pair = False
-            for j, x2 in enumerate(data):
-                if i == j or j in skip_indexes:
+
+            type2 = x2.get("type_doc", "").lower()
+            # تحقق إنهم مبيعات ومردود متقابل
+            if (("مبيعات" in type1 and "مردود مبيعات" in type2) or
+                ("مردود مبيعات" in type1 and "فاتوره مبيعات" in type2) or
+                ("مشتريات" in type1 and "مردود مشتريات" in type2) or
+                ("مردود مشتريات" in type1 and "مشتريات" in type2)):
+
+                # نفس الفرع
+                if x1.get("branch") != x2.get("branch"):
                     continue
-                if x1["branch"] != x2["branch"]:
+                # نفس المبلغ
+                if abs(x1.get("amount", 0) - x2.get("amount", 0)) > 0.01:
                     continue
-                types_pair = {x1.get("doc", "").lower(), x2.get("doc", "").lower()}
-                # شرط أن يكون مبيعات ومردود
-                if ("فاتوره مبيعات" in types_pair or "مبيعات" in types_pair) and \
-                   ("مردود" in types_pair):
-                    # نفس المبلغ والتاريخ
-                    if abs(x1["amount"] - x2["amount"]) < 0.01 and x1["date"] == x2["date"]:
-                        skip_indexes.add(i)
-                        skip_indexes.add(j)
-                        is_pair = True
-                        break
-            if not is_pair:
-                cleaned.append(x1)
-        return cleaned
+                # نفس التاريخ
+                if x1.get("date") != x2.get("date"):
+                    continue
+
+                # لو وصلنا هنا، حذف الاثنين
+                used[i] = True
+                used[j] = True
+                found_pair = True
+                break
+
+        if not found_pair:
+            cleaned.append(x1)
+
+    return cleaned
 
     d1 = remove_sales_returns(d1)
     d2 = remove_sales_returns(d2)
