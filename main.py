@@ -446,7 +446,6 @@ def analyze(d1, d2):
     # حذف العمليات العكسية
     # =========================================
     def remove_reversals(data):
-
     # 🔥 دالة داخلية لعكس المستند
     def is_reverse_doc(d1, d2):
         if not d1 or not d2:
