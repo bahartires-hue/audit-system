@@ -740,7 +740,7 @@ def analyze(d1, d2):
 
     return res, counts
     d1 = remove_sales_purchases_pair(d1)
-    d2 = remove_sales_purchases_pair(d2))
+    d2 = remove_sales_purchases_pair(d2)
 
     # =========================================
     # لو الفرع الثاني فاضي
