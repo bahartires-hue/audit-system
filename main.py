@@ -422,40 +422,6 @@ def clean_doc(s):
 
 # ================= ANALYZE =================
 
-import pandas as pd
-
-# =========================================
-# حذف المبيعات والمردود داخل نفس الفرع
-# =========================================
-def remove_sales_purchases_pair(df):
-    df = df.copy()
-    pairs = {
-        "مبيعات": "مردود مبيعات",
-        "مردود مبيعات": "مبيعات",
-        "مشتريات": "مردود مشتريات",
-        "مردود مشتريات": "مشتريات",
-    }
-
-    to_drop = set()
-    grouped = df.groupby(["فرع", "رقم المستند", "التاريخ"] )
-
-    for _, group in grouped:
-        types_in_group = group["نوع المستند"].tolist()
-        indices = group.index.tolist()
-        for i, doc_type in enumerate(types_in_group):
-            if doc_type in pairs and pairs[doc_type] in types_in_group:
-                j = types_in_group.index(pairs[doc_type])
-                to_drop.add(indices[i])
-                to_drop.add(indices[j])
-                types_in_group[i] = None
-                types_in_group[j] = None
-
-    df = df.drop(index=list(to_drop))
-    return df
-
-# =========================================
-# تحليل العمليات بين فرعين
-# =========================================
 def analyze(d1, d2):
     res = []
     used = [False] * len(d2)
@@ -467,246 +433,47 @@ def analyze(d1, d2):
     def remove_reversals(data):
         cleaned = []
         used_local = [False] * len(data)
+
         for i, x1 in enumerate(data):
             if used_local[i]:
                 continue
+
             found = False
+
             for j, x2 in enumerate(data):
                 if i == j or used_local[j]:
                     continue
+
                 if x1["branch"] != x2["branch"]:
                     continue
+
                 if x1["type"] == x2["type"]:
                     continue
+
                 if abs(x1["amount"] - x2["amount"]) > 0.01:
                     continue
-                # هنا لازم تكون عندك دالة date_diff_days و match_doc
+
                 days = date_diff_days(x1["date"], x2["date"])
                 if days is None or days > 1:
                     continue
-                if x1.get("doc") and x2.get("doc") and not match_doc(x1["doc"], x2["doc"]):
-                    continue
+
+                if x1.get("doc") and x2.get("doc"):
+                    if not match_doc(x1["doc"], x2["doc"]):
+                        continue
+
                 used_local[i] = True
                 used_local[j] = True
                 found = True
                 break
+
             if not found:
                 cleaned.append(x1)
+
         return cleaned
 
+    # تطبيق الحذف
     d1 = remove_reversals(d1)
     d2 = remove_reversals(d2)
-
-    # =========================================
-    # حذف المبيعات والمشتريات المتطابقة داخل القوائم
-    # =========================================
-    d1 = remove_sales_purchases_pair(d1)
-    d2 = remove_sales_purchases_pair(d2)
-
-    # =========================================
-    # لو الفرع الثاني فاضي
-    # =========================================
-    if not d2:
-        for x in d1:
-            res.append({**x, "reason": "لا يوجد مقابل ❌ (الفرع الثاني فارغ)"})
-            b = x.get("branch") or "unknown"
-            counts[b] = counts.get(b, 0) + 1
-        return res, counts
-
-    # =========================================
-    # نظام تقييم المطابقة
-    # =========================================
-    def match_score(x1, x2):
-        score = 0
-        reasons = []
-        diff = abs(x1["amount"] - x2["amount"])
-        if diff < 0.01:
-            score += 50
-            reasons.append("نفس المبلغ")
-        elif diff < 1:
-            score += 30
-            reasons.append("مبلغ قريب")
-        else:
-            return 0, ["فرق مبلغ كبير"]
-
-        if (x1["type"] == "credit" and x2["type"] == "debit") or (x1["type"] == "debit" and x2["type"] == "credit"):
-            score += 30
-            reasons.append("اتجاه عكسي صحيح")
-        else:
-            return 0, ["نفس الاتجاه"]
-
-        if x1.get("doc") and x2.get("doc") and not match_doc(x1["doc"], x2["doc"]):
-            return 0, ["اختلاف نوع المستند"]
-
-        days = date_diff_days(x1["date"], x2["date"])
-        if days is None:
-            score -= 10
-            reasons.append("تاريخ غير واضح")
-        elif days == 0:
-            score += 20
-            reasons.append("نفس اليوم")
-        elif days <= 2:
-            score += 10
-            reasons.append("تاريخ قريب")
-        else:
-            score -= 10
-            reasons.append("تاريخ بعيد")
-
-        return score, reasons
-
-    # =========================================
-    # المطابقة بين d1 و d2
-    # =========================================
-    for x1 in d1:
-        if x1.get("type") == "error":
-            res.append(x1)
-            b = x1.get("branch") or "unknown"
-            counts[b] = counts.get(b, 0) + 1
-            continue
-
-        best_i = -1
-        best_score = -1
-        best_reason = []
-
-        for i, x2 in enumerate(d2):
-            if used[i] or x2.get("type") == "error":
-                continue
-            score, reasons = match_score(x1, x2)
-            if score > best_score:
-                best_score = score
-                best_i = i
-                best_reason = reasons
-
-        if best_score >= 80 and best_i != -1:
-            used[best_i] = True
-        elif best_score >= 60 and best_i != -1:
-            res.append({**x1, "reason": f"تطابق ضعيف ⚠️ | score={best_score} | {' , '.join(best_reason)}"})
-            used[best_i] = True
-        else:
-            res.append({**x1, "reason": f"لا يوجد مقابل ❌ | score={best_score} | {' , '.join(best_reason)}"})
-            b = x1.get("branch") or "unknown"
-            counts[b] = counts.get(b, 0) + 1
-
-    for i, x in enumerate(d2):
-        if not used[i]:
-            if x.get("type") == "error":
-                res.append(x)
-                b = x.get("branch") or "unknown"
-                counts[b] = counts.get(b, 0) + 1
-                continue
-            res.append({**x, "reason": "لا يوجد مقابل ❌ (من الفرع الآخر)"})
-            b = x.get("branch") or "unknown"
-            counts[b] = counts.get(b, 0) + 1
-
-    return res, counts
-    
-    # =========================================
-    # نظام التقييم (باقي الكود بدون تغيير)
-    # =========================================
-    def match_score(x1, x2):
-        score = 0
-        reasons = []
-
-        diff = abs(x1["amount"] - x2["amount"])
-        if diff < 0.01:
-            score += 50
-            reasons.append("نفس المبلغ")
-        elif diff < 1:
-            score += 30
-            reasons.append("مبلغ قريب")
-        else:
-            return 0, ["فرق مبلغ كبير"]
-
-        if (
-            (x1["type"] == "credit" and x2["type"] == "debit") or
-            (x1["type"] == "debit" and x2["type"] == "credit")
-        ):
-            score += 30
-            reasons.append("اتجاه عكسي صحيح")
-        else:
-            return 0, ["نفس الاتجاه"]
-
-        if x1.get("doc") and x2.get("doc"):
-            if not match_doc(x1["doc"], x2["doc"]):
-                return 0, ["اختلاف نوع المستند"]
-
-        days = date_diff_days(x1["date"], x2["date"])
-        if days is None:
-            score -= 10
-            reasons.append("تاريخ غير واضح")
-        elif days == 0:
-            score += 20
-            reasons.append("نفس اليوم")
-        elif days <= 2:
-            score += 10
-            reasons.append("تاريخ قريب")
-        else:
-            score -= 10
-            reasons.append("تاريخ بعيد")
-
-        if match_doc(x1.get("doc"), x2.get("doc")):
-            score += 20
-            reasons.append("نوع مستند مطابق")
-        else:
-            score -= 10
-            reasons.append("اختلاف نوع المستند")
-
-        return score, reasons
-
-    for x1 in d1:
-        if x1.get("type") == "error":
-            res.append(x1)
-            b = x1.get("branch") or "unknown"
-            counts[b] = counts.get(b, 0) + 1
-            continue
-
-        best_i = -1
-        best_score = -1
-        best_reason = []
-
-        for i, x2 in enumerate(d2):
-            if used[i] or x2.get("type") == "error":
-                continue
-
-            score, reasons = match_score(x1, x2)
-            if score > best_score:
-                best_score = score
-                best_i = i
-                best_reason = reasons
-
-        if best_score >= 80 and best_i != -1:
-            used[best_i] = True
-        elif best_score >= 60 and best_i != -1:
-            res.append({
-                **x1,
-                "reason": f"تطابق ضعيف ⚠️ | score={best_score} | {' , '.join(best_reason)}"
-            })
-            used[best_i] = True
-        else:
-            res.append({
-                **x1,
-                "reason": f"لا يوجد مقابل ❌ | score={best_score} | {' , '.join(best_reason)}"
-            })
-            b = x1.get("branch") or "unknown"
-            counts[b] = counts.get(b, 0) + 1
-
-    for i, x in enumerate(d2):
-        if not used[i]:
-            if x.get("type") == "error":
-                res.append(x)
-                b = x.get("branch") or "unknown"
-                counts[b] = counts.get(b, 0) + 1
-                continue
-            res.append({
-                **x,
-                "reason": "لا يوجد مقابل ❌ (من الفرع الآخر)"
-            })
-            b = x.get("branch") or "unknown"
-            counts[b] = counts.get(b, 0) + 1
-
-    return res, counts
-    d1 = remove_sales_purchases_pair(d1)
-    d2 = remove_sales_purchases_pair(d2)
 
     # =========================================
     # لو الفرع الثاني فاضي
@@ -720,112 +487,6 @@ def analyze(d1, d2):
             b = x.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
         return res, counts
-
-    # =========================================
-    # نظام التقييم (متعلق بالمطابقة)
-    # =========================================
-    def match_score(x1, x2):
-        score = 0
-        reasons = []
-
-        diff = abs(x1["amount"] - x2["amount"])
-        if diff < 0.01:
-            score += 50
-            reasons.append("نفس المبلغ")
-        elif diff < 1:
-            score += 30
-            reasons.append("مبلغ قريب")
-        else:
-            return 0, ["فرق مبلغ كبير"]
-
-        if (
-            (x1["type"] == "credit" and x2["type"] == "debit") or
-            (x1["type"] == "debit" and x2["type"] == "credit")
-        ):
-            score += 30
-            reasons.append("اتجاه عكسي صحيح")
-        else:
-            return 0, ["نفس الاتجاه"]
-
-        if x1.get("doc") and x2.get("doc"):
-            if not match_doc(x1["doc"], x2["doc"]):
-                return 0, ["اختلاف نوع المستند"]
-
-        days = date_diff_days(x1["date"], x2["date"])
-        if days is None:
-            score -= 10
-            reasons.append("تاريخ غير واضح")
-        elif days == 0:
-            score += 20
-            reasons.append("نفس اليوم")
-        elif days <= 2:
-            score += 10
-            reasons.append("تاريخ قريب")
-        else:
-            score -= 10
-            reasons.append("تاريخ بعيد")
-
-        if match_doc(x1.get("doc"), x2.get("doc")):
-            score += 20
-            reasons.append("نوع مستند مطابق")
-        else:
-            score -= 10
-            reasons.append("اختلاف نوع المستند")
-
-        return score, reasons
-
-    for x1 in d1:
-        if x1.get("type") == "error":
-            res.append(x1)
-            b = x1.get("branch") or "unknown"
-            counts[b] = counts.get(b, 0) + 1
-            continue
-
-        best_i = -1
-        best_score = -1
-        best_reason = []
-
-        for i, x2 in enumerate(d2):
-            if used[i] or x2.get("type") == "error":
-                continue
-
-            score, reasons = match_score(x1, x2)
-            if score > best_score:
-                best_score = score
-                best_i = i
-                best_reason = reasons
-
-        if best_score >= 80 and best_i != -1:
-            used[best_i] = True
-        elif best_score >= 60 and best_i != -1:
-            res.append({
-                **x1,
-                "reason": f"تطابق ضعيف ⚠️ | score={best_score} | {' , '.join(best_reason)}"
-            })
-            used[best_i] = True
-        else:
-            res.append({
-                **x1,
-                "reason": f"لا يوجد مقابل ❌ | score={best_score} | {' , '.join(best_reason)}"
-            })
-            b = x1.get("branch") or "unknown"
-            counts[b] = counts.get(b, 0) + 1
-
-    for i, x in enumerate(d2):
-        if not used[i]:
-            if x.get("type") == "error":
-                res.append(x)
-                b = x.get("branch") or "unknown"
-                counts[b] = counts.get(b, 0) + 1
-                continue
-            res.append({
-                **x,
-                "reason": "لا يوجد مقابل ❌ (من الفرع الآخر)"
-            })
-            b = x.get("branch") or "unknown"
-            counts[b] = counts.get(b, 0) + 1
-
-    return res, counts
 
     # =========================================
     # نظام التقييم
@@ -1153,27 +814,22 @@ goLogin()
 }
 
 async function login(){
-    let f = new FormData()
-    f.append("username", user.value)
-    f.append("password", pass.value)
+let f=new FormData()
+f.append("username",user.value)
+f.append("password",pass.value)
 
-    let r = await fetch("/login",{method:"POST",body:f})
-    let d = await r.json()
+let r=await fetch("/login",{method:"POST",body:f})
+let d=await r.json()
 
-    if(d.token){
-        TOKEN = d.token
-        USERNAME = d.username
-
-        // 🔥 تخزين التوكن في localStorage
-        localStorage.setItem("TOKEN", TOKEN)
-        localStorage.setItem("USERNAME", USERNAME)
-
-        loginBox.classList.add("hidden")
-        systemBox.classList.remove("hidden")
-        welcomeUser.innerText = "مرحبًا " + USERNAME
-    } else {
-        showToast("فشل تسجيل الدخول","#ef4444")
-    }
+if(d.token){
+TOKEN=d.token
+USERNAME=d.username
+loginBox.classList.add("hidden")
+systemBox.classList.remove("hidden")
+welcomeUser.innerText="مرحبًا "+USERNAME
+}else{
+showToast("فشل تسجيل الدخول","#ef4444")
+}
 }
 
 // ================= RENDER =================
@@ -1369,20 +1025,6 @@ a.download="report.xlsx"
 a.click()
 })
 }
-
-document.addEventListener("DOMContentLoaded", () => {
-    const savedToken = localStorage.getItem("TOKEN");
-    const savedUser  = localStorage.getItem("USERNAME");
-
-    if (savedToken && savedUser) {
-        TOKEN = savedToken;
-        USERNAME = savedUser;
-
-        loginBox.classList.add("hidden");
-        systemBox.classList.remove("hidden");
-        welcomeUser.innerText = "مرحبًا " + USERNAME;
-    }
-});
 </script>
 
 </body>
