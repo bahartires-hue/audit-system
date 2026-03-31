@@ -338,29 +338,14 @@ def clean(s):
 
     s = str(s).lower().strip()
 
-    # 🔥 توحيد عربي/إنجليزي
-    replacements = {
-        "فاتورة": "مبيعات",
-        "فاتوره": "مبيعات",
-        "invoice": "مبيعات",
-        "sales": "مبيعات",
+    # إزالة كلمات مزعجة
+    for w in ["رقم", "no", "doc", "ref"]:
+        s = s.replace(w, "")
 
-        "purchase": "مشتريات",
-
-        "return": "مردود",
-        "refund": "مردود",
-
-        "receipt": "سند",
-        "payment": "سند"
-    }
-
-    for k, v in replacements.items():
-        s = s.replace(k, v)
-
-    # حذف أرقام
+    # حذف الأرقام 🔥
     s = re.sub(r'\d+', '', s)
 
-    # حذف رموز
+    # إزالة رموز
     for ch in [" ", "-", "_", "/", "\\", ".", ","]:
         s = s.replace(ch, "")
 
@@ -446,19 +431,6 @@ def analyze(d1, d2):
     # حذف العمليات العكسية
     # =========================================
     def remove_reversals(data):
-        # 🔥 دالة داخلية لعكس المستند
-        def is_reverse_doc(d1_val, d2_val):
-            if not d1_val or not d2_val:
-                return False
-
-            for k, v in doc_map.items():
-                if match_doc(d1_val, k) and match_doc(d2_val, v):
-                    return True
-                if match_doc(d1_val, v) and match_doc(d2_val, k):
-                    return True
-
-            return False
-
         cleaned = []
         used_local = [False] * len(data)
 
@@ -472,24 +444,23 @@ def analyze(d1, d2):
                 if i == j or used_local[j]:
                     continue
 
-                # نفس الفرع
                 if x1["branch"] != x2["branch"]:
                     continue
 
-                # نفس المبلغ
+                if x1["type"] == x2["type"]:
+                    continue
+
                 if abs(x1["amount"] - x2["amount"]) > 0.01:
                     continue
 
-                # 🔥 أهم شرط: لازم يكونوا عكس بعض بالمستند
-                if not is_reverse_doc(x1.get("doc"), x2.get("doc")):
-                    continue
-
-                # التاريخ
                 days = date_diff_days(x1["date"], x2["date"])
                 if days is None or days > 1:
                     continue
 
-                # ✔️ تم إيجاد عكس
+                if x1.get("doc") and x2.get("doc"):
+                    if not match_doc(x1["doc"], x2["doc"]):
+                        continue
+
                 used_local[i] = True
                 used_local[j] = True
                 found = True
