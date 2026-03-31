@@ -338,14 +338,29 @@ def clean(s):
 
     s = str(s).lower().strip()
 
-    # إزالة كلمات مزعجة
-    for w in ["رقم", "no", "doc", "ref"]:
-        s = s.replace(w, "")
+    # 🔥 توحيد عربي/إنجليزي
+    replacements = {
+        "فاتورة": "مبيعات",
+        "فاتوره": "مبيعات",
+        "invoice": "مبيعات",
+        "sales": "مبيعات",
 
-    # حذف الأرقام 🔥
+        "purchase": "مشتريات",
+
+        "return": "مردود",
+        "refund": "مردود",
+
+        "receipt": "سند",
+        "payment": "سند"
+    }
+
+    for k, v in replacements.items():
+        s = s.replace(k, v)
+
+    # حذف أرقام
     s = re.sub(r'\d+', '', s)
 
-    # إزالة رموز
+    # حذف رموز
     for ch in [" ", "-", "_", "/", "\\", ".", ","]:
         s = s.replace(ch, "")
 
@@ -431,45 +446,60 @@ def analyze(d1, d2):
     # حذف العمليات العكسية
     # =========================================
     def remove_reversals(data):
-        cleaned = []
-        used_local = [False] * len(data)
 
-        for i, x1 in enumerate(data):
-            if used_local[i]:
+    # 🔥 دالة داخلية لعكس المستند
+    def is_reverse_doc(d1, d2):
+        if not d1 or not d2:
+            return False
+
+        for k, v in doc_map.items():
+            if match_doc(d1, k) and match_doc(d2, v):
+                return True
+            if match_doc(d1, v) and match_doc(d2, k):
+                return True
+
+        return False
+
+    cleaned = []
+    used_local = [False] * len(data)
+
+    for i, x1 in enumerate(data):
+        if used_local[i]:
+            continue
+
+        found = False
+
+        for j, x2 in enumerate(data):
+            if i == j or used_local[j]:
                 continue
 
-            found = False
+            # نفس الفرع
+            if x1["branch"] != x2["branch"]:
+                continue
 
-            for j, x2 in enumerate(data):
-                if i == j or used_local[j]:
-                    continue
+            # نفس المبلغ
+            if abs(x1["amount"] - x2["amount"]) > 0.01:
+                continue
 
-                if x1["branch"] != x2["branch"]:
-                    continue
+            # 🔥 أهم شرط: لازم يكونوا عكس بعض بالمستند
+            if not is_reverse_doc(x1.get("doc"), x2.get("doc")):
+                continue
 
-                if x1["type"] == x2["type"]:
-                    continue
+            # التاريخ
+            days = date_diff_days(x1["date"], x2["date"])
+            if days is None or days > 1:
+                continue
 
-                if abs(x1["amount"] - x2["amount"]) > 0.01:
-                    continue
+            # ✔️ تم إيجاد عكس
+            used_local[i] = True
+            used_local[j] = True
+            found = True
+            break
 
-                days = date_diff_days(x1["date"], x2["date"])
-                if days is None or days > 1:
-                    continue
+        if not found:
+            cleaned.append(x1)
 
-                if x1.get("doc") and x2.get("doc"):
-                    if not match_doc(x1["doc"], x2["doc"]):
-                        continue
-
-                used_local[i] = True
-                used_local[j] = True
-                found = True
-                break
-
-            if not found:
-                cleaned.append(x1)
-
-        return cleaned
+    return cleaned
 
     # تطبيق الحذف
     d1 = remove_reversals(d1)
