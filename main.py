@@ -468,57 +468,279 @@ def analyze(d1, d2):
     d2 = remove_reversals(d2)
 
     # =========================================
-    # حذف المبيعات والمردود المرتبط بنفس المبلغ والتاريخ فقط
+    # حذف المبيعات والمردود المرتبط بنفس المبلغ والتاريخ
     # =========================================
     def remove_sales_purchases_pair(data):
-    cleaned = []
-    used = [False] * len(data)
+        cleaned = []
+        used_pair = [False] * len(data)
 
-    for i, x1 in enumerate(data):
-        if used[i]:
-            continue
-
-        type1 = x1.get("type_doc", "").lower()
-        if type1 not in ["فاتوره مبيعات اجل", "مردود مبيعات اجل",
-                         "فاتوره مشتريات اجل", "مردود مشتريات اجل"]:
-            cleaned.append(x1)
-            continue
-
-        found_pair = False
-        for j, x2 in enumerate(data):
-            if i == j or used[j]:
+        for i, x1 in enumerate(data):
+            if used_pair[i]:
                 continue
 
-            type2 = x2.get("type_doc", "").lower()
-            # تحقق إنهم مبيعات ومردود متقابل
-            if (("مبيعات" in type1 and "مردود مبيعات" in type2) or
-                ("مردود مبيعات" in type1 and "فاتوره مبيعات" in type2) or
-                ("مشتريات" in type1 and "مردود مشتريات" in type2) or
-                ("مردود مشتريات" in type1 and "مشتريات" in type2)):
+            type1 = x1.get("type_doc", "").lower()
+            if type1 not in ["فاتوره مبيعات اجل", "مردود مبيعات اجل",
+                             "فاتوره مشتريات اجل", "مردود مشتريات اجل"]:
+                cleaned.append(x1)
+                continue
 
-                # نفس الفرع
-                if x1.get("branch") != x2.get("branch"):
-                    continue
-                # نفس المبلغ
-                if abs(x1.get("amount", 0) - x2.get("amount", 0)) > 0.01:
-                    continue
-                # نفس التاريخ
-                if x1.get("date") != x2.get("date"):
+            found_pair = False
+            for j, x2 in enumerate(data):
+                if i == j or used_pair[j]:
                     continue
 
-                # لو وصلنا هنا، حذف الاثنين
-                used[i] = True
-                used[j] = True
-                found_pair = True
-                break
+                type2 = x2.get("type_doc", "").lower()
+                if (("مبيعات" in type1 and "مردود مبيعات" in type2) or
+                    ("مردود مبيعات" in type1 and "فاتوره مبيعات" in type2) or
+                    ("مشتريات" in type1 and "مردود مشتريات" in type2) or
+                    ("مردود مشتريات" in type1 and "مشتريات" in type2)):
 
-        if not found_pair:
-            cleaned.append(x1)
+                    if x1.get("branch") != x2.get("branch"):
+                        continue
+                    if abs(x1.get("amount", 0) - x2.get("amount", 0)) > 0.01:
+                        continue
+                    if x1.get("date") != x2.get("date"):
+                        continue
 
-    return cleaned
+                    used_pair[i] = True
+                    used_pair[j] = True
+                    found_pair = True
+                    break
 
-    d1 = remove_sales_returns(d1)
-    d2 = remove_sales_returns(d2)
+            if not found_pair:
+                cleaned.append(x1)
+
+        return cleaned
+
+    d1 = remove_sales_purchases_pair(d1)
+    d2 = remove_sales_purchases_pair(d2)
+
+    # =========================================
+    # لو الفرع الثاني فاضي
+    # =========================================
+    if not d2:
+        for x in d1:
+            res.append({
+                **x,
+                "reason": "لا يوجد مقابل ❌ (الفرع الثاني فارغ)"
+            })
+            b = x.get("branch") or "unknown"
+            counts[b] = counts.get(b, 0) + 1
+        return res, counts
+
+    # =========================================
+    # نظام تقييم المطابقة
+    # =========================================
+    def match_score(x1, x2):
+        score = 0
+        reasons = []
+
+        diff = abs(x1["amount"] - x2["amount"])
+        if diff < 0.01:
+            score += 50
+            reasons.append("نفس المبلغ")
+        elif diff < 1:
+            score += 30
+            reasons.append("مبلغ قريب")
+        else:
+            return 0, ["فرق مبلغ كبير"]
+
+        if (x1["type"] == "credit" and x2["type"] == "debit") or \
+           (x1["type"] == "debit" and x2["type"] == "credit"):
+            score += 30
+            reasons.append("اتجاه عكسي صحيح")
+        else:
+            return 0, ["نفس الاتجاه"]
+
+        if x1.get("doc") and x2.get("doc"):
+            if not match_doc(x1["doc"], x2["doc"]):
+                return 0, ["اختلاف نوع المستند"]
+
+        days = date_diff_days(x1["date"], x2["date"])
+        if days is None:
+            score -= 10
+            reasons.append("تاريخ غير واضح")
+        elif days == 0:
+            score += 20
+            reasons.append("نفس اليوم")
+        elif days <= 2:
+            score += 10
+            reasons.append("تاريخ قريب")
+        else:
+            score -= 10
+            reasons.append("تاريخ بعيد")
+
+        if match_doc(x1.get("doc"), x2.get("doc")):
+            score += 20
+            reasons.append("نوع مستند مطابق")
+        else:
+            score -= 10
+            reasons.append("اختلاف نوع المستند")
+
+        return score, reasons
+
+    # =========================================
+    # المطابقة بين d1 و d2
+    # =========================================
+    for x1 in d1:
+        if x1.get("type") == "error":
+            res.append(x1)
+            b = x1.get("branch") or "unknown"
+            counts[b] = counts.get(b, 0) + 1
+            continue
+
+        best_i = -1
+        best_score = -1
+        best_reason = []
+
+        for i, x2 in enumerate(d2):
+            if used[i] or x2.get("type") == "error":
+                continue
+            score, reasons = match_score(x1, x2)
+            if score > best_score:
+                best_score = score
+                best_i = i
+                best_reason = reasons
+
+        if best_score >= 80 and best_i != -1:
+            used[best_i] = True
+        elif best_score >= 60 and best_i != -1:
+            res.append({
+                **x1,
+                "reason": f"تطابق ضعيف ⚠️ | score={best_score} | {' , '.join(best_reason)}"
+            })
+            used[best_i] = True
+        else:
+            res.append({
+                **x1,
+                "reason": f"لا يوجد مقابل ❌ | score={best_score} | {' , '.join(best_reason)}"
+            })
+            b = x1.get("branch") or "unknown"
+            counts[b] = counts.get(b, 0) + 1
+
+    for i, x in enumerate(d2):
+        if not used[i]:
+            if x.get("type") == "error":
+                res.append(x)
+                b = x.get("branch") or "unknown"
+                counts[b] = counts.get(b, 0) + 1
+                continue
+            res.append({
+                **x,
+                "reason": "لا يوجد مقابل ❌ (من الفرع الآخر)"
+            })
+            b = x.get("branch") or "unknown"
+            counts[b] = counts.get(b, 0) + 1
+
+    return res, counts
+    
+    # =========================================
+    # نظام التقييم (باقي الكود بدون تغيير)
+    # =========================================
+    def match_score(x1, x2):
+        score = 0
+        reasons = []
+
+        diff = abs(x1["amount"] - x2["amount"])
+        if diff < 0.01:
+            score += 50
+            reasons.append("نفس المبلغ")
+        elif diff < 1:
+            score += 30
+            reasons.append("مبلغ قريب")
+        else:
+            return 0, ["فرق مبلغ كبير"]
+
+        if (
+            (x1["type"] == "credit" and x2["type"] == "debit") or
+            (x1["type"] == "debit" and x2["type"] == "credit")
+        ):
+            score += 30
+            reasons.append("اتجاه عكسي صحيح")
+        else:
+            return 0, ["نفس الاتجاه"]
+
+        if x1.get("doc") and x2.get("doc"):
+            if not match_doc(x1["doc"], x2["doc"]):
+                return 0, ["اختلاف نوع المستند"]
+
+        days = date_diff_days(x1["date"], x2["date"])
+        if days is None:
+            score -= 10
+            reasons.append("تاريخ غير واضح")
+        elif days == 0:
+            score += 20
+            reasons.append("نفس اليوم")
+        elif days <= 2:
+            score += 10
+            reasons.append("تاريخ قريب")
+        else:
+            score -= 10
+            reasons.append("تاريخ بعيد")
+
+        if match_doc(x1.get("doc"), x2.get("doc")):
+            score += 20
+            reasons.append("نوع مستند مطابق")
+        else:
+            score -= 10
+            reasons.append("اختلاف نوع المستند")
+
+        return score, reasons
+
+    for x1 in d1:
+        if x1.get("type") == "error":
+            res.append(x1)
+            b = x1.get("branch") or "unknown"
+            counts[b] = counts.get(b, 0) + 1
+            continue
+
+        best_i = -1
+        best_score = -1
+        best_reason = []
+
+        for i, x2 in enumerate(d2):
+            if used[i] or x2.get("type") == "error":
+                continue
+
+            score, reasons = match_score(x1, x2)
+            if score > best_score:
+                best_score = score
+                best_i = i
+                best_reason = reasons
+
+        if best_score >= 80 and best_i != -1:
+            used[best_i] = True
+        elif best_score >= 60 and best_i != -1:
+            res.append({
+                **x1,
+                "reason": f"تطابق ضعيف ⚠️ | score={best_score} | {' , '.join(best_reason)}"
+            })
+            used[best_i] = True
+        else:
+            res.append({
+                **x1,
+                "reason": f"لا يوجد مقابل ❌ | score={best_score} | {' , '.join(best_reason)}"
+            })
+            b = x1.get("branch") or "unknown"
+            counts[b] = counts.get(b, 0) + 1
+
+    for i, x in enumerate(d2):
+        if not used[i]:
+            if x.get("type") == "error":
+                res.append(x)
+                b = x.get("branch") or "unknown"
+                counts[b] = counts.get(b, 0) + 1
+                continue
+            res.append({
+                **x,
+                "reason": "لا يوجد مقابل ❌ (من الفرع الآخر)"
+            })
+            b = x.get("branch") or "unknown"
+            counts[b] = counts.get(b, 0) + 1
+
+    return res, counts
+    d1 = remove_sales_purchases_pair(d1)
+    d2 = remove_sales_purchases_pair(d2))
 
     # =========================================
     # لو الفرع الثاني فاضي
