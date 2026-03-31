@@ -428,7 +428,7 @@ def analyze(d1, d2):
     counts = {}
 
     # =========================================
-    # حذف العمليات العكسية
+    # حذف العمليات العكسية (مبيعات مقابل مردود أو مشتريات مقابل مردود)
     # =========================================
     def remove_reversals(data):
         cleaned = []
@@ -439,28 +439,21 @@ def analyze(d1, d2):
                 continue
 
             found = False
-
             for j, x2 in enumerate(data):
                 if i == j or used_local[j]:
                     continue
-
                 if x1["branch"] != x2["branch"]:
                     continue
-
                 if x1["type"] == x2["type"]:
                     continue
-
                 if abs(x1["amount"] - x2["amount"]) > 0.01:
                     continue
-
                 days = date_diff_days(x1["date"], x2["date"])
                 if days is None or days > 1:
                     continue
-
                 if x1.get("doc") and x2.get("doc"):
                     if not match_doc(x1["doc"], x2["doc"]):
                         continue
-
                 used_local[i] = True
                 used_local[j] = True
                 found = True
@@ -471,26 +464,40 @@ def analyze(d1, d2):
 
         return cleaned
 
-    # =========================================
-    # تطبيق الحذف
-    # =========================================
     d1 = remove_reversals(d1)
     d2 = remove_reversals(d2)
 
     # =========================================
-    # حذف المبيعات والمشتريات ومردودهم
+    # حذف المبيعات والمردود المرتبط بنفس المبلغ والتاريخ فقط
     # =========================================
-    def remove_sales_purchases(data):
+    def remove_sales_returns(data):
         cleaned = []
-        for x in data:
-            doc = (x.get("doc") or "").lower()
-            if any(k in doc for k in ["مبيعات","مردود مبيعات","مشتريات","مردود مشتريات"]):
+        skip_indexes = set()
+        for i, x1 in enumerate(data):
+            if i in skip_indexes:
                 continue
-            cleaned.append(x)
+            is_pair = False
+            for j, x2 in enumerate(data):
+                if i == j or j in skip_indexes:
+                    continue
+                if x1["branch"] != x2["branch"]:
+                    continue
+                types_pair = {x1.get("doc", "").lower(), x2.get("doc", "").lower()}
+                # شرط أن يكون مبيعات ومردود
+                if ("فاتوره مبيعات" in types_pair or "مبيعات" in types_pair) and \
+                   ("مردود" in types_pair):
+                    # نفس المبلغ والتاريخ
+                    if abs(x1["amount"] - x2["amount"]) < 0.01 and x1["date"] == x2["date"]:
+                        skip_indexes.add(i)
+                        skip_indexes.add(j)
+                        is_pair = True
+                        break
+            if not is_pair:
+                cleaned.append(x1)
         return cleaned
 
-    d1 = remove_sales_purchases(d1)
-    d2 = remove_sales_purchases(d2)
+    d1 = remove_sales_returns(d1)
+    d2 = remove_sales_returns(d2)
 
     # =========================================
     # لو الفرع الثاني فاضي
@@ -506,7 +513,7 @@ def analyze(d1, d2):
         return res, counts
 
     # =========================================
-    # نظام التقييم (باقي الكود بدون تغيير)
+    # نظام التقييم (متعلق بالمطابقة)
     # =========================================
     def match_score(x1, x2):
         score = 0
