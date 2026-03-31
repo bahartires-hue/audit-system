@@ -446,59 +446,59 @@ def analyze(d1, d2):
     # حذف العمليات العكسية
     # =========================================
     def remove_reversals(data):
-    # 🔥 دالة داخلية لعكس المستند
-    def is_reverse_doc(d1, d2):
-        if not d1 or not d2:
+        # 🔥 دالة داخلية لعكس المستند
+        def is_reverse_doc(d1_val, d2_val):
+            if not d1_val or not d2_val:
+                return False
+
+            for k, v in doc_map.items():
+                if match_doc(d1_val, k) and match_doc(d2_val, v):
+                    return True
+                if match_doc(d1_val, v) and match_doc(d2_val, k):
+                    return True
+
             return False
 
-        for k, v in doc_map.items():
-            if match_doc(d1, k) and match_doc(d2, v):
-                return True
-            if match_doc(d1, v) and match_doc(d2, k):
-                return True
+        cleaned = []
+        used_local = [False] * len(data)
 
-        return False
-
-    cleaned = []
-    used_local = [False] * len(data)
-
-    for i, x1 in enumerate(data):
-        if used_local[i]:
-            continue
-
-        found = False
-
-        for j, x2 in enumerate(data):
-            if i == j or used_local[j]:
+        for i, x1 in enumerate(data):
+            if used_local[i]:
                 continue
 
-            # نفس الفرع
-            if x1["branch"] != x2["branch"]:
-                continue
+            found = False
 
-            # نفس المبلغ
-            if abs(x1["amount"] - x2["amount"]) > 0.01:
-                continue
+            for j, x2 in enumerate(data):
+                if i == j or used_local[j]:
+                    continue
 
-            # 🔥 أهم شرط: لازم يكونوا عكس بعض بالمستند
-            if not is_reverse_doc(x1.get("doc"), x2.get("doc")):
-                continue
+                # نفس الفرع
+                if x1["branch"] != x2["branch"]:
+                    continue
 
-            # التاريخ
-            days = date_diff_days(x1["date"], x2["date"])
-            if days is None or days > 1:
-                continue
+                # نفس المبلغ
+                if abs(x1["amount"] - x2["amount"]) > 0.01:
+                    continue
 
-            # ✔️ تم إيجاد عكس
-            used_local[i] = True
-            used_local[j] = True
-            found = True
-            break
+                # 🔥 أهم شرط: لازم يكونوا عكس بعض بالمستند
+                if not is_reverse_doc(x1.get("doc"), x2.get("doc")):
+                    continue
 
-        if not found:
-            cleaned.append(x1)
+                # التاريخ
+                days = date_diff_days(x1["date"], x2["date"])
+                if days is None or days > 1:
+                    continue
 
-    return cleaned
+                # ✔️ تم إيجاد عكس
+                used_local[i] = True
+                used_local[j] = True
+                found = True
+                break
+
+            if not found:
+                cleaned.append(x1)
+
+        return cleaned
 
     # تطبيق الحذف
     d1 = remove_reversals(d1)
