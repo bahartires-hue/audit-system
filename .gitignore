@@ -1,0 +1,20 @@
+# Local / build
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+node_modules/
+tools/tailwindcss.exe
+
+# Secrets and local data
+*.sqlite
+*.db
+db.sqlite
+auditflow/uploads/
+
+# Generated reports (do not commit)
+report_*.xlsx
+
+# Archives / dumps (optional local copies)
+*.zip
+auditflow_code*.txt

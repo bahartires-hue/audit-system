@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>تحليل - AuditFlow</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/tailwind.css" />
+    <style>
+      body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+    </style>
+  </head>
+  <body class="bg-slate-50 text-slate-900">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold"></div>
+
+    <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
+      <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+        <div class="font-extrabold text-slate-900 text-lg">AuditFlow</div>
+        <nav class="flex gap-3">
+          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/">لوحة التحكم</a>
+          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-slate-900 text-white" href="/analyze">تحليل</a>
+          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/reports">التقارير</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-8">
+      <div class="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 shadow-sm">
+        <h1 class="text-2xl md:text-3xl font-extrabold text-center">تحليل المطابقة المالية</h1>
+        <p class="text-center text-slate-600 mt-2">ارفع ملفي الفرع الأول والثاني (Excel/PDF) ثم شغّل التحليل.</p>
+
+        <div class="grid lg:grid-cols-2 gap-4 mt-6">
+          <section class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+            <div class="font-extrabold text-slate-900 mb-3">الفرع الأول</div>
+
+            <label class="block text-sm font-extrabold text-slate-700 mb-1">اسم الفرع</label>
+            <input id="b1" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10" value="الفرع الأول" />
+
+            <div class="flex gap-2 justify-center mt-3 mb-3">
+              <button type="button" id="b1_excel" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs active:bg-emerald-50 active:border-emerald-200 active:text-emerald-700" onclick="setType(1,'excel')">Excel</button>
+              <button type="button" id="b1_pdf" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs" onclick="setType(1,'pdf')">PDF</button>
+            </div>
+
+            <input type="file" id="file1" class="hidden" />
+            <div id="dz1" class="dropzone border-2 border-dashed border-slate-300 rounded-2xl bg-white h-28 flex items-center justify-center flex-col gap-1 cursor-pointer hover:border-slate-400" draggable="false">
+              <div class="text-sm font-extrabold text-slate-900">اسحب وأفلت</div>
+              <div class="text-xs text-slate-500">أو اضغط للاختيار</div>
+            </div>
+            <div id="fileName1" class="text-xs text-slate-500 mt-2 min-h-4"></div>
+          </section>
+
+          <section class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+            <div class="font-extrabold text-slate-900 mb-3">الفرع الثاني</div>
+
+            <label class="block text-sm font-extrabold text-slate-700 mb-1">اسم الفرع</label>
+            <input id="b2" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10" value="الفرع الثاني" />
+
+            <div class="flex gap-2 justify-center mt-3 mb-3">
+              <button type="button" id="b2_excel" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs" onclick="setType(2,'excel')">Excel</button>
+              <button type="button" id="b2_pdf" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs" onclick="setType(2,'pdf')">PDF</button>
+            </div>
+
+            <input type="file" id="file2" class="hidden" />
+            <div id="dz2" class="dropzone border-2 border-dashed border-slate-300 rounded-2xl bg-white h-28 flex items-center justify-center flex-col gap-1 cursor-pointer hover:border-slate-400" draggable="false">
+              <div class="text-sm font-extrabold text-slate-900">اسحب وأفلت</div>
+              <div class="text-xs text-slate-500">أو اضغط للاختيار</div>
+            </div>
+            <div id="fileName2" class="text-xs text-slate-500 mt-2 min-h-4"></div>
+          </section>
+        </div>
+
+        <div class="mt-6 flex items-center justify-center gap-3 flex-wrap">
+          <button id="startBtn" class="px-6 py-3 bg-slate-900 text-white rounded-2xl font-extrabold hover:bg-slate-800" onclick="startAnalyze()">ابدأ التحليل</button>
+          <input id="title" class="w-72 max-w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none" placeholder="عنوان التقرير (اختياري)" />
+        </div>
+      </div>
+    </main>
+
+    <script src="/static/app.js"></script>
+    <script>
+      let type1 = "excel";
+      let type2 = "pdf";
+
+      function setType(branch, type) {
+        if (branch === 1) type1 = type;
+        if (branch === 2) type2 = type;
+
+        const b1e = document.getElementById("b1_excel");
+        const b1p = document.getElementById("b1_pdf");
+        const b2e = document.getElementById("b2_excel");
+        const b2p = document.getElementById("b2_pdf");
+
+        if (b1e) b1e.className = "px-3 py-1.5 rounded-full border border-slate-200 font-extrabold text-xs" + (type1 === "excel" ? " bg-emerald-50 border-emerald-200 text-emerald-700" : " text-slate-600");
+        if (b1p) b1p.className = "px-3 py-1.5 rounded-full border border-slate-200 font-extrabold text-xs" + (type1 === "pdf" ? " bg-blue-50 border-blue-200 text-blue-700" : " text-slate-600");
+        if (b2e) b2e.className = "px-3 py-1.5 rounded-full border border-slate-200 font-extrabold text-xs" + (type2 === "excel" ? " bg-emerald-50 border-emerald-200 text-emerald-700" : " text-slate-600");
+        if (b2p) b2p.className = "px-3 py-1.5 rounded-full border border-slate-200 font-extrabold text-xs" + (type2 === "pdf" ? " bg-blue-50 border-blue-200 text-blue-700" : " text-slate-600");
+      }
+
+      function validate(file, expected) {
+        if (!file) return false;
+        const n = (file.name || "").toLowerCase();
+        if (expected === "excel") return /\.(xlsx|xls|xlsm|xlsb|csv)$/.test(n);
+        if (expected === "pdf") return n.endsWith(".pdf");
+        return true;
+      }
+
+      function bindDZ(dzId, inputId, expectedGetter, fileNameId) {
+        const dz = document.getElementById(dzId);
+        const inp = document.getElementById(inputId);
+        const fileName = document.getElementById(fileNameId);
+        if (!dz || !inp) return;
+
+        dz.addEventListener("click", () => inp.click());
+        dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.classList.add("border-slate-500"); });
+        dz.addEventListener("dragleave", () => dz.classList.remove("border-slate-500"));
+        dz.addEventListener("drop", (e) => {
+          e.preventDefault();
+          dz.classList.remove("border-slate-500");
+          const file = e.dataTransfer?.files?.[0];
+          if (!file || !validate(file, expectedGetter())) {
+            showToast("نوع الملف غير صحيح", "#ef4444");
+            return;
+          }
+          inp.files = e.dataTransfer.files;
+          if (fileName) fileName.innerText = "تم اختيار: " + file.name;
+        });
+
+        inp.addEventListener("change", () => {
+          const file = inp.files?.[0] || null;
+          if (file && !validate(file, expectedGetter())) {
+            showToast("نوع الملف غير صحيح", "#ef4444");
+            inp.value = "";
+            if (fileName) fileName.innerText = "";
+            return;
+          }
+          if (fileName) fileName.innerText = file ? ("تم اختيار: " + file.name) : "";
+        });
+      }
+
+      bindDZ("dz1", "file1", () => type1, "fileName1");
+      bindDZ("dz2", "file2", () => type2, "fileName2");
+
+      // activate defaults
+      setType(1, "excel");
+      setType(2, "pdf");
+
+      async function startAnalyze() {
+        const btn = document.getElementById("startBtn");
+        setLoading(btn, true, "جارٍ التحليل ...");
+        try {
+          const file1 = document.getElementById("file1").files?.[0] || null;
+          const file2 = document.getElementById("file2").files?.[0] || null;
+          const b1 = document.getElementById("b1").value || "الفرع الأول";
+          const b2 = document.getElementById("b2").value || "الفرع الثاني";
+          const title = document.getElementById("title").value || "";
+
+          if (!file1 || !file2) {
+            showToast("اختَر ملفي الفرعين أولاً", "#ef4444");
+            return;
+          }
+
+          const fd = new FormData();
+          fd.append("file1", file1);
+          fd.append("file2", file2);
+          fd.append("b1", b1);
+          fd.append("b2", b2);
+          if (title) fd.append("title", title);
+
+          const data = await apiPostForm("/analyze", fd);
+          showToast("تم التحليل ✔️", "#10b981");
+          window.location.href = `/report?id=${encodeURIComponent(data.reportId)}`;
+        } catch (e) {
+          showToast(e.message || "فشل التحليل", "#ef4444");
+        } finally {
+          setLoading(btn, false, "ابدأ التحليل");
+        }
+      }
+    </script>
+  </body>
+</html>
+

@@ -33,7 +33,7 @@ import pandas as pd
 import pdfplumber
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, create_engine, text
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
@@ -309,10 +309,16 @@ def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Opti
     for col in df.columns:
         nums = pd.to_numeric(df[col], errors="coerce")
         valid = nums.dropna()
-        if len(valid) < len(df) * 0.3:
+        frac = 0.3 if len(df) >= 12 else 0.15
+        need = max(1, int(len(df) * frac + 0.5))
+        if len(df) >= 4:
+            need = max(2, need)
+        if len(valid) < need:
             continue
         mean_val = valid.mean()
-        if mean_val < 10:
+        max_val = float(valid.max())
+        # Ignore tiny index columns; keep columns that have at least one plausible amount.
+        if mean_val < 10 and max_val < 10:
             continue
         numeric_cols.append((col, float(mean_val)))
 
@@ -357,43 +363,113 @@ def _parse_number_token(token: str) -> Optional[float]:
         return None
 
 
+def _debit_credit_from_tail_numbers(numbers: List[str]) -> Tuple[Optional[float], Optional[float]]:
+    """
+    Map trailing numeric tokens to مدين/دائن. Many ERP PDFs end with: ... debit, credit, رصيد.
+    Some lines are: م | رقم_سند | ... | تاريخ | مدين | دائن | رصيد → use last 3 for deb/cred/bal.
+    """
+    if not numbers:
+        return None, None
+    vals: List[Optional[float]] = [_parse_number_token(n) for n in numbers]
+    vals = [v for v in vals if v is not None]
+    if not vals:
+        return None, None
+    if len(vals) == 1:
+        return vals[0], None
+    if len(vals) >= 5:
+        return vals[-3], vals[-2]
+    if len(vals) == 4:
+        first = vals[0]
+        if first is not None and first == int(first) and 1 <= abs(first) <= 999:
+            return vals[-2], vals[-1]
+        return vals[-3], vals[-2]
+    if len(vals) == 3:
+        third = vals[0]
+        if third is not None and third == int(third) and abs(third) >= 10000:
+            return vals[-2], vals[-1]
+        return vals[-3], vals[-2]
+    return vals[-2], vals[-1]
+
+
+_LETTERHEAD_MARKERS = (
+    "الرقم الضريبي",
+    "السجل التجاري",
+    "كشف حساب",
+    "اسم العميل",
+)
+
+
+def _skip_statement_letterhead_lines(lines: List[str]) -> List[str]:
+    """Drop company letterhead / meta block before جدول الحركة (كما في كشوف الموردين)."""
+    start = 0
+    for i, raw in enumerate(lines):
+        s = raw.strip()
+        if not s:
+            continue
+        low = s.lower()
+        if "مدين" in s and "دائن" in s:
+            start = i + 1
+            break
+        if "مدين" in s and "التاريخ" in s:
+            start = i + 1
+            break
+        if "الرصيد" in s and "مدين" in s:
+            start = i + 1
+            break
+        if re.search(r"\d{4}\s*[-/.]\s*\d{1,2}\s*[-/.]\s*\d{1,2}", _normalize_arabic_digits(s)):
+            if any(m in s for m in _LETTERHEAD_MARKERS):
+                continue
+            start = i
+            break
+    return lines[start:] if start else lines
+
+
 def _extract_pdf_rows_from_text(raw_text: str) -> List[Dict[str, Any]]:
-    date_pat = re.compile(r"(\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})")
+    # Dates with / - . and optional spaces (common in bank/extract_text layouts).
+    date_pat = re.compile(
+        r"(\d{4}\s*[/\-\.]\s*\d{1,2}\s*[/\-\.]\s*\d{1,2}|\d{1,2}\s*[/\-\.]\s*\d{1,2}\s*[/\-\.]\s*\d{2,4})"
+    )
     num_pat = re.compile(r"[-+]?\d[\d,٬٫\.]*")
 
+    body_lines = _skip_statement_letterhead_lines((raw_text or "").splitlines())
     rows: List[Dict[str, Any]] = []
-    for raw_line in (raw_text or "").splitlines():
+    last_date: Optional[str] = None
+    for raw_line in body_lines:
         line = _normalize_arabic_digits(raw_line).strip()
-        if len(line) < 8:
+        if len(line) < 2:
+            continue
+        if any(m in raw_line for m in _LETTERHEAD_MARKERS) and "مدين" not in raw_line:
             continue
 
         date_m = date_pat.search(line)
-        if not date_m:
+        if date_m:
+            last_date = date_m.group(1).strip()
+
+        # Strip the date token from the line so 2024/01/15 does not become extra "amounts".
+        if date_m:
+            work_line = (line[: date_m.start()] + " " + line[date_m.end() :]).strip()
+        else:
+            work_line = line
+
+        effective_date = (date_m.group(1).strip() if date_m else None) or last_date
+        if not effective_date:
             continue
 
-        numbers = [n for n in num_pat.findall(line) if _parse_number_token(n) is not None]
+        numbers = [n for n in num_pat.findall(work_line) if _parse_number_token(n) is not None]
         if not numbers:
             continue
 
-        # In most statements, the last two numeric values are debit/credit.
-        debit_val: Optional[float] = None
-        credit_val: Optional[float] = None
-        if len(numbers) >= 2:
-            debit_val = _parse_number_token(numbers[-2])
-            credit_val = _parse_number_token(numbers[-1])
-        else:
-            debit_val = _parse_number_token(numbers[-1])
+        debit_val, credit_val = _debit_credit_from_tail_numbers(numbers)
 
         if (debit_val is None or abs(debit_val) < 0.0001) and (credit_val is None or abs(credit_val) < 0.0001):
             continue
 
-        statement = line
         rows.append(
             {
-                "التاريخ": date_m.group(1),
+                "التاريخ": effective_date,
                 "مدين": debit_val if debit_val is not None else "",
                 "دائن": credit_val if credit_val is not None else "",
-                "بيان": statement,
+                "بيان": raw_line.strip(),
                 "مستند": "",
             }
         )
@@ -401,34 +477,103 @@ def _extract_pdf_rows_from_text(raw_text: str) -> List[Dict[str, Any]]:
     return rows
 
 
-def read_pdf(file_path: str) -> Optional[pd.DataFrame]:
-    rows: List[List[Any]] = []
-    with pdfplumber.open(file_path) as pdf:
-        for page in pdf.pages:
-            tables = page.extract_tables()
-            if not tables:
+def _trim_pdf_table_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove header/letter rows merged into pdfplumber table (before first real movement row)."""
+    if df is None or df.empty:
+        return df
+    dfc = df.copy()
+    dfc.columns = dfc.columns.astype(str).str.strip()
+
+    for idx in range(min(8, len(dfc))):
+        parts = [str(x) for x in dfc.iloc[idx].tolist() if pd.notna(x) and str(x).strip()]
+        row_txt = " ".join(parts)
+        if "مدين" in row_txt and "دائن" in row_txt:
+            return dfc.iloc[idx + 1 :].reset_index(drop=True)
+
+    try:
+        _, _, date_col = detect_columns(dfc.copy())
+    except Exception:
+        return dfc
+
+    if date_col and date_col in dfc.columns:
+        for idx, row in dfc.iterrows():
+            val = row.get(date_col)
+            if pd.isna(val):
                 continue
-            for table in tables:
-                for row in table:
-                    if row and any(cell is not None for cell in row):
-                        rows.append(row)
+            parsed = pd.to_datetime(val, errors="coerce", dayfirst=True)
+            if pd.notna(parsed):
+                return dfc.iloc[int(idx) :].reset_index(drop=True)
+    return dfc
 
-    # Path 1: classic table extraction
-    if rows:
-        df = pd.DataFrame(rows).dropna(how="all")
-        if len(df) >= 2:
-            df.columns = df.iloc[0]
-            df = df[1:].dropna(how="all")
-            if not df.empty:
-                return df
 
-    # Path 2: text fallback for semi-structured statements
-    with pdfplumber.open(file_path) as pdf:
-        all_text = "\n".join([(p.extract_text() or "") for p in pdf.pages])
-    parsed_rows = _extract_pdf_rows_from_text(all_text)
-    if not parsed_rows:
+def _estimate_extractable_rows(df: Optional[pd.DataFrame]) -> int:
+    """How many rows look like ledger lines (for picking table vs text PDF parse)."""
+    if df is None or df.empty:
+        return 0
+    try:
+        dfc = df.copy()
+        dfc.columns = dfc.columns.astype(str).str.strip()
+        debit_col, credit_col, _ = detect_columns(dfc)
+    except Exception:
+        return 0
+
+    n = 0
+    for _, row in dfc.iterrows():
+        if row.isna().all():
+            continue
+        deb = safe(row[debit_col]) if debit_col and debit_col in dfc.columns else None
+        cre = safe(row[credit_col]) if credit_col and credit_col in dfc.columns else None
+        if deb is not None or cre is not None:
+            n += 1
+    return n
+
+
+def read_pdf(file_path: str) -> Optional[pd.DataFrame]:
+    table_df: Optional[pd.DataFrame] = None
+    all_text = ""
+
+    try:
+        with pdfplumber.open(file_path) as pdf:
+            grid_rows: List[List[Any]] = []
+            text_parts: List[str] = []
+            for page in pdf.pages:
+                text_parts.append(page.extract_text() or "")
+                tables = page.extract_tables()
+                if not tables:
+                    continue
+                for table in tables:
+                    for row in table:
+                        if row and any(cell is not None for cell in row):
+                            grid_rows.append(row)
+
+            all_text = "\n".join(text_parts)
+
+            if grid_rows:
+                df = pd.DataFrame(grid_rows).dropna(how="all")
+                if len(df) >= 2:
+                    df.columns = df.iloc[0]
+                    df = df[1:].dropna(how="all")
+                    if not df.empty:
+                        table_df = _trim_pdf_table_df(df.reset_index(drop=True))
+    except Exception:
         return None
-    return pd.DataFrame(parsed_rows).dropna(how="all")
+
+    parsed_rows = _extract_pdf_rows_from_text(all_text)
+    text_df: Optional[pd.DataFrame] = None
+    if parsed_rows:
+        text_df = pd.DataFrame(parsed_rows).dropna(how="all")
+
+    candidates: List[pd.DataFrame] = [d for d in (table_df, text_df) if d is not None and not d.empty]
+    if not candidates:
+        return None
+
+    scored = [(d, _estimate_extractable_rows(d)) for d in candidates]
+    best_score = max(sc for _, sc in scored)
+    if best_score > 0:
+        for d, sc in scored:
+            if sc == best_score:
+                return d
+    return max(candidates, key=len)
 
 
 def read_any(file_path: str, filename: str) -> pd.DataFrame:
@@ -438,10 +583,20 @@ def read_any(file_path: str, filename: str) -> pd.DataFrame:
         if out is None:
             raise ValueError("Excel file has no readable data")
         return out
+    if name.endswith(".csv"):
+        try:
+            out = pd.read_csv(file_path, encoding="utf-8-sig")
+        except UnicodeDecodeError:
+            out = pd.read_csv(file_path, encoding="cp1256")
+        if out is None or out.empty:
+            raise ValueError("ملف CSV فارغ أو غير مقروء")
+        return out.dropna(how="all")
     if name.endswith(".pdf"):
         out = read_pdf(file_path)
         if out is None:
-            raise ValueError("PDF file has no readable data")
+            raise ValueError(
+                "لم يُستخرج من PDF جداول أو أسطر حركة واضحة. جرّب: ملف Excel، أو PDF نصّي (وليس صورة ممسوحة)، أو تأكد أن أعمدة المدين/الدائن ظاهرة في النص."
+            )
         return out
     raise ValueError("نوع الملف غير مدعوم")
 
@@ -512,6 +667,30 @@ def date_diff_days(d1: Any, d2: Any) -> Optional[int]:
         return None
 
 
+def extract_row_date_doc(
+    row: pd.Series, df: pd.DataFrame, date_col: Optional[str], doc_col: Optional[str]
+) -> Tuple[Optional[str], Optional[str]]:
+    date_out: Optional[str] = None
+    if date_col and date_col in df.columns:
+        try:
+            val = row[date_col]
+            if pd.isna(val):
+                date_out = None
+            else:
+                d = pd.to_datetime(val, errors="coerce", dayfirst=False)
+                date_out = None if pd.isna(d) else d.strftime("%Y-%m-%d")
+        except Exception:
+            date_out = str(row[date_col])
+
+    doc_out: Optional[str] = None
+    if doc_col and doc_col in df.columns:
+        val = row[doc_col]
+        if pd.notna(val):
+            doc_out = str(val).strip()
+
+    return date_out, doc_out
+
+
 def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
     df = read_any(file_path, filename)
     if df is None or len(df) == 0:
@@ -534,11 +713,17 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
         numeric_cols: List[Tuple[str, float]] = []
         for col in df.columns:
             nums = pd.to_numeric(df[col], errors="coerce").dropna()
-            if len(nums) < len(df) * 0.3:
+            frac = 0.3 if len(df) >= 12 else 0.15
+            need = max(1, int(len(df) * frac + 0.5))
+            if len(df) >= 4:
+                need = max(2, need)
+            if len(nums) < need:
                 continue
-            if nums.mean() < 10:
+            mean_val = float(nums.mean())
+            max_val = float(nums.max())
+            if mean_val < 10 and max_val < 10:
                 continue
-            numeric_cols.append((col, float(nums.mean())))
+            numeric_cols.append((col, mean_val))
         numeric_cols.sort(key=lambda x: x[1], reverse=True)
         if len(numeric_cols) >= 1:
             debit_col = numeric_cols[0][0]
@@ -557,16 +742,11 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
             continue
 
         if debit and credit and debit > 0 and credit > 0:
+            date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col)
             amount = max(debit, credit)
+            t = "credit" if credit >= debit else "debit"
             data.append(
-                {
-                    "amount": float(amount),
-                    "type": "error",
-                    "branch": branch,
-                    "date": None,
-                    "doc": "",
-                    "reason": "خطأ: الصف يحتوي مدين ودائن",
-                }
+                {"amount": float(amount), "type": t, "branch": branch, "date": date_out, "doc": doc_out}
             )
             continue
 
@@ -579,24 +759,7 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
         else:
             continue
 
-        date_out: Optional[str] = None
-        if date_col and date_col in df.columns:
-            try:
-                val = row[date_col]
-                if pd.isna(val):
-                    date_out = None
-                else:
-                    d = pd.to_datetime(val, errors="coerce", dayfirst=False)
-                    date_out = None if pd.isna(d) else d.strftime("%Y-%m-%d")
-            except Exception:
-                date_out = str(row[date_col])
-
-        doc_out: Optional[str] = None
-        if doc_col and doc_col in df.columns:
-            val = row[doc_col]
-            if pd.notna(val):
-                doc_out = str(val).strip()
-
+        date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col)
         data.append({"amount": float(amount), "type": t, "branch": branch, "date": date_out, "doc": doc_out})
 
     return data
@@ -925,50 +1088,70 @@ def mismatches_to_pdf_bytes(entries: List[Dict[str, Any]]) -> bytes:
 # =========================
 # FRONTEND (HTML + JS)
 # =========================
-APP_JS = r"""function qs(name) {
+APP_JS = r"""function syncCsrfFromCookie() {
+  const key = "auditflow_csrf=";
+  const i = document.cookie.indexOf(key);
+  if (i === -1) return;
+  let v = document.cookie.slice(i + key.length).split(";")[0] || "";
+  try {
+    v = decodeURIComponent(v);
+  } catch (e) {}
+  if (v) try { localStorage.setItem("csrf_token", v); } catch (e) {}
+}
+syncCsrfFromCookie();
+
+async function readErrorMessage(res) {
+  const raw = await res.text().catch(() => "");
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+  if (ct.includes("application/json") && raw) {
+    try {
+      const j = JSON.parse(raw);
+      const d = j.detail;
+      if (typeof d === "string") return d;
+      if (Array.isArray(d))
+        return d
+          .map((x) => (x && typeof x === "object" && x.msg ? String(x.msg) : JSON.stringify(x)))
+          .join("; ");
+    } catch (e) {}
+  }
+  return raw || `HTTP ${res.status}`;
+}
+
+function qs(name) {
   return new URLSearchParams(window.location.search).get(name);
 }
 
 async function apiGet(url) {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `HTTP ${res.status}`);
-  }
+  if (!res.ok) throw new Error(await readErrorMessage(res));
   return res.json();
 }
 
 async function apiPostForm(url, formData) {
+  syncCsrfFromCookie();
   const csrf = localStorage.getItem("csrf_token") || "";
   const res = await fetch(url, { method: "POST", body: formData, headers: { Accept: "application/json", "X-CSRF-Token": csrf } });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `HTTP ${res.status}`);
-  }
+  if (!res.ok) throw new Error(await readErrorMessage(res));
   return res.json();
 }
 
 async function apiPostJson(url, body) {
+  syncCsrfFromCookie();
   const csrf = localStorage.getItem("csrf_token") || "";
   const res = await fetch(url, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json", "X-CSRF-Token": csrf },
     body: JSON.stringify(body || {}),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `HTTP ${res.status}`);
-  }
+  if (!res.ok) throw new Error(await readErrorMessage(res));
   return res.json();
 }
 
 async function apiDelete(url) {
+  syncCsrfFromCookie();
   const csrf = localStorage.getItem("csrf_token") || "";
   const res = await fetch(url, { method: "DELETE", headers: { Accept: "application/json", "X-CSRF-Token": csrf } });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `HTTP ${res.status}`);
-  }
+  if (!res.ok) throw new Error(await readErrorMessage(res));
   return res.json();
 }
 
@@ -1337,7 +1520,7 @@ INDEX_HTML = r"""<!doctype html>
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/tailwind.css" />
     <style>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
     </style>
@@ -1440,7 +1623,7 @@ ANALYZE_HTML = r"""<!doctype html>
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/tailwind.css" />
     <style>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
     </style>
@@ -1597,7 +1780,7 @@ REPORTS_HTML = r"""<!doctype html>
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/tailwind.css" />
     <style>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
     </style>
@@ -1653,7 +1836,7 @@ REPORT_HTML = r"""<!doctype html>
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/tailwind.css" />
     <style>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
     </style>
@@ -1770,7 +1953,7 @@ SETTINGS_HTML = r"""<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>الإعدادات - AuditFlow</title>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/tailwind.css" />
     <style>body { font-family: "IBM Plex Sans Arabic", system-ui, sans-serif; }</style>
   </head>
   <body class="bg-slate-50 text-slate-900">
@@ -1827,7 +2010,7 @@ LOGIN_HTML = r"""<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>تسجيل الدخول - AuditFlow</title>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/tailwind.css" />
     <style>body { font-family: "IBM Plex Sans Arabic", system-ui, sans-serif; }</style>
   </head>
   <body class="bg-slate-50 text-slate-900 min-h-screen">
@@ -1919,6 +2102,20 @@ def ui_login(request: Request):
 @app.get("/static/app.js")
 def ui_js():
     return Response(content=APP_JS.encode("utf-8"), media_type="application/javascript; charset=utf-8")
+
+
+TAILWIND_CSS_PATH = Path(__file__).resolve().parent / "frontend" / "tailwind.css"
+
+
+@app.get("/static/tailwind.css")
+def ui_tailwind_css():
+    if not TAILWIND_CSS_PATH.is_file():
+        return Response(
+            content=b"/* Missing auditflow/frontend/tailwind.css - run npm run build:css */\n",
+            media_type="text/css; charset=utf-8",
+            status_code=503,
+        )
+    return FileResponse(TAILWIND_CSS_PATH, media_type="text/css; charset=utf-8")
 
 
 @app.get("/auth/me")
@@ -2093,8 +2290,11 @@ def analyze_api(
         d1 = process(saved1, original1, b1)
         d2 = process(saved2, original2, b2)
         mismatches, counts = analyze(d1, d2)
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(400, f"Failed to analyze files: {e}")
+        msg = str(e).strip() or e.__class__.__name__
+        raise HTTPException(400, f"تعذّر تحليل الملفات: {msg}")
 
     summary = compute_summary(d1, d2, mismatches)
 

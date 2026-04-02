@@ -1,0 +1,10 @@
+{
+  "name": "audit-system",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i ./auditflow/tailwind.input.css -o ./auditflow/frontend/tailwind.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  }
+}
