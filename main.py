@@ -1,13 +1,17 @@
 from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Header
 from fastapi.responses import HTMLResponse, FileResponse
 
-from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy import create_engine, Column, Integer, String, text
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 
 import pandas as pd
 import uuid
 import pdfplumber
-import jwt
+import base64
+import hashlib
+import hmac
+import os
+import time
 
 from passlib.hash import pbkdf2_sha256
 
@@ -23,20 +27,62 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True)
     password = Column(String)
+    is_admin = Column(Integer, default=0)
 
 Base.metadata.create_all(engine)
 
+with engine.connect() as conn:
+    cols = [r[1] for r in conn.execute(text("PRAGMA table_info(users)")).fetchall()]
+    if "is_admin" not in cols:
+        conn.execute(text("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0"))
+        conn.commit()
+
 # ================= AUTH =================
 SECRET = "SECRET_KEY"
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "").strip().lower()
 
 def create_token(username):
-    return jwt.encode({"user": username}, SECRET, algorithm="HS256")
+    ts = str(int(time.time()))
+    payload = f"{username}|{ts}"
+    sig = hmac.new(SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    raw = f"{payload}|{sig}".encode()
+    return base64.urlsafe_b64encode(raw).decode()
 
 def check_auth(token: str):
     try:
-        jwt.decode(token, SECRET, algorithms=["HS256"])
-    except:
+        raw = base64.urlsafe_b64decode(token.encode()).decode()
+        parts = raw.split("|")
+        if len(parts) != 3:
+            raise ValueError("bad token")
+        username, ts, sig = parts
+        payload = f"{username}|{ts}"
+        expected = hmac.new(SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            raise ValueError("bad signature")
+        # 7 days token max age
+        if int(time.time()) - int(ts) > 7 * 24 * 60 * 60:
+            raise ValueError("expired")
+        return username
+    except Exception:
         raise HTTPException(401, "غير مصرح")
+
+
+def extract_token(authorization: str | None) -> str:
+    if not authorization:
+        raise HTTPException(401, "Missing token")
+    parts = authorization.split()
+    if len(parts) != 2:
+        raise HTTPException(401, "Invalid token format")
+    return parts[1]
+
+
+def require_current_user(authorization: str | None, db: Session) -> User:
+    token = extract_token(authorization)
+    username = check_auth(token)
+    user = db.query(User).filter_by(username=username).first()
+    if not user:
+        raise HTTPException(401, "غير مصرح")
+    return user
 
 # ================= UTILS =================
 def get_db():
@@ -808,6 +854,7 @@ input{width:100%;padding:10px;margin:5px 0 10px;border-radius:8px;border:1px sol
 </div>
 <div>
 <button class="btn btn-mode" onclick="toggleMode()">الوضع</button>
+<button id="adminBtn" class="btn btn-mode hidden" onclick="goAdmin()">لوحة الإدارة</button>
 <button class="btn btn-danger" onclick="logout()">خروج</button>
 </div>
 </div>
@@ -911,6 +958,7 @@ input{width:100%;padding:10px;margin:5px 0 10px;border-radius:8px;border:1px sol
 
 let TOKEN=""
 let USERNAME=""
+let IS_ADMIN=false
 let ALL_ERRORS=[]
 let SELECTED_FILE1 = null
 let SELECTED_FILE2 = null
@@ -968,7 +1016,13 @@ setTimeout(()=>t.style.display="none",3000)
 }
 
 function toggleMode(){document.body.classList.toggle("dark")}
-function logout(){location.reload()}
+function logout(){
+localStorage.removeItem("token")
+localStorage.removeItem("username")
+localStorage.removeItem("is_admin")
+location.reload()
+}
+function goAdmin(){ window.location.href="/admin" }
 
 // ================= AUTH =================
 function goRegister(){
@@ -1002,9 +1056,15 @@ let d=await r.json()
 if(d.token){
 TOKEN=d.token
 USERNAME=d.username
+IS_ADMIN=!!d.is_admin
+localStorage.setItem("token", TOKEN)
+localStorage.setItem("username", USERNAME)
+localStorage.setItem("is_admin", IS_ADMIN ? "1" : "0")
 loginBox.classList.add("hidden")
 systemBox.classList.remove("hidden")
 welcomeUser.innerText="مرحبًا "+USERNAME
+let adminBtn = document.getElementById("adminBtn")
+if(adminBtn){ adminBtn.classList.toggle("hidden", !IS_ADMIN) }
 }else{
 showToast("فشل تسجيل الدخول","#ef4444")
 }
@@ -1142,6 +1202,18 @@ setBranchType(1, EXPECTED_TYPE1)
 setBranchType(2, EXPECTED_TYPE2)
 bindDropzone("dz1","f1", ()=>EXPECTED_TYPE1)
 bindDropzone("dz2","f2", ()=>EXPECTED_TYPE2)
+
+// restore session on refresh
+TOKEN = localStorage.getItem("token") || ""
+USERNAME = localStorage.getItem("username") || ""
+IS_ADMIN = (localStorage.getItem("is_admin") || "") === "1"
+if(TOKEN && USERNAME){
+    loginBox.classList.add("hidden")
+    systemBox.classList.remove("hidden")
+    welcomeUser.innerText = "مرحبًا " + USERNAME
+    let adminBtn = document.getElementById("adminBtn")
+    if(adminBtn){ adminBtn.classList.toggle("hidden", !IS_ADMIN) }
+}
 
 // ================= RENDER =================
 function render(errors){
@@ -1362,7 +1434,11 @@ last_errors = []
 def register(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     if db.query(User).filter_by(username=username).first():
         return {"msg":"المستخدم موجود"}
-    db.add(User(username=username, password=pbkdf2_sha256.hash(password)))
+    users_count = db.query(User).count()
+    is_admin = 1 if users_count == 0 else 0
+    if ADMIN_USERNAME and username.strip().lower() == ADMIN_USERNAME:
+        is_admin = 1
+    db.add(User(username=username, password=pbkdf2_sha256.hash(password), is_admin=is_admin))
     db.commit()
     return {"msg":"تم"}
 
@@ -1379,7 +1455,8 @@ def login(username: str = Form(...), password: str = Form(...), db: Session = De
 
     return {
         "token": create_token(username),
-        "username": username
+        "username": username,
+        "is_admin": bool(user.is_admin)
     }
 @app.post("/analyze")
 def analyze_api(
@@ -1387,20 +1464,10 @@ def analyze_api(
     file1: UploadFile = File(...),
     file2: UploadFile = File(...),
     b1: str = Form(...),
-    b2: str = Form(...)
+    b2: str = Form(...),
+    db: Session = Depends(get_db)
 ):
-    # 🔥 حماية بدون ما يطيح
-    if not authorization:
-        raise HTTPException(401, "Missing token")
-
-    parts = authorization.split()
-
-    if len(parts) != 2:
-        raise HTTPException(401, "Invalid token format")
-
-    scheme, token = parts
-
-    check_auth(token)
+    _ = require_current_user(authorization, db)
 
     d1 = process(file1.file, file1.filename, b1)
     d2 = process(file2.file, file2.filename, b2)
@@ -1418,22 +1485,98 @@ def analyze_api(
     return {"errors": errors, "counts": counts, "totals": totals}
     
 @app.get("/download")
-def download(authorization: str = Header(None)):
-    # 🔥 حماية بدون crash
-    if not authorization:
-        raise HTTPException(401, "Missing token")
-
-    parts = authorization.split()
-
-    if len(parts) != 2:
-        raise HTTPException(401, "Invalid token format")
-
-    scheme, token = parts
-
-    check_auth(token)
+def download(authorization: str = Header(None), db: Session = Depends(get_db)):
+    _ = require_current_user(authorization, db)
 
     df = pd.DataFrame(last_errors)
     name = f"report_{uuid.uuid4().hex}.xlsx"
     df.to_excel(name, index=False)
 
     return FileResponse(name, filename="report.xlsx")
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin_page():
+    return """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;600;800&display=swap" rel="stylesheet">
+<title>لوحة الإدارة</title>
+<style>
+*{font-family:Cairo;box-sizing:border-box}
+body{background:#f8fafc;margin:0;padding:20px;color:#0f172a}
+.wrap{max-width:1100px;margin:auto}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:16px}
+table{width:100%;border-collapse:collapse}
+th,td{border:1px solid #e2e8f0;padding:10px;text-align:right}
+th{background:#fff7cc;color:#b91c1c}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.btn{padding:8px 12px;border:none;border-radius:10px;cursor:pointer}
+.btn-primary{background:#2563eb;color:#fff}
+.btn-muted{background:#e2e8f0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h2>لوحة إدارة النظام</h2>
+    <div>
+      <button class="btn btn-muted" onclick="window.location.href='/'">رجوع</button>
+      <button class="btn btn-primary" onclick="loadUsers()">تحديث</button>
+    </div>
+  </div>
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>اسم المستخدم</th>
+          <th>الصلاحية</th>
+          <th>إجمالي الحسابات</th>
+        </tr>
+      </thead>
+      <tbody id="usersBody"></tbody>
+    </table>
+  </div>
+</div>
+<script>
+async function loadUsers(){
+  const token = localStorage.getItem("token") || ""
+  if(!token){ alert("سجل دخول أولاً"); window.location.href="/"; return; }
+  const r = await fetch("/admin/users",{headers:{"Authorization":"Bearer "+token}})
+  if(r.status===401 || r.status===403){ alert("غير مصرح"); window.location.href="/"; return; }
+  const d = await r.json()
+  const body = document.getElementById("usersBody")
+  body.innerHTML = ""
+  ;(d.users||[]).forEach((u,idx)=>{
+    body.innerHTML += `<tr>
+      <td>${idx+1}</td>
+      <td>${u.username}</td>
+      <td>${u.is_admin ? "مدير" : "مستخدم"}</td>
+      <td>${d.total_users}</td>
+    </tr>`
+  })
+}
+loadUsers()
+</script>
+</body>
+</html>
+    """
+
+
+@app.get("/admin/users")
+def admin_users(authorization: str = Header(None), db: Session = Depends(get_db)):
+    current = require_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(403, "هذه الصفحة للمشرف فقط")
+    users = db.query(User).order_by(User.id.desc()).all()
+    return {
+        "total_users": len(users),
+        "users": [
+            {"id": u.id, "username": u.username, "is_admin": bool(u.is_admin)}
+            for u in users
+        ],
+    }
