@@ -662,6 +662,46 @@ input{width:100%;padding:10px;margin:5px 0 10px;border-radius:8px;border:1px sol
 .upload-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
 .upload-dot{width:10px;height:10px;border-radius:50%;background:#2563eb;box-shadow:0 0 0 4px rgba(37,99,235,0.10);}
 .upload-label{font-weight:700;color:#1d4ed8;font-size:13px;}
+.branch-input{
+    border:none;
+    outline:none;
+    background:transparent;
+    font-weight:700;
+    color:#1d4ed8;
+    font-size:13px;
+    width:100%;
+    padding:0;
+    margin:0;
+    text-align:right;
+}
+.type-toggle{
+    display:flex;
+    gap:10px;
+    justify-content:center;
+    margin:8px 0 14px;
+    flex-wrap:wrap;
+}
+.toggle-btn{
+    border:1px solid rgba(148,163,184,0.55);
+    background:#fff;
+    color:#64748b;
+    font-weight:800;
+    font-size:12px;
+    padding:6px 12px;
+    border-radius:999px;
+    cursor:pointer;
+    transition:0.15s;
+}
+.toggle-btn.active-excel{
+    border-color:#10b981;
+    color:#10b981;
+    background:rgba(16,185,129,0.10);
+}
+.toggle-btn.active-pdf{
+    border-color:#2563eb;
+    color:#2563eb;
+    background:rgba(37,99,235,0.10);
+}
 .dz-excel .upload-dot{background:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,0.12);}
 
 .dropzone{
@@ -775,18 +815,21 @@ input{width:100%;padding:10px;margin:5px 0 10px;border-radius:8px;border:1px sol
     <h1 class="audit-title">تدقيق مالي</h1>
     <div class="audit-sub">ارفع ملف Excel و PDF للمقارنة وتحليل الفروقات تلقائيًا.</div>
 
-    <!-- keep values for API -->
-    <input type="hidden" id="b1" value="الفرع الأول">
-    <input type="hidden" id="b2" value="الفرع الثاني">
+    <!-- branch inputs live inside the headers -->
 
     <div class="upload-grid">
-        <div class="upload-card dz-excel">
+        <div class="upload-card dz-excel" id="card1">
             <div class="upload-head">
                 <span class="upload-dot"></span>
-                <span class="upload-label">الفرع الأول</span>
+                <input id="b1" class="branch-input" value="الفرع الأول" />
             </div>
 
-            <input type="file" id="f1" accept=".xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden">
+            <div class="type-toggle" id="typeToggle1">
+                <button type="button" id="t1_excel" class="toggle-btn active-excel" onclick="setBranchType(1,'excel')">Excel</button>
+                <button type="button" id="t1_pdf" class="toggle-btn" onclick="setBranchType(1,'pdf')">PDF</button>
+            </div>
+
+            <input type="file" id="f1" accept=".xlsx,.xls,.xlsm,.xlsb,.pdf,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden">
             <div class="dropzone" id="dz1" data-target="f1">
                 <div class="dz-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24">
@@ -795,19 +838,24 @@ input{width:100%;padding:10px;margin:5px 0 10px;border-radius:8px;border:1px sol
                         <path d="M5 14v4a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-4" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </div>
-                <div class="dz-title">Excel</div>
+                <div class="dz-title" id="dz1Title">Excel</div>
                 <div class="dz-sub">اسحب وأفلت أو اضغط للاختيار</div>
             </div>
             <div class="file-hint" id="fileName1"> </div>
         </div>
 
-        <div class="upload-card">
+        <div class="upload-card" id="card2">
             <div class="upload-head">
                 <span class="upload-dot"></span>
-                <span class="upload-label">الفرع الثاني</span>
+                <input id="b2" class="branch-input" value="الفرع الثاني" />
             </div>
 
-            <input type="file" id="f2" accept=".pdf,application/pdf" class="hidden">
+            <div class="type-toggle" id="typeToggle2">
+                <button type="button" id="t2_excel" class="toggle-btn" onclick="setBranchType(2,'excel')">Excel</button>
+                <button type="button" id="t2_pdf" class="toggle-btn active-pdf" onclick="setBranchType(2,'pdf')">PDF</button>
+            </div>
+
+            <input type="file" id="f2" accept=".xlsx,.xls,.xlsm,.xlsb,.pdf,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden">
             <div class="dropzone" id="dz2" data-target="f2">
                 <div class="dz-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24">
@@ -816,7 +864,7 @@ input{width:100%;padding:10px;margin:5px 0 10px;border-radius:8px;border:1px sol
                         <path d="M5 14v4a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-4" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </div>
-                <div class="dz-title">PDF</div>
+                <div class="dz-title" id="dz2Title">PDF</div>
                 <div class="dz-sub">اسحب وأفلت أو اضغط للاختيار</div>
             </div>
             <div class="file-hint" id="fileName2"> </div>
@@ -980,9 +1028,9 @@ function setSelected(fileInputId, fileObj){
 
 function validateFile(fileObj, expected){
     if(!fileObj) return false
-    let name = (fileObj.name || "").toLowerCase()
+    let name = (fileObj.name || "").toLowerCase().trim()
     if(expected === "excel"){
-        return name.endsWith(".xlsx") || name.endsWith(".xls")
+        return /\.(xlsx|xls|xlsm|xlsb|csv)$/.test(name)
     }
     if(expected === "pdf"){
         return name.endsWith(".pdf")
@@ -990,10 +1038,60 @@ function validateFile(fileObj, expected){
     return true
 }
 
-function bindDropzone(dzId, inputId, expectedType){
+let EXPECTED_TYPE1 = "excel"
+let EXPECTED_TYPE2 = "pdf"
+
+function setBranchType(branch, type){
+    // type: "excel" | "pdf"
+    if(branch === 1){
+        EXPECTED_TYPE1 = type
+        let card = document.getElementById("card1")
+        if(card){ card.classList.toggle("dz-excel", type === "excel") }
+
+        let t1e = document.getElementById("t1_excel")
+        let t1p = document.getElementById("t1_pdf")
+        if(t1e){ t1e.classList.toggle("active-excel", type === "excel") }
+        if(t1p){ t1p.classList.toggle("active-pdf", type === "pdf") }
+
+        let title = document.getElementById("dz1Title")
+        if(title){ title.innerText = type === "excel" ? "Excel" : "PDF" }
+
+        if(SELECTED_FILE1 && !validateFile(SELECTED_FILE1, type)){
+            SELECTED_FILE1 = null
+            let inp = document.getElementById("f1")
+            if(inp){ inp.value = "" }
+            setSelected("f1", null)
+        }
+    }else{
+        EXPECTED_TYPE2 = type
+        let card = document.getElementById("card2")
+        if(card){ card.classList.toggle("dz-excel", type === "excel") }
+
+        let t2e = document.getElementById("t2_excel")
+        let t2p = document.getElementById("t2_pdf")
+        if(t2e){ t2e.classList.toggle("active-excel", type === "excel") }
+        if(t2p){ t2p.classList.toggle("active-pdf", type === "pdf") }
+
+        let title = document.getElementById("dz2Title")
+        if(title){ title.innerText = type === "excel" ? "Excel" : "PDF" }
+
+        if(SELECTED_FILE2 && !validateFile(SELECTED_FILE2, type)){
+            SELECTED_FILE2 = null
+            let inp = document.getElementById("f2")
+            if(inp){ inp.value = "" }
+            setSelected("f2", null)
+        }
+    }
+}
+
+function bindDropzone(dzId, inputId, expectedTypeGetter){
     let dz = document.getElementById(dzId)
     let inp = document.getElementById(inputId)
     if(!dz || !inp) return
+
+    function expectedNow(){
+        return (typeof expectedTypeGetter === "function") ? expectedTypeGetter() : expectedTypeGetter
+    }
 
     dz.addEventListener("click", ()=> inp.click())
 
@@ -1016,7 +1114,7 @@ function bindDropzone(dzId, inputId, expectedType){
     dz.addEventListener("drop", (e)=>{
         let dt = e.dataTransfer
         let fileObj = dt && dt.files && dt.files.length ? dt.files[0] : null
-        if(!fileObj || !validateFile(fileObj, expectedType)){
+        if(!fileObj || !validateFile(fileObj, expectedNow())){
             showToast("نوع الملف غير صحيح", "#ef4444")
             setSelected(inputId, null)
             return
@@ -1027,7 +1125,7 @@ function bindDropzone(dzId, inputId, expectedType){
 
     inp.addEventListener("change", ()=>{
         let fileObj = inp.files && inp.files.length ? inp.files[0] : null
-        if(fileObj && !validateFile(fileObj, expectedType)){
+        if(fileObj && !validateFile(fileObj, expectedNow())){
             showToast("نوع الملف غير صحيح", "#ef4444")
             inp.value = ""
             setSelected(inputId, null)
@@ -1037,10 +1135,11 @@ function bindDropzone(dzId, inputId, expectedType){
     })
 }
 
-window.addEventListener("DOMContentLoaded", ()=>{
-    bindDropzone("dz1","f1","excel")
-    bindDropzone("dz2","f2","pdf")
-})
+// script is at the end of <body>, so DOM is ready; bind directly.
+setBranchType(1, EXPECTED_TYPE1)
+setBranchType(2, EXPECTED_TYPE2)
+bindDropzone("dz1","f1", ()=>EXPECTED_TYPE1)
+bindDropzone("dz2","f2", ()=>EXPECTED_TYPE2)
 
 // ================= RENDER =================
 function render(errors){
@@ -1050,10 +1149,13 @@ function render(errors){
 
     errors.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
 
-    right.innerHTML = `<h4>${b1.value}</h4>`
-    left.innerHTML  = `<h4>${b2.value}</h4>`
+    let b1v = (document.getElementById("b1") || {}).value || "الفرع الأول"
+    let b2v = (document.getElementById("b2") || {}).value || "الفرع الثاني"
 
-    errors.filter(x => x.branch == b1.value).forEach(x=>{
+    right.innerHTML = `<h4>${b1v}</h4>`
+    left.innerHTML  = `<h4>${b2v}</h4>`
+
+    errors.filter(x => x.branch == b1v).forEach(x=>{
         right.innerHTML+=`
         <div class="error">
             <div>المبلغ: ${x.amount}</div>
@@ -1063,7 +1165,7 @@ function render(errors){
         </div>`
     })
 
-    errors.filter(x => x.branch == b2.value).forEach(x=>{
+    errors.filter(x => x.branch == b2v).forEach(x=>{
         left.innerHTML+=`
         <div class="error">
             <div>المبلغ: ${x.amount}</div>
@@ -1103,11 +1205,14 @@ async function upload(){
         return
     }
 
+    let b1v = (document.getElementById("b1") || {}).value || "الفرع الأول"
+    let b2v = (document.getElementById("b2") || {}).value || "الفرع الثاني"
+
     let f=new FormData()
     f.append("file1", file1)
     f.append("file2", file2)
-    f.append("b1",b1.value)
-    f.append("b2",b2.value)
+    f.append("b1",b1v)
+    f.append("b2",b2v)
 
     try{
 
@@ -1160,8 +1265,8 @@ async function upload(){
         // =========================================
         // 🔥 stats (عدد + نسبة)
         // =========================================
-        let c1 = d.counts?.[b1.value] || 0
-        let c2 = d.counts?.[b2.value] || 0
+        let c1 = d.counts?.[b1v] || 0
+        let c2 = d.counts?.[b2v] || 0
 
         let totalErrors = ALL_ERRORS.length || 1
 
@@ -1172,14 +1277,14 @@ async function upload(){
 
         stats.innerHTML = `
 <div class="stat">
-    <span>${b1.value}</span>
+    <span>${b1v}</span>
     <b>${c1}</b>
     <span>عدد الأخطاء</span>
     <small>${p1}%</small>
 </div>
 
 <div class="stat">
-    <span>${b2.value}</span>
+    <span>${b2v}</span>
     <b>${c2}</b>
     <span>عدد الأخطاء</span>
     <small>${p2}%</small>
