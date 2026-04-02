@@ -1,79 +1,54 @@
-===== README.md =====
-## AuditFlow (Backend + Frontend)
-
-### التشغيل
-
-#### 1) Backend
-افتح PowerShell:
-
-```powershell
-cd "C:\Users\DELL\OneDrive\Desktop\audit-system\auditflow\backend"
-.\venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
-```
-
-افتح المتصفح:
-- `http://127.0.0.1:8001/`
-
-### ملاحظات
-- الكود في:
-  - `backend/app/main.py` (API + استضافة صفحات الواجهة)
-  - `backend/app/services/analyzer.py` (التحليل المحلي)
-  - `frontend/` (صفحات HTML + `app.js`)
-
-
-
-
-
-===== backend\requirements.txt =====
-fastapi
-uvicorn[standard]
-sqlalchemy
-pandas
-pdfplumber
-openpyxl
-python-multipart
-
-
-
-
-===== backend\app\__init__.py =====
-
-
-
-
-
-===== backend\app\db.py =====
 from __future__ import annotations
 
+"""
+AuditFlow (single-file version)
+--------------------------------
+Backend + Frontend in ONE Python file.
+
+Run:
+  pip install fastapi uvicorn[standard] sqlalchemy pandas pdfplumber openpyxl python-multipart
+  uvicorn auditflow_single:app --host 127.0.0.1 --port 8001
+
+Open:
+  http://127.0.0.1:8001/
+"""
+
+import csv
+import datetime as dt
+import io
 import os
+import re
+import uuid
+from difflib import SequenceMatcher
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
+import pandas as pd
+import pdfplumber
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, Response
+from sqlalchemy import JSON, Column, DateTime, Integer, String, create_engine
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
-BASE_DIR = Path(__file__).resolve().parents[1]  # auditflow/backend
-DB_PATH = Path(os.getenv("DATABASE_PATH", str(BASE_DIR / "data.db")))
 
+# =========================
+# CONFIG / PATHS
+# =========================
+BASE_DIR = Path(__file__).resolve().parent
+DB_PATH = Path(os.getenv("AUDITFLOW_DB", str(BASE_DIR / "auditflow.db")))
+UPLOAD_DIR = BASE_DIR / "uploads"
+
+
+# =========================
+# DB
+# =========================
 engine = create_engine(
     f"sqlite:///{DB_PATH}",
     connect_args={"check_same_thread": False},
 )
-
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
-
-
-
-
-
-===== backend\app\models.py =====
-from __future__ import annotations
-
-import datetime as dt
-
-from sqlalchemy import Column, DateTime, Integer, String, JSON
-
-from .db import Base
 
 
 class AnalysisReport(Base):
@@ -93,346 +68,47 @@ class AnalysisReport(Base):
     status = Column(String, default="completed", nullable=False)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
-    # summary stats (fast query)
     total_ops = Column(Integer, nullable=False, default=0)
     matched_ops = Column(Integer, nullable=False, default=0)
     mismatch_ops = Column(Integer, nullable=False, default=0)
     errors_count = Column(Integer, nullable=False, default=0)
     warnings_count = Column(Integer, nullable=False, default=0)
 
-    # full analysis data (JSON)
     stats_json = Column(JSON, nullable=False, default=dict)
     analysis_json = Column(JSON, nullable=False, default=dict)
 
 
-def init_db():
-    from .db import engine
+Base.metadata.create_all(bind=engine)
 
-    Base.metadata.create_all(bind=engine)
 
+def db_session() -> Session:
+    return SessionLocal()
 
 
+# =========================
+# UTILS (storage)
+# =========================
+def ensure_dir(p: Path) -> None:
+    p.mkdir(parents=True, exist_ok=True)
 
 
-===== backend\app\schemas.py =====
-from __future__ import annotations
+def save_upload_file(upload: UploadFile, dest_dir: Path) -> Tuple[str, str]:
+    ensure_dir(dest_dir)
+    original = upload.filename or "upload"
+    suffix = Path(original).suffix
+    saved_name = f"{uuid.uuid4().hex}{suffix}"
+    saved_path = dest_dir / saved_name
 
-import datetime as dt
-from typing import Any, Dict, List, Optional
+    content = upload.file.read()
+    with open(saved_path, "wb") as f:
+        f.write(content)
 
-from pydantic import BaseModel, Field
+    return str(saved_path), original
 
 
-class AnalyzeResponse(BaseModel):
-    reportId: str
-
-
-class ReportStats(BaseModel):
-    total_ops: int
-    matched_ops: int
-    mismatch_ops: int
-    errors_count: int
-    warnings_count: int
-
-
-class ReportListItem(BaseModel):
-    id: str
-    title: Optional[str] = None
-    branch1_name: str
-    branch2_name: str
-    status: str
-    created_at: dt.datetime
-    stats: ReportStats
-
-
-class ReportDetail(BaseModel):
-    id: str
-    title: Optional[str] = None
-    branch1_name: str
-    branch2_name: str
-    status: str
-    created_at: dt.datetime
-    stats: ReportStats
-
-    file1_original: Optional[str] = None
-    file2_original: Optional[str] = None
-
-    stats_json: Dict[str, Any] = Field(default_factory=dict)
-    analysis_json: Dict[str, Any] = Field(default_factory=dict)
-
-
-class AnalyzeFormResponse(BaseModel):
-    message: str
-
-
-class AnalyzeErrorResponse(BaseModel):
-    detail: str
-
-
-
-
-
-===== backend\app\main.py =====
-from __future__ import annotations
-
-import uuid
-from pathlib import Path
-from typing import Any, Dict, List, Optional
-
-from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, Response
-from fastapi.staticfiles import StaticFiles
-
-from .db import SessionLocal as _SessionLocal  # type: ignore
-from .models import AnalysisReport, init_db
-from .services.analyzer import analyze as analyze_pairs
-from .services.analyzer import compute_summary, process
-from .services.reports import mismatches_to_csv_bytes
-from .services.storage import save_upload_file
-
-# NOTE: relative imports simplified below
-
-app = FastAPI(title="AuditFlow API")
-
-origins = ["*"]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-BASE_DIR = Path(__file__).resolve().parents[2]  # auditflow/backend
-UPLOAD_DIR = BASE_DIR / "uploads"
-FRONTEND_DIR = BASE_DIR / "frontend"
-
-app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
-
-init_db()
-
-
-def _wants_html(request: Request) -> bool:
-    accept = request.headers.get("accept", "").lower()
-    if "application/json" in accept:
-        return False
-    # Browsers usually send text/html, but some clients may send */*.
-    return ("text/html" in accept) or (accept == "" or "*/*" in accept)
-
-
-@app.get("/", response_class=HTMLResponse)
-def ui_home():
-    return FileResponse(str(FRONTEND_DIR / "index.html"))
-
-
-@app.get("/analyze", response_class=HTMLResponse)
-def ui_analyze(request: Request):
-    # GET /analyze is the UI route (POST /analyze is the API)
-    return FileResponse(str(FRONTEND_DIR / "analyze.html"))
-
-
-def _classify_reason(entry: Dict[str, Any]) -> str:
-    reason = entry.get("reason") or ""
-    if entry.get("type") == "error":
-        return "error"
-    if "⚠️" in reason:
-        return "warning"
-    if "❌" in reason:
-        return "error"
-    if "لا يوجد مقابل" in reason:
-        return "error"
-    return "mismatch"
-
-
-def _compute_entry_counts(entries: List[Dict[str, Any]]) -> Dict[str, int]:
-    errors = sum(1 for e in entries if _classify_reason(e) == "error")
-    warnings = sum(1 for e in entries if _classify_reason(e) == "warning")
-    return {"errors": errors, "warnings": warnings}
-
-
-@app.post("/analyze")
-def analyze_api(
-    file1: UploadFile = File(...),
-    file2: UploadFile = File(...),
-    b1: str = Form(...),
-    b2: str = Form(...),
-    title: Optional[str] = Form(None),
-):
-    # store uploads
-    report_id = uuid.uuid4().hex
-    saved1, original1 = save_upload_file(file1, UPLOAD_DIR / report_id / "file1")
-    saved2, original2 = save_upload_file(file2, UPLOAD_DIR / report_id / "file2")
-
-    # analyze locally
-    try:
-        d1 = process(saved1, original1, b1)
-        d2 = process(saved2, original2, b2)
-        mismatch_entries, counts = analyze_pairs(d1, d2)
-    except Exception as e:
-        raise HTTPException(400, f"Failed to analyze files: {e}")
-
-    summary = compute_summary(d1, d2, mismatch_entries)
-    entry_counts = _compute_entry_counts(mismatch_entries)
-
-    created = AnalysisReport(
-        id=report_id,
-        title=title,
-        branch1_name=b1,
-        branch2_name=b2,
-        file1_original=original1,
-        file2_original=original2,
-        file1_path=saved1,
-        file2_path=saved2,
-        total_ops=summary["total_ops"],
-        matched_ops=summary["matched_ops"],
-        mismatch_ops=summary["mismatch_ops"],
-        errors_count=entry_counts["errors"],
-        warnings_count=entry_counts["warnings"],
-        stats_json={
-            "counts": counts,
-            "branch1_total": len(d1),
-            "branch2_total": len(d2),
-        },
-        analysis_json={
-            "extracted_branch1": d1,
-            "extracted_branch2": d2,
-            "mismatches": mismatch_entries,
-            "counts": counts,
-        },
-    )
-
-    db = _SessionLocal()
-    try:
-        db.add(created)
-        db.commit()
-    finally:
-        db.close()
-
-    return {"reportId": report_id}
-
-
-@app.get("/reports")
-def list_reports(request: Request):
-    if _wants_html(request):
-        return FileResponse(str(FRONTEND_DIR / "reports.html"))
-
-    db = _SessionLocal()
-    try:
-        rows: List[AnalysisReport] = (
-            db.query(AnalysisReport).order_by(AnalysisReport.created_at.desc()).limit(200).all()
-        )
-        items = []
-        for r in rows:
-            items.append(
-                {
-                    "id": r.id,
-                    "title": r.title,
-                    "branch1_name": r.branch1_name,
-                    "branch2_name": r.branch2_name,
-                    "status": r.status,
-                    "created_at": r.created_at,
-                    "stats": {
-                        "total_ops": r.total_ops,
-                        "matched_ops": r.matched_ops,
-                        "mismatch_ops": r.mismatch_ops,
-                        "errors_count": r.errors_count,
-                        "warnings_count": r.warnings_count,
-                    },
-                }
-            )
-        return {"items": items}
-    finally:
-        db.close()
-
-
-@app.get("/report")
-def get_report(request: Request, id: str = Query(...)):
-    if _wants_html(request):
-        # report.html uses JS to fetch JSON via the same endpoint
-        return FileResponse(str(FRONTEND_DIR / "report.html"))
-
-    db = _SessionLocal()
-    try:
-        r: AnalysisReport | None = db.query(AnalysisReport).filter(AnalysisReport.id == id).first()
-        if not r:
-            raise HTTPException(404, "Report not found")
-
-        return {
-            "id": r.id,
-            "title": r.title,
-            "branch1_name": r.branch1_name,
-            "branch2_name": r.branch2_name,
-            "status": r.status,
-            "created_at": r.created_at,
-            "stats": {
-                "total_ops": r.total_ops,
-                "matched_ops": r.matched_ops,
-                "mismatch_ops": r.mismatch_ops,
-                "errors_count": r.errors_count,
-                "warnings_count": r.warnings_count,
-            },
-            "file1_original": r.file1_original,
-            "file2_original": r.file2_original,
-            "stats_json": r.stats_json,
-            "analysis_json": r.analysis_json,
-        }
-    finally:
-        db.close()
-
-
-@app.get("/download")
-def download_report(id: str = Query(...)):
-    db = _SessionLocal()
-    try:
-        r: AnalysisReport | None = db.query(AnalysisReport).filter(AnalysisReport.id == id).first()
-        if not r:
-            raise HTTPException(404, "Report not found")
-
-        mismatches = (r.analysis_json or {}).get("mismatches", []) or []
-        csv_bytes = mismatches_to_csv_bytes(mismatches)
-        filename = f"report_{r.id}.csv"
-
-        return Response(
-            content=csv_bytes,
-            media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-        )
-    finally:
-        db.close()
-
-
-@app.delete("/reports")
-def delete_reports(id: str = Query(...)):
-    db = _SessionLocal()
-    try:
-        r: AnalysisReport | None = db.query(AnalysisReport).filter(AnalysisReport.id == id).first()
-        if not r:
-            raise HTTPException(404, "Report not found")
-
-        db.delete(r)
-        db.commit()
-        return {"deleted": True}
-    finally:
-        db.close()
-
-
-
-
-
-===== backend\app\services\analyzer.py =====
-from __future__ import annotations
-
-import re
-from difflib import SequenceMatcher
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-
-import pandas as pd
-import pdfplumber
-
-
+# =========================
+# ANALYZER (local)
+# =========================
 def safe(v: Any) -> Optional[float]:
     try:
         if v is None:
@@ -452,7 +128,6 @@ def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Opti
     credit_col = None
     date_col = None
 
-    # 1) by header names
     for col in df.columns:
         name = str(col).lower()
         if any(x in name for x in ["مدين", "debit", "dr"]):
@@ -462,7 +137,6 @@ def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Opti
         if any(x in name for x in ["تاريخ", "التاريخ", "التأريخ", "date"]):
             date_col = col
 
-    # 2) fallback: numeric columns by mean
     numeric_cols: List[Tuple[str, float]] = []
     for col in df.columns:
         nums = pd.to_numeric(df[col], errors="coerce")
@@ -470,19 +144,16 @@ def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Opti
         if len(valid) < len(df) * 0.3:
             continue
         mean_val = valid.mean()
-        # heuristic to ignore IDs
         if mean_val < 10:
             continue
         numeric_cols.append((col, float(mean_val)))
 
     numeric_cols.sort(key=lambda x: x[1], reverse=True)
-
     if not debit_col and len(numeric_cols) >= 1:
         debit_col = numeric_cols[0][0]
     if not credit_col and len(numeric_cols) >= 2:
         credit_col = numeric_cols[1][0]
 
-    # 3) date fallback: column with many parseable dates
     if not date_col:
         for col in df.columns:
             parsed = pd.to_datetime(df[col], errors="coerce")
@@ -497,8 +168,7 @@ def read_excel(file_path: str) -> Optional[pd.DataFrame]:
     df = pd.read_excel(file_path)
     if df is None or df.empty:
         return None
-    df = df.dropna(how="all")
-    return df
+    return df.dropna(how="all")
 
 
 def read_pdf(file_path: str) -> Optional[pd.DataFrame]:
@@ -519,8 +189,6 @@ def read_pdf(file_path: str) -> Optional[pd.DataFrame]:
     df = pd.DataFrame(rows).dropna(how="all")
     if len(df) < 2:
         return None
-
-    # first row as header
     df.columns = df.iloc[0]
     df = df[1:].dropna(how="all")
     return df
@@ -554,17 +222,6 @@ doc_map: Dict[str, str] = {
     "مبيعات": "مشتريات",
     "مشتريات": "مبيعات",
 }
-
-
-def clean_doc(s: Any) -> str:
-    if not s:
-        return ""
-    s = str(s).lower().strip()
-    s = s.replace("رقم", "")
-    s = s.replace("-", "")
-    s = s.replace("_", "")
-    s = s.replace("  ", " ")
-    return s
 
 
 def clean(s: Any) -> str:
@@ -604,8 +261,7 @@ def match_doc(d1: Any, d2: Any) -> bool:
         if (k in d1 and v in d2) or (v in d1 and k in d2):
             return True
 
-    similarity = SequenceMatcher(None, d1, d2).ratio()
-    return similarity > 0.7
+    return SequenceMatcher(None, d1, d2).ratio() > 0.7
 
 
 def date_diff_days(d1: Any, d2: Any) -> Optional[int]:
@@ -627,27 +283,16 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
     df.columns = df.columns.astype(str).str.strip()
     debit_col, credit_col, date_col = detect_columns(df)
 
-    # doc column
     doc_col = None
     for col in df.columns:
         name = str(col).lower().strip()
         if any(
             x in name
-            for x in [
-                "مستند",
-                "المستند",
-                "نوع",
-                "بيان",
-                "وصف",
-                "description",
-                "desc",
-                "document",
-            ]
+            for x in ["مستند", "المستند", "نوع", "بيان", "وصف", "description", "desc", "document"]
         ):
             doc_col = col
             break
 
-    # fallback if debit/credit not found
     if not debit_col and not credit_col:
         numeric_cols: List[Tuple[str, float]] = []
         for col in df.columns:
@@ -674,7 +319,6 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
         if debit is None and credit is None:
             continue
 
-        # error row: debit + credit positive
         if debit and credit and debit > 0 and credit > 0:
             amount = max(debit, credit)
             data.append(
@@ -689,7 +333,6 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
             )
             continue
 
-        # determine direction
         if credit and credit > 0:
             amount = credit
             t = "credit"
@@ -699,7 +342,6 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
         else:
             continue
 
-        # date
         date_out: Optional[str] = None
         if date_col and date_col in df.columns:
             try:
@@ -712,22 +354,13 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
             except Exception:
                 date_out = str(row[date_col])
 
-        # doc
         doc_out: Optional[str] = None
         if doc_col and doc_col in df.columns:
             val = row[doc_col]
             if pd.notna(val):
                 doc_out = str(val).strip()
 
-        data.append(
-            {
-                "amount": float(amount),
-                "type": t,
-                "branch": branch,
-                "date": date_out,
-                "doc": doc_out,
-            }
-        )
+        data.append({"amount": float(amount), "type": t, "branch": branch, "date": date_out, "doc": doc_out})
 
     return data
 
@@ -770,7 +403,6 @@ def analyze(d1: List[Dict[str, Any]], d2: List[Dict[str, Any]]) -> Tuple[List[Di
     d1 = remove_reversals(d1)
     d2 = remove_reversals(d2)
 
-    # if branch2 empty
     if not d2:
         for x in d1:
             res.append({**x, "reason": "لا يوجد مقابل ❌ (الفرع الثاني فارغ)"})
@@ -841,7 +473,6 @@ def analyze(d1: List[Dict[str, Any]], d2: List[Dict[str, Any]]) -> Tuple[List[Di
                 continue
             if x2.get("type") == "error":
                 continue
-
             score, reasons = match_score(x1, x2)
             if score > best_score:
                 best_score = score
@@ -858,7 +489,6 @@ def analyze(d1: List[Dict[str, Any]], d2: List[Dict[str, Any]]) -> Tuple[List[Di
             b = x1.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
 
-    # remaining from branch2
     for i, x in enumerate(d2):
         if not used[i]:
             if x.get("type") == "error":
@@ -866,7 +496,6 @@ def analyze(d1: List[Dict[str, Any]], d2: List[Dict[str, Any]]) -> Tuple[List[Di
                 b = x.get("branch") or "unknown"
                 counts[b] = counts.get(b, 0) + 1
                 continue
-
             res.append({**x, "reason": "لا يوجد مقابل ❌ (من الفرع الآخر)"})
             b = x.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
@@ -874,50 +503,30 @@ def analyze(d1: List[Dict[str, Any]], d2: List[Dict[str, Any]]) -> Tuple[List[Di
     return res, counts
 
 
-def compute_summary(
-    d1: List[Dict[str, Any]],
-    d2: List[Dict[str, Any]],
-    mismatch_entries: List[Dict[str, Any]],
-) -> Dict[str, Any]:
+def compute_summary(d1: List[Dict[str, Any]], d2: List[Dict[str, Any]], mismatches: List[Dict[str, Any]]) -> Dict[str, int]:
     total_ops = len(d1) + len(d2)
-    mismatch_ops = len(mismatch_entries)
+    mismatch_ops = len(mismatches)
     matched_ops = max(0, total_ops - mismatch_ops)
-
-    errors_count = 0
-    warnings_count = 0
-    for e in mismatch_entries:
-        reason = (e.get("reason") or "").lower()
-        if e.get("type") == "error" or "❌" in e.get("reason", "") or "لا يوجد مقابل" in reason:
-            errors_count += 1
-        elif "⚠️" in e.get("reason", ""):
-            warnings_count += 1
+    errors = 0
+    warnings = 0
+    for e in mismatches:
+        reason = e.get("reason") or ""
+        if e.get("type") == "error" or "❌" in reason or "لا يوجد مقابل" in reason:
+            errors += 1
+        elif "⚠️" in reason:
+            warnings += 1
     return {
         "total_ops": total_ops,
         "matched_ops": matched_ops,
         "mismatch_ops": mismatch_ops,
-        "errors_count": errors_count,
-        "warnings_count": warnings_count,
+        "errors_count": errors,
+        "warnings_count": warnings,
     }
 
 
-
-
-
-===== backend\app\services\reports.py =====
-from __future__ import annotations
-
-import csv
-import io
-from typing import Any, Dict, List
-
-
 def mismatches_to_csv_bytes(entries: List[Dict[str, Any]]) -> bytes:
-    """
-    Return CSV bytes encoded so that Excel opens Arabic correctly.
-    """
     output = io.StringIO()
     writer = csv.writer(output)
-
     writer.writerow(["الفرع", "المبلغ", "نوع العملية", "التاريخ", "المستند", "السبب"])
     for e in entries:
         writer.writerow(
@@ -930,52 +539,13 @@ def mismatches_to_csv_bytes(entries: List[Dict[str, Any]]) -> bytes:
                 e.get("reason", "") or "",
             ]
         )
-
-    # utf-8-sig helps Excel detect Arabic correctly
     return output.getvalue().encode("utf-8-sig")
 
 
-
-
-
-===== backend\app\services\storage.py =====
-from __future__ import annotations
-
-import os
-import uuid
-from pathlib import Path
-from typing import Tuple
-
-from fastapi import UploadFile
-
-
-def ensure_dir(p: Path) -> None:
-    p.mkdir(parents=True, exist_ok=True)
-
-
-def save_upload_file(upload: UploadFile, dest_dir: Path) -> Tuple[str, str]:
-    """
-    Returns: (saved_path, original_filename)
-    """
-    ensure_dir(dest_dir)
-    original = upload.filename or "upload"
-    suffix = Path(original).suffix
-    saved_name = f"{uuid.uuid4().hex}{suffix}"
-    saved_path = dest_dir / saved_name
-
-    # UploadFile.file is a SpooledTemporaryFile; we read bytes once.
-    content = upload.file.read()
-    with open(saved_path, "wb") as f:
-        f.write(content)
-
-    return str(saved_path), original
-
-
-
-
-
-===== frontend\app.js =====
-function qs(name) {
+# =========================
+# FRONTEND (HTML + JS)
+# =========================
+APP_JS = r"""function qs(name) {
   return new URLSearchParams(window.location.search).get(name);
 }
 
@@ -1197,15 +767,10 @@ function initAnalyzePage() {
   document.getElementById("startBtn")?.addEventListener("click", () => startAnalyze());
 }
 
-// deleteReport is global for inline onclick usage
 window.deleteReport = deleteReport;
+"""
 
-
-
-
-
-===== frontend\index.html =====
-<!doctype html>
+INDEX_HTML = r"""<!doctype html>
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
@@ -1301,13 +866,9 @@ window.deleteReport = deleteReport;
     </script>
   </body>
 </html>
+"""
 
-
-
-
-
-===== frontend\analyze.html =====
-<!doctype html>
+ANALYZE_HTML = r"""<!doctype html>
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
@@ -1452,51 +1013,14 @@ window.deleteReport = deleteReport;
       bindDZ("dz1", "file1", () => type1, "fileName1");
       bindDZ("dz2", "file2", () => type2, "fileName2");
 
-      // activate defaults
       setType(1, "excel");
       setType(2, "pdf");
-
-      async function startAnalyze() {
-        const btn = document.getElementById("startBtn");
-        setLoading(btn, true, "جارٍ التحليل ...");
-        try {
-          const file1 = document.getElementById("file1").files?.[0] || null;
-          const file2 = document.getElementById("file2").files?.[0] || null;
-          const b1 = document.getElementById("b1").value || "الفرع الأول";
-          const b2 = document.getElementById("b2").value || "الفرع الثاني";
-          const title = document.getElementById("title").value || "";
-
-          if (!file1 || !file2) {
-            showToast("اختَر ملفي الفرعين أولاً", "#ef4444");
-            return;
-          }
-
-          const fd = new FormData();
-          fd.append("file1", file1);
-          fd.append("file2", file2);
-          fd.append("b1", b1);
-          fd.append("b2", b2);
-          if (title) fd.append("title", title);
-
-          const data = await apiPostForm("/analyze", fd);
-          showToast("تم التحليل ✔️", "#10b981");
-          window.location.href = `/report?id=${encodeURIComponent(data.reportId)}`;
-        } catch (e) {
-          showToast(e.message || "فشل التحليل", "#ef4444");
-        } finally {
-          setLoading(btn, false, "ابدأ التحليل");
-        }
-      }
     </script>
   </body>
 </html>
+"""
 
-
-
-
-
-===== frontend\reports.html =====
-<!doctype html>
+REPORTS_HTML = r"""<!doctype html>
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
@@ -1545,13 +1069,9 @@ window.deleteReport = deleteReport;
     </script>
   </body>
 </html>
+"""
 
-
-
-
-
-===== frontend\report.html =====
-<!doctype html>
+REPORT_HTML = r"""<!doctype html>
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
@@ -1644,8 +1164,199 @@ window.deleteReport = deleteReport;
     </script>
   </body>
 </html>
+"""
 
 
+def wants_html(request: Request) -> bool:
+    accept = request.headers.get("accept", "").lower()
+    if "application/json" in accept:
+        return False
+    return ("text/html" in accept) or (accept == "" or "*/*" in accept)
 
 
+# =========================
+# APP
+# =========================
+app = FastAPI(title="AuditFlow (single file)")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/", response_class=HTMLResponse)
+def ui_home():
+    return HTMLResponse(INDEX_HTML)
+
+
+@app.get("/analyze", response_class=HTMLResponse)
+def ui_analyze():
+    return HTMLResponse(ANALYZE_HTML)
+
+
+@app.get("/static/app.js")
+def ui_js():
+    return Response(content=APP_JS.encode("utf-8"), media_type="application/javascript; charset=utf-8")
+
+
+@app.post("/analyze")
+def analyze_api(
+    file1: UploadFile = File(...),
+    file2: UploadFile = File(...),
+    b1: str = Form(...),
+    b2: str = Form(...),
+    title: Optional[str] = Form(None),
+):
+    report_id = uuid.uuid4().hex
+    saved1, original1 = save_upload_file(file1, UPLOAD_DIR / report_id / "file1")
+    saved2, original2 = save_upload_file(file2, UPLOAD_DIR / report_id / "file2")
+
+    try:
+        d1 = process(saved1, original1, b1)
+        d2 = process(saved2, original2, b2)
+        mismatches, counts = analyze(d1, d2)
+    except Exception as e:
+        raise HTTPException(400, f"Failed to analyze files: {e}")
+
+    summary = compute_summary(d1, d2, mismatches)
+
+    created = AnalysisReport(
+        id=report_id,
+        title=title,
+        branch1_name=b1,
+        branch2_name=b2,
+        file1_original=original1,
+        file2_original=original2,
+        file1_path=saved1,
+        file2_path=saved2,
+        total_ops=summary["total_ops"],
+        matched_ops=summary["matched_ops"],
+        mismatch_ops=summary["mismatch_ops"],
+        errors_count=summary["errors_count"],
+        warnings_count=summary["warnings_count"],
+        stats_json={
+            "counts": counts,
+            "branch1_total": len(d1),
+            "branch2_total": len(d2),
+        },
+        analysis_json={
+            "extracted_branch1": d1,
+            "extracted_branch2": d2,
+            "mismatches": mismatches,
+            "counts": counts,
+        },
+    )
+
+    db = db_session()
+    try:
+        db.add(created)
+        db.commit()
+    finally:
+        db.close()
+
+    return {"reportId": report_id}
+
+
+@app.get("/reports")
+def reports(request: Request):
+    if wants_html(request):
+        return HTMLResponse(REPORTS_HTML)
+
+    db = db_session()
+    try:
+        rows: List[AnalysisReport] = (
+            db.query(AnalysisReport).order_by(AnalysisReport.created_at.desc()).limit(200).all()
+        )
+        items = []
+        for r in rows:
+            items.append(
+                {
+                    "id": r.id,
+                    "title": r.title,
+                    "branch1_name": r.branch1_name,
+                    "branch2_name": r.branch2_name,
+                    "status": r.status,
+                    "created_at": r.created_at,
+                    "stats": {
+                        "total_ops": r.total_ops,
+                        "matched_ops": r.matched_ops,
+                        "mismatch_ops": r.mismatch_ops,
+                        "errors_count": r.errors_count,
+                        "warnings_count": r.warnings_count,
+                    },
+                }
+            )
+        return {"items": items}
+    finally:
+        db.close()
+
+
+@app.get("/report")
+def report(request: Request, id: str = Query(...)):
+    if wants_html(request):
+        return HTMLResponse(REPORT_HTML)
+
+    db = db_session()
+    try:
+        r: AnalysisReport | None = db.query(AnalysisReport).filter(AnalysisReport.id == id).first()
+        if not r:
+            raise HTTPException(404, "Report not found")
+
+        return {
+            "id": r.id,
+            "title": r.title,
+            "branch1_name": r.branch1_name,
+            "branch2_name": r.branch2_name,
+            "status": r.status,
+            "created_at": r.created_at,
+            "stats": {
+                "total_ops": r.total_ops,
+                "matched_ops": r.matched_ops,
+                "mismatch_ops": r.mismatch_ops,
+                "errors_count": r.errors_count,
+                "warnings_count": r.warnings_count,
+            },
+            "file1_original": r.file1_original,
+            "file2_original": r.file2_original,
+            "stats_json": r.stats_json,
+            "analysis_json": r.analysis_json,
+        }
+    finally:
+        db.close()
+
+
+@app.get("/download")
+def download(id: str = Query(...)):
+    db = db_session()
+    try:
+        r: AnalysisReport | None = db.query(AnalysisReport).filter(AnalysisReport.id == id).first()
+        if not r:
+            raise HTTPException(404, "Report not found")
+        mismatches = (r.analysis_json or {}).get("mismatches", []) or []
+        csv_bytes = mismatches_to_csv_bytes(mismatches)
+        filename = f"report_{r.id}.csv"
+        return Response(
+            content=csv_bytes,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename=\"{filename}\"'},
+        )
+    finally:
+        db.close()
+
+
+@app.delete("/reports")
+def delete_report(id: str = Query(...)):
+    db = db_session()
+    try:
+        r: AnalysisReport | None = db.query(AnalysisReport).filter(AnalysisReport.id == id).first()
+        if not r:
+            raise HTTPException(404, "Report not found")
+        db.delete(r)
+        db.commit()
+        return {"deleted": True}
+    finally:
+        db.close()
 
