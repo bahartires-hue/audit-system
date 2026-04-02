@@ -13,7 +13,10 @@ import hmac
 import os
 import time
 
-from passlib.hash import pbkdf2_sha256
+try:
+    from passlib.hash import pbkdf2_sha256 as _legacy_passlib_pbkdf2
+except Exception:
+    _legacy_passlib_pbkdf2 = None
 
 app = FastAPI()
 
@@ -40,6 +43,31 @@ with engine.connect() as conn:
 # ================= AUTH =================
 SECRET = "SECRET_KEY"
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "").strip().lower()
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "").strip().lower()
+OWNER_IDENTIFIER = ADMIN_EMAIL or ADMIN_USERNAME
+
+def hash_password(password: str) -> str:
+    salt = os.urandom(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200000)
+    return f"pbkdf2${salt.hex()}${dk.hex()}"
+
+def verify_password(password: str, stored: str) -> bool:
+    # Backward compatibility for older passlib hashes, if passlib exists.
+    if stored.startswith("$pbkdf2-sha256$") and _legacy_passlib_pbkdf2 is not None:
+        try:
+            return _legacy_passlib_pbkdf2.verify(password, stored)
+        except Exception:
+            return False
+    try:
+        algo, salt_hex, hash_hex = stored.split("$", 2)
+        if algo != "pbkdf2":
+            return False
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(hash_hex)
+        dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200000)
+        return hmac.compare_digest(dk, expected)
+    except Exception:
+        return False
 
 def create_token(username):
     ts = str(int(time.time()))
@@ -1436,9 +1464,9 @@ def register(username: str = Form(...), password: str = Form(...), db: Session =
         return {"msg":"المستخدم موجود"}
     users_count = db.query(User).count()
     is_admin = 1 if users_count == 0 else 0
-    if ADMIN_USERNAME and username.strip().lower() == ADMIN_USERNAME:
+    if OWNER_IDENTIFIER and username.strip().lower() == OWNER_IDENTIFIER:
         is_admin = 1
-    db.add(User(username=username, password=pbkdf2_sha256.hash(password), is_admin=is_admin))
+    db.add(User(username=username, password=hash_password(password), is_admin=is_admin))
     db.commit()
     return {"msg":"تم"}
 
@@ -1450,7 +1478,7 @@ def login(username: str = Form(...), password: str = Form(...), db: Session = De
     if not user:
         return {"error": "user_not_found"}
 
-    if not pbkdf2_sha256.verify(password, user.password):
+    if not verify_password(password, user.password):
         return {"error": "wrong_password"}
 
     return {
@@ -1570,6 +1598,8 @@ loadUsers()
 @app.get("/admin/users")
 def admin_users(authorization: str = Header(None), db: Session = Depends(get_db)):
     current = require_current_user(authorization, db)
+    if OWNER_IDENTIFIER and current.username.strip().lower() != OWNER_IDENTIFIER:
+        raise HTTPException(403, "هذه اللوحة مرتبطة ببريد/حساب المالك فقط")
     if not current.is_admin:
         raise HTTPException(403, "هذه الصفحة للمشرف فقط")
     users = db.query(User).order_by(User.id.desc()).all()
