@@ -649,6 +649,87 @@ input{width:100%;padding:10px;margin:5px 0 10px;border-radius:8px;border:1px sol
 .bar-inner{background:#ef4444;height:100%}
 .toast{position:fixed;bottom:20px;left:20px;background:#22c55e;color:#fff;padding:12px 20px;border-radius:10px;display:none;z-index:999;}
 .hidden{display:none}
+
+/* =================== Upload UI (matches design) =================== */
+#systemBox .container{padding:28px 20px 40px;max-width:980px;}
+#systemBox .topbar{display:none;}
+#systemBox .card{margin-bottom:0;box-shadow:none;border:1px solid rgba(15,23,42,0.08);}
+.audit-shell{background:#fff;border-radius:18px;padding:26px 22px;}
+.audit-title{margin:0;text-align:center;font-size:28px;font-weight:800;color:#0f172a;}
+.audit-sub{margin:8px 0 0;text-align:center;color:#64748b;font-size:14px;line-height:1.6;}
+.upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:26px;align-items:start;}
+.upload-card{border:1px solid rgba(15,23,42,0.10);border-radius:16px;padding:16px;background:#fff;}
+.upload-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.upload-dot{width:10px;height:10px;border-radius:50%;background:#2563eb;box-shadow:0 0 0 4px rgba(37,99,235,0.10);}
+.upload-label{font-weight:700;color:#1d4ed8;font-size:13px;}
+.dz-excel .upload-dot{background:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,0.12);}
+
+.dropzone{
+    border:2px dashed rgba(148,163,184,0.55);
+    border-radius:14px;
+    background:#f8fafc;
+    height:120px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    gap:8px;
+    cursor:pointer;
+    transition:0.15s;
+    user-select:none;
+}
+.dropzone.dragover{
+    border-color:#2563eb;
+    background:#eff6ff;
+}
+.dz-excel .dropzone.dragover{
+    border-color:#10b981;
+    background:#ecfdf5;
+}
+.dz-icon{
+    width:42px;height:42px;
+    display:flex;align-items:center;justify-content:center;
+    border-radius:12px;
+    background:rgba(37,99,235,0.08);
+    color:#2563eb;
+}
+.dz-excel .dz-icon{
+    background:rgba(16,185,129,0.10);
+    color:#10b981;
+}
+.dz-icon svg{width:22px;height:22px;stroke:currentColor;stroke-width:2;fill:none}
+.dz-title{font-size:13px;font-weight:800;color:#0f172a;}
+.dz-sub{font-size:12px;color:#64748b;line-height:1.4;}
+.file-hint{margin-top:10px;font-size:12px;color:#94a3b8;min-height:16px;}
+
+.start-row{display:flex;justify-content:center;margin-top:18px;}
+.start-btn{
+    border:none;
+    background:#2563eb;
+    color:#fff;
+    border-radius:12px;
+    padding:10px 18px;
+    font-size:14px;
+    font-weight:800;
+    cursor:pointer;
+    transition:0.15s;
+}
+.start-btn:active{transform:translateY(1px)}
+
+/* results hidden until analysis */
+#stats.hidden, #totals.hidden, #filterCard.hidden, #errorsCard.hidden {display:none !important;}
+
+.spinner{
+    width:14px;height:14px;
+    border:2px solid rgba(255,255,255,0.35);
+    border-top-color:#fff;
+    border-radius:50%;
+    display:inline-block;
+    vertical-align:middle;
+    margin-inline-start:8px;
+    animation:spin 0.7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 
@@ -690,42 +771,88 @@ input{width:100%;padding:10px;margin:5px 0 10px;border-radius:8px;border:1px sol
 </div>
 </div>
 
-<div class="card">
-<input id="b1" placeholder="الفرع الأول">
-<input id="b2" placeholder="الفرع الثاني">
-<input type="file" id="f1">
-<input type="file" id="f2">
+<div class="card audit-shell">
+    <h1 class="audit-title">تدقيق مالي</h1>
+    <div class="audit-sub">ارفع ملف Excel و PDF للمقارنة وتحليل الفروقات تلقائيًا.</div>
 
-<div style="display:flex;gap:10px;justify-content:center;margin-top:10px">
-<button id="analyzeBtn" class="analyze-btn" onclick="upload()">تحليل</button>
-<button class="analyze-btn" style="background:#10b981" onclick="download()">تحميل التقرير</button>
+    <!-- keep values for API -->
+    <input type="hidden" id="b1" value="الفرع الأول">
+    <input type="hidden" id="b2" value="الفرع الثاني">
+
+    <div class="upload-grid">
+        <div class="upload-card dz-excel">
+            <div class="upload-head">
+                <span class="upload-dot"></span>
+                <span class="upload-label">الفرع الأول</span>
+            </div>
+
+            <input type="file" id="f1" accept=".xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden">
+            <div class="dropzone" id="dz1" data-target="f1">
+                <div class="dz-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 3v10" stroke-linecap="round"/>
+                        <path d="M8 9l4-4 4 4" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M5 14v4a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-4" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div class="dz-title">Excel</div>
+                <div class="dz-sub">اسحب وأفلت أو اضغط للاختيار</div>
+            </div>
+            <div class="file-hint" id="fileName1"> </div>
+        </div>
+
+        <div class="upload-card">
+            <div class="upload-head">
+                <span class="upload-dot"></span>
+                <span class="upload-label">الفرع الثاني</span>
+            </div>
+
+            <input type="file" id="f2" accept=".pdf,application/pdf" class="hidden">
+            <div class="dropzone" id="dz2" data-target="f2">
+                <div class="dz-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 3v10" stroke-linecap="round"/>
+                        <path d="M8 9l4-4 4 4" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M5 14v4a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-4" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div class="dz-title">PDF</div>
+                <div class="dz-sub">اسحب وأفلت أو اضغط للاختيار</div>
+            </div>
+            <div class="file-hint" id="fileName2"> </div>
+        </div>
+    </div>
+
+    <div class="start-row">
+        <button id="analyzeBtn" class="start-btn" onclick="upload()">ابدأ التحليل</button>
+    </div>
+    
+    <div style="display:flex;justify-content:center;margin-top:12px">
+        <button id="downloadBtn" class="start-btn hidden" style="background:#10b981" onclick="download()">تحميل التقرير</button>
+    </div>
 </div>
+
+<div id="stats" class="stats hidden"></div>
+<div id="totals" class="card hidden"></div>
+
+<div class="card hidden" id="filterCard">
+    <h3>فلترة الأخطاء</h3>
+
+    <input id="filterDoc" placeholder="نوع المستند">
+    <input id="filterAmount" placeholder="المبلغ">
+
+    <input id="filterType" placeholder="نوع الخطأ (❌ أو ⚠️)">
+
+    <button class="analyze-btn" onclick="applyFilter()">تطبيق</button>
+    <button class="btn btn-mode" onclick="resetFilter()">إلغاء</button>
 </div>
 
-<div id="stats" class="stats"></div>
-<div id="totals" class="card"></div>
-
-
-<div class="card">
-<h3>فلترة الأخطاء</h3>
-
-<input id="filterDoc" placeholder="نوع المستند">
-<input id="filterAmount" placeholder="المبلغ">
-
-<!-- 🔥 جديد -->
-<input id="filterType" placeholder="نوع الخطأ (❌ أو ⚠️)">
-
-<button class="analyze-btn" onclick="applyFilter()">تطبيق</button>
-<button class="btn btn-mode" onclick="resetFilter()">إلغاء</button>
-
-</div>
-
-<div class="card">
-<h3>الأخطاء</h3>
-<div class="errors">
-<div id="right"></div>
-<div id="left"></div>
-</div>
+<div class="card hidden" id="errorsCard">
+    <h3>الأخطاء</h3>
+    <div class="errors">
+        <div id="right"></div>
+        <div id="left"></div>
+    </div>
 </div>
 
 </div>
@@ -736,6 +863,8 @@ input{width:100%;padding:10px;margin:5px 0 10px;border-radius:8px;border:1px sol
 let TOKEN=""
 let USERNAME=""
 let ALL_ERRORS=[]
+let SELECTED_FILE1 = null
+let SELECTED_FILE2 = null
 
 // ================= FILTER =================
 function applyFilter(){
@@ -832,6 +961,87 @@ showToast("فشل تسجيل الدخول","#ef4444")
 }
 }
 
+// ================= DROPZONE =================
+function setSelected(fileInputId, fileObj){
+    if(fileInputId === "f1"){
+        SELECTED_FILE1 = fileObj
+        let el = document.getElementById("fileName1")
+        if(el){
+            el.innerText = fileObj ? ("تم اختيار: " + (fileObj.name || "")) : ""
+        }
+    }else{
+        SELECTED_FILE2 = fileObj
+        let el = document.getElementById("fileName2")
+        if(el){
+            el.innerText = fileObj ? ("تم اختيار: " + (fileObj.name || "")) : ""
+        }
+    }
+}
+
+function validateFile(fileObj, expected){
+    if(!fileObj) return false
+    let name = (fileObj.name || "").toLowerCase()
+    if(expected === "excel"){
+        return name.endsWith(".xlsx") || name.endsWith(".xls")
+    }
+    if(expected === "pdf"){
+        return name.endsWith(".pdf")
+    }
+    return true
+}
+
+function bindDropzone(dzId, inputId, expectedType){
+    let dz = document.getElementById(dzId)
+    let inp = document.getElementById(inputId)
+    if(!dz || !inp) return
+
+    dz.addEventListener("click", ()=> inp.click())
+
+    ;["dragenter","dragover"].forEach(evtName=>{
+        dz.addEventListener(evtName, (e)=>{
+            e.preventDefault()
+            e.stopPropagation()
+            dz.classList.add("dragover")
+        })
+    })
+
+    ;["dragleave","drop"].forEach(evtName=>{
+        dz.addEventListener(evtName, (e)=>{
+            e.preventDefault()
+            e.stopPropagation()
+            dz.classList.remove("dragover")
+        })
+    })
+
+    dz.addEventListener("drop", (e)=>{
+        let dt = e.dataTransfer
+        let fileObj = dt && dt.files && dt.files.length ? dt.files[0] : null
+        if(!fileObj || !validateFile(fileObj, expectedType)){
+            showToast("نوع الملف غير صحيح", "#ef4444")
+            setSelected(inputId, null)
+            return
+        }
+
+        setSelected(inputId, fileObj)
+    })
+
+    inp.addEventListener("change", ()=>{
+        let fileObj = inp.files && inp.files.length ? inp.files[0] : null
+        if(fileObj && !validateFile(fileObj, expectedType)){
+            showToast("نوع الملف غير صحيح", "#ef4444")
+            inp.value = ""
+            setSelected(inputId, null)
+            return
+        }
+        setSelected(inputId, fileObj)
+    })
+}
+
+window.addEventListener("DOMContentLoaded", ()=>{
+    bindDropzone("dz1","f1","excel")
+    bindDropzone("dz2","f2","pdf")
+})
+
 // ================= RENDER =================
 function render(errors){
 
@@ -881,8 +1091,8 @@ async function upload(){
     btn.innerHTML = `جاري التحليل <span class="spinner"></span>`
     btn.style.opacity = "0.6"
 
-    let file1 = document.getElementById("f1").files[0]
-    let file2 = document.getElementById("f2").files[0]
+    let file1 = SELECTED_FILE1 || (document.getElementById("f1").files ? document.getElementById("f1").files[0] : null)
+    let file2 = SELECTED_FILE2 || (document.getElementById("f2").files ? document.getElementById("f2").files[0] : null)
 
     if(!file1 || !file2){
         showToast("اختار الملفين أولاً","#ef4444")
@@ -980,6 +1190,13 @@ async function upload(){
         render(ALL_ERRORS)
 
         showToast("تم التحليل ✔️")
+        
+        // Show results UI
+        document.getElementById("stats").classList.remove("hidden")
+        document.getElementById("totals").classList.remove("hidden")
+        document.getElementById("filterCard").classList.remove("hidden")
+        document.getElementById("errorsCard").classList.remove("hidden")
+        document.getElementById("downloadBtn").classList.remove("hidden")
 
     } catch(e){
         console.error("❌ error:", e)
