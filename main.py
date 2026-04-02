@@ -33,7 +33,7 @@ import pandas as pd
 import pdfplumber
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, create_engine, text
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
@@ -743,22 +743,60 @@ def mismatches_to_csv_bytes(entries: List[Dict[str, Any]]) -> bytes:
 
 
 def mismatches_to_excel_bytes(entries: List[Dict[str, Any]]) -> bytes:
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    # Ordered to match requested visual layout (RTL): amount, date, doc, reason
+    headers = ["المبلغ", "التاريخ", "المستند", "السبب"]
     rows = []
     for e in entries:
         rows.append(
-            {
-                "الفرع": e.get("branch", ""),
-                "المبلغ": e.get("amount", ""),
-                "نوع العملية": e.get("type", ""),
-                "التاريخ": e.get("date", "") or "",
-                "المستند": e.get("doc", "") or "",
-                "السبب": e.get("reason", "") or "",
-            }
+            [
+                e.get("amount", ""),
+                e.get("date", "") or "",
+                e.get("doc", "") or "",
+                e.get("reason", "") or "",
+            ]
         )
-    df = pd.DataFrame(rows)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "errors"
+    ws.sheet_view.rightToLeft = True
+
+    header_fill = PatternFill(fill_type="solid", start_color="FFF200", end_color="FFF200")
+    header_font = Font(color="FF0000", bold=True, size=12)
+    body_font = Font(color="000000", size=11)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin = Side(style="thin", color="000000")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    # Header
+    for col, h in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = center
+        cell.border = border
+
+    # Body
+    for r_idx, r in enumerate(rows, start=2):
+        for c_idx, val in enumerate(r, start=1):
+            cell = ws.cell(row=r_idx, column=c_idx, value=val)
+            cell.font = body_font
+            cell.alignment = center
+            cell.border = border
+
+    # Widths close to screenshot proportions
+    ws.column_dimensions["A"].width = 14  # المبلغ
+    ws.column_dimensions["B"].width = 16  # التاريخ
+    ws.column_dimensions["C"].width = 20  # المستند
+    ws.column_dimensions["D"].width = 48  # السبب
+
+    ws.freeze_panes = "A2"
+
     out = io.BytesIO()
-    with pd.ExcelWriter(out, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="errors")
+    wb.save(out)
     return out.getvalue()
 
 
@@ -766,31 +804,49 @@ def mismatches_to_pdf_bytes(entries: List[Dict[str, Any]]) -> bytes:
     if canvas is None or A4 is None:
         raise HTTPException(500, "PDF export يحتاج تثبيت reportlab: pip install reportlab")
 
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+
     out = io.BytesIO()
-    c = canvas.Canvas(out, pagesize=A4)
-    page_w, page_h = A4
-    y = page_h - 40
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(40, y, "AuditFlow Errors Report")
-    y -= 20
-    c.setFont("Helvetica", 9)
+    doc = SimpleDocTemplate(
+        out,
+        pagesize=A4,
+        rightMargin=24,
+        leftMargin=24,
+        topMargin=24,
+        bottomMargin=24,
+    )
 
-    for idx, e in enumerate(entries, start=1):
-        line = (
-            f"{idx}) branch={e.get('branch','-')} | amount={e.get('amount','-')} | "
-            f"type={e.get('type','-')} | date={e.get('date','-')} | "
-            f"doc={e.get('doc','-')} | reason={e.get('reason','-')}"
+    # Keep same order/shape as Excel export
+    data = [["المبلغ", "التاريخ", "المستند", "السبب"]]
+    for e in entries:
+        data.append(
+            [
+                str(e.get("amount", "") or ""),
+                str(e.get("date", "") or ""),
+                str(e.get("doc", "") or ""),
+                str(e.get("reason", "") or ""),
+            ]
         )
-        if len(line) > 170:
-            line = line[:167] + "..."
-        c.drawString(40, y, line)
-        y -= 14
-        if y < 40:
-            c.showPage()
-            y = page_h - 40
-            c.setFont("Helvetica", 9)
 
-    c.save()
+    table = Table(data, colWidths=[70, 90, 110, 260], repeatRows=1)
+    table.setStyle(
+        TableStyle(
+            [
+                ("GRID", (0, 0), (-1, -1), 0.8, colors.black),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#FFF200")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.red),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 11),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("FONTSIZE", (0, 1), (-1, -1), 9),
+            ]
+        )
+    )
+
+    doc.build([table])
     return out.getvalue()
 
 
@@ -1654,6 +1710,32 @@ SETTINGS_HTML = r"""<!doctype html>
 </html>
 """
 
+LOGIN_HTML = r"""<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>تسجيل الدخول - AuditFlow</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>body { font-family: "IBM Plex Sans Arabic", system-ui, sans-serif; }</style>
+  </head>
+  <body class="bg-slate-50 text-slate-900 min-h-screen">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold"></div>
+    <main class="max-w-xl mx-auto px-4 py-16">
+      <div class="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm text-center">
+        <h1 class="text-3xl font-extrabold">AuditFlow</h1>
+        <p class="text-slate-600 mt-3">يجب تسجيل الدخول أو إنشاء حساب أولًا للوصول إلى التحليل والتقارير والتنزيل.</p>
+        <div id="authArea" class="mt-6 flex justify-center"></div>
+      </div>
+    </main>
+    <footer class="max-w-xl mx-auto px-4 pb-8 text-center text-slate-500 text-sm font-extrabold">تطوير الموقع: محمد علي السوداني</footer>
+    <script src="/static/app.js"></script>
+    <script>initAuthUI();</script>
+  </body>
+</html>
+"""
+
 
 def wants_html(request: Request) -> bool:
     accept = request.headers.get("accept", "").lower()
@@ -1677,18 +1759,51 @@ run_migrations()
 
 
 @app.get("/", response_class=HTMLResponse)
-def ui_home():
-    return HTMLResponse(INDEX_HTML)
+def ui_home(request: Request):
+    db = db_session()
+    try:
+        _ = require_user(db, request)
+        return HTMLResponse(INDEX_HTML)
+    except HTTPException:
+        return RedirectResponse(url="/login", status_code=302)
+    finally:
+        db.close()
 
 
 @app.get("/analyze", response_class=HTMLResponse)
-def ui_analyze():
-    return HTMLResponse(ANALYZE_HTML)
+def ui_analyze(request: Request):
+    db = db_session()
+    try:
+        _ = require_user(db, request)
+        return HTMLResponse(ANALYZE_HTML)
+    except HTTPException:
+        return RedirectResponse(url="/login", status_code=302)
+    finally:
+        db.close()
 
 
 @app.get("/settings", response_class=HTMLResponse)
-def ui_settings():
-    return HTMLResponse(SETTINGS_HTML)
+def ui_settings(request: Request):
+    db = db_session()
+    try:
+        _ = require_user(db, request)
+        return HTMLResponse(SETTINGS_HTML)
+    except HTTPException:
+        return RedirectResponse(url="/login", status_code=302)
+    finally:
+        db.close()
+
+
+@app.get("/login", response_class=HTMLResponse)
+def ui_login(request: Request):
+    db = db_session()
+    try:
+        u = current_user_from_request(db, request)
+        if u:
+            return RedirectResponse(url="/", status_code=302)
+        return HTMLResponse(LOGIN_HTML)
+    finally:
+        db.close()
 
 
 @app.get("/static/app.js")
@@ -1915,7 +2030,14 @@ def analyze_api(
 @app.get("/reports")
 def reports(request: Request):
     if wants_html(request):
-        return HTMLResponse(REPORTS_HTML)
+        db = db_session()
+        try:
+            _ = require_user(db, request)
+            return HTMLResponse(REPORTS_HTML)
+        except HTTPException:
+            return RedirectResponse(url="/login", status_code=302)
+        finally:
+            db.close()
 
     db = db_session()
     try:
@@ -1954,7 +2076,14 @@ def reports(request: Request):
 @app.get("/report")
 def report(request: Request, id: str = Query(...)):
     if wants_html(request):
-        return HTMLResponse(REPORT_HTML)
+        db = db_session()
+        try:
+            _ = require_user(db, request)
+            return HTMLResponse(REPORT_HTML)
+        except HTTPException:
+            return RedirectResponse(url="/login", status_code=302)
+        finally:
+            db.close()
 
     db = db_session()
     try:
