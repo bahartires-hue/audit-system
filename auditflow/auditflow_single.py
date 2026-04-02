@@ -1258,7 +1258,7 @@ function qs(name) {
 }
 
 async function apiGet(url) {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  const res = await fetch(url, { headers: { Accept: "application/json" }, credentials: "include" });
   if (!res.ok) throw new Error(await readErrorMessage(res));
   return res.json();
 }
@@ -1266,7 +1266,12 @@ async function apiGet(url) {
 async function apiPostForm(url, formData) {
   syncCsrfFromCookie();
   const csrf = localStorage.getItem("csrf_token") || "";
-  const res = await fetch(url, { method: "POST", body: formData, headers: { Accept: "application/json", "X-CSRF-Token": csrf } });
+  const res = await fetch(url, {
+    method: "POST",
+    body: formData,
+    headers: { Accept: "application/json", "X-CSRF-Token": csrf },
+    credentials: "include",
+  });
   if (!res.ok) throw new Error(await readErrorMessage(res));
   return res.json();
 }
@@ -1276,6 +1281,7 @@ async function apiPostJson(url, body) {
   const csrf = localStorage.getItem("csrf_token") || "";
   const res = await fetch(url, {
     method: "POST",
+    credentials: "include",
     headers: { Accept: "application/json", "Content-Type": "application/json", "X-CSRF-Token": csrf },
     body: JSON.stringify(body || {}),
   });
@@ -1286,7 +1292,7 @@ async function apiPostJson(url, body) {
 async function apiDelete(url) {
   syncCsrfFromCookie();
   const csrf = localStorage.getItem("csrf_token") || "";
-  const res = await fetch(url, { method: "DELETE", headers: { Accept: "application/json", "X-CSRF-Token": csrf } });
+  const res = await fetch(url, { method: "DELETE", headers: { Accept: "application/json", "X-CSRF-Token": csrf }, credentials: "include" });
   if (!res.ok) throw new Error(await readErrorMessage(res));
   return res.json();
 }

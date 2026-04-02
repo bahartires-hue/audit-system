@@ -3,7 +3,7 @@ function qs(name) {
 }
 
 async function apiGet(url) {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  const res = await fetch(url, { headers: { Accept: "application/json" }, credentials: "include" });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(text || `HTTP ${res.status}`);
@@ -12,7 +12,7 @@ async function apiGet(url) {
 }
 
 async function apiPostForm(url, formData) {
-  const res = await fetch(url, { method: "POST", body: formData, headers: { Accept: "application/json" } });
+  const res = await fetch(url, { method: "POST", body: formData, headers: { Accept: "application/json" }, credentials: "include" });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(text || `HTTP ${res.status}`);
