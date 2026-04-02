@@ -1,8 +1,11 @@
 fastapi
-uvicorn
+uvicorn[standard]
 pandas
 sqlalchemy
 psycopg2-binary
 python-multipart
 openpyxl
 pdfplumber
+PyJWT
+passlib[bcrypt]
+reportlab
