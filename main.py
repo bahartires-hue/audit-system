@@ -15,10 +15,16 @@ Open:
 
 import csv
 import datetime as dt
+import hashlib
+import hmac
 import io
+import json
 import os
 import re
+import secrets
+import shutil
 import uuid
+import zipfile
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -28,8 +34,15 @@ import pdfplumber
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
-from sqlalchemy import JSON, Column, DateTime, Integer, String, create_engine
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, create_engine, text
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
+
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+except Exception:
+    A4 = None
+    canvas = None
 
 
 # =========================
@@ -38,6 +51,7 @@ from sqlalchemy.orm import Session, declarative_base, sessionmaker
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = Path(os.getenv("AUDITFLOW_DB", str(BASE_DIR / "auditflow.db")))
 UPLOAD_DIR = BASE_DIR / "uploads"
+BACKUP_DIR = BASE_DIR / "backups"
 
 
 # =========================
@@ -55,6 +69,7 @@ class AnalysisReport(Base):
     __tablename__ = "analysis_reports"
 
     id = Column(String, primary_key=True)  # uuid4 hex
+    user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     title = Column(String, nullable=True)
 
     branch1_name = Column(String, nullable=False)
@@ -78,11 +93,148 @@ class AnalysisReport(Base):
     analysis_json = Column(JSON, nullable=False, default=dict)
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True)
+    username = Column(String, unique=True, nullable=False, index=True)
+    password_hash = Column(String, nullable=False)
+    failed_attempts = Column(Integer, nullable=False, default=0)
+    locked_until = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
+    action = Column(String, nullable=False)
+    meta_json = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    token = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+
+
 Base.metadata.create_all(bind=engine)
+
+
+def run_migrations() -> None:
+    """Best-effort SQLite migrations for existing local DB."""
+    with engine.connect() as conn:
+        cols = [r[1] for r in conn.execute(text("PRAGMA table_info(analysis_reports)")).fetchall()]
+        if "user_id" not in cols:
+            conn.execute(text("ALTER TABLE analysis_reports ADD COLUMN user_id VARCHAR"))
+            conn.commit()
+
+        cols = [r[1] for r in conn.execute(text("PRAGMA table_info(users)")).fetchall()]
+        if "failed_attempts" not in cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN failed_attempts INTEGER DEFAULT 0"))
+            conn.commit()
+        if "locked_until" not in cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN locked_until DATETIME"))
+            conn.commit()
 
 
 def db_session() -> Session:
     return SessionLocal()
+
+
+# =========================
+# AUTH
+# =========================
+SESSION_COOKIE = "auditflow_session"
+CSRF_COOKIE = "auditflow_csrf"
+SESSION_DAYS = 14
+MAX_UPLOAD_SIZE_MB = 15
+LOCK_MINUTES = 15
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200000)
+    return f"pbkdf2_sha256${salt.hex()}${dk.hex()}"
+
+
+def verify_password(password: str, stored: str) -> bool:
+    # Backward compatibility for old sha256 hashes.
+    if "$" not in stored:
+        return hashlib.sha256(password.encode("utf-8")).hexdigest() == stored
+    try:
+        algo, salt_hex, hash_hex = stored.split("$", 2)
+        if algo != "pbkdf2_sha256":
+            return False
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(hash_hex)
+        dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200000)
+        return hmac.compare_digest(dk, expected)
+    except Exception:
+        return False
+
+
+def create_session(db: Session, user_id: str) -> str:
+    token = secrets.token_urlsafe(40)
+    now = dt.datetime.utcnow()
+    session = UserSession(
+        token=token,
+        user_id=user_id,
+        created_at=now,
+        expires_at=now + dt.timedelta(days=SESSION_DAYS),
+    )
+    db.add(session)
+    db.commit()
+    return token
+
+
+def issue_csrf_token() -> str:
+    return secrets.token_urlsafe(24)
+
+
+def require_csrf(request: Request) -> None:
+    cookie_token = request.cookies.get(CSRF_COOKIE, "")
+    header_token = request.headers.get("x-csrf-token", "")
+    if not cookie_token or not header_token or not hmac.compare_digest(cookie_token, header_token):
+        raise HTTPException(403, "CSRF token غير صالح")
+
+
+def current_user_from_request(db: Session, request: Request) -> Optional[User]:
+    token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        return None
+    s = db.query(UserSession).filter(UserSession.token == token).first()
+    if not s:
+        return None
+    if s.expires_at < dt.datetime.utcnow():
+        db.delete(s)
+        db.commit()
+        return None
+    return db.query(User).filter(User.id == s.user_id).first()
+
+
+def require_user(db: Session, request: Request) -> User:
+    u = current_user_from_request(db, request)
+    if not u:
+        raise HTTPException(401, "يرجى تسجيل الدخول أولاً")
+    return u
+
+
+def log_event(db: Session, action: str, user_id: Optional[str] = None, meta: Optional[Dict[str, Any]] = None) -> None:
+    db.add(
+        AuditLog(
+            id=uuid.uuid4().hex,
+            user_id=user_id,
+            action=action,
+            meta_json=meta or {},
+        )
+    )
+    db.commit()
 
 
 # =========================
@@ -100,6 +252,22 @@ def save_upload_file(upload: UploadFile, dest_dir: Path) -> Tuple[str, str]:
     saved_path = dest_dir / saved_name
 
     content = upload.file.read()
+    max_bytes = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    if len(content) > max_bytes:
+        raise HTTPException(400, f"حجم الملف أكبر من {MAX_UPLOAD_SIZE_MB}MB")
+
+    lower = original.lower()
+    if lower.endswith(".pdf") and not content.startswith(b"%PDF"):
+        raise HTTPException(400, "ملف PDF غير صالح")
+    if lower.endswith(".xlsx") and not content.startswith(b"PK"):
+        raise HTTPException(400, "ملف Excel (.xlsx) غير صالح")
+    if lower.endswith(".xls") and not content.startswith(b"\xD0\xCF\x11\xE0"):
+        raise HTTPException(400, "ملف Excel (.xls) غير صالح")
+
+    allowed = (".pdf", ".xlsx", ".xls", ".csv", ".xlsm", ".xlsb")
+    if not lower.endswith(allowed):
+        raise HTTPException(400, "نوع الملف غير مدعوم. المسموح: Excel/PDF")
+
     with open(saved_path, "wb") as f:
         f.write(content)
 
@@ -370,6 +538,24 @@ def analyze(d1: List[Dict[str, Any]], d2: List[Dict[str, Any]]) -> Tuple[List[Di
     used = [False] * len(d2)
     counts: Dict[str, int] = {}
 
+    def is_sale_return_pair(doc1: Any, doc2: Any) -> bool:
+        """
+        Treat (sales, sales return) and (purchases, purchases return) as valid internal neutralizing pairs.
+        """
+        c1 = clean(doc1)
+        c2 = clean(doc2)
+        if not c1 or not c2:
+            return False
+
+        pairs = [
+            (clean("مبيعات"), clean("مردود مبيعات")),
+            (clean("مشتريات"), clean("مردود مشتريات")),
+        ]
+        for base, ret in pairs:
+            if (base in c1 and ret in c2) or (ret in c1 and base in c2):
+                return True
+        return False
+
     def remove_reversals(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         cleaned: List[Dict[str, Any]] = []
         used_local = [False] * len(data)
@@ -382,16 +568,30 @@ def analyze(d1: List[Dict[str, Any]], d2: List[Dict[str, Any]]) -> Tuple[List[Di
                     continue
                 if x1["branch"] != x2["branch"]:
                     continue
-                if x1["type"] == x2["type"]:
-                    continue
                 if abs(x1["amount"] - x2["amount"]) > 0.01:
                     continue
                 days = date_diff_days(x1["date"], x2["date"])
-                if days is None or days > 1:
+                if days is None:
                     continue
-                if x1.get("doc") and x2.get("doc"):
-                    if not match_doc(x1["doc"], x2["doc"]):
-                        continue
+
+                # Rule 1: classic reversal (opposite direction, same amount, close date).
+                classic_reversal = (
+                    x1["type"] != x2["type"]
+                    and days <= 1
+                    and (
+                        not (x1.get("doc") and x2.get("doc"))
+                        or match_doc(x1["doc"], x2["doc"])
+                    )
+                )
+
+                # Rule 2: same-branch sales/purchase with their return in the SAME day.
+                sales_return_same_day = (
+                    days == 0 and is_sale_return_pair(x1.get("doc"), x2.get("doc"))
+                )
+
+                if not classic_reversal and not sales_return_same_day:
+                    continue
+
                 used_local[i] = True
                 used_local[j] = True
                 found = True
@@ -542,6 +742,58 @@ def mismatches_to_csv_bytes(entries: List[Dict[str, Any]]) -> bytes:
     return output.getvalue().encode("utf-8-sig")
 
 
+def mismatches_to_excel_bytes(entries: List[Dict[str, Any]]) -> bytes:
+    rows = []
+    for e in entries:
+        rows.append(
+            {
+                "الفرع": e.get("branch", ""),
+                "المبلغ": e.get("amount", ""),
+                "نوع العملية": e.get("type", ""),
+                "التاريخ": e.get("date", "") or "",
+                "المستند": e.get("doc", "") or "",
+                "السبب": e.get("reason", "") or "",
+            }
+        )
+    df = pd.DataFrame(rows)
+    out = io.BytesIO()
+    with pd.ExcelWriter(out, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="errors")
+    return out.getvalue()
+
+
+def mismatches_to_pdf_bytes(entries: List[Dict[str, Any]]) -> bytes:
+    if canvas is None or A4 is None:
+        raise HTTPException(500, "PDF export يحتاج تثبيت reportlab: pip install reportlab")
+
+    out = io.BytesIO()
+    c = canvas.Canvas(out, pagesize=A4)
+    page_w, page_h = A4
+    y = page_h - 40
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(40, y, "AuditFlow Errors Report")
+    y -= 20
+    c.setFont("Helvetica", 9)
+
+    for idx, e in enumerate(entries, start=1):
+        line = (
+            f"{idx}) branch={e.get('branch','-')} | amount={e.get('amount','-')} | "
+            f"type={e.get('type','-')} | date={e.get('date','-')} | "
+            f"doc={e.get('doc','-')} | reason={e.get('reason','-')}"
+        )
+        if len(line) > 170:
+            line = line[:167] + "..."
+        c.drawString(40, y, line)
+        y -= 14
+        if y < 40:
+            c.showPage()
+            y = page_h - 40
+            c.setFont("Helvetica", 9)
+
+    c.save()
+    return out.getvalue()
+
+
 # =========================
 # FRONTEND (HTML + JS)
 # =========================
@@ -559,7 +811,32 @@ async function apiGet(url) {
 }
 
 async function apiPostForm(url, formData) {
-  const res = await fetch(url, { method: "POST", body: formData, headers: { Accept: "application/json" } });
+  const csrf = localStorage.getItem("csrf_token") || "";
+  const res = await fetch(url, { method: "POST", body: formData, headers: { Accept: "application/json", "X-CSRF-Token": csrf } });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function apiPostJson(url, body) {
+  const csrf = localStorage.getItem("csrf_token") || "";
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json", "X-CSRF-Token": csrf },
+    body: JSON.stringify(body || {}),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function apiDelete(url) {
+  const csrf = localStorage.getItem("csrf_token") || "";
+  const res = await fetch(url, { method: "DELETE", headers: { Accept: "application/json", "X-CSRF-Token": csrf } });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(text || `HTTP ${res.status}`);
@@ -615,11 +892,7 @@ function renderReportRow(item) {
 
 async function deleteReport(id) {
   if (!confirm("هل تريد حذف هذا التقرير؟")) return;
-  const res = await fetch(`/reports?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    showToast("فشل حذف التقرير", "#ef4444");
-    return;
-  }
+  await apiDelete(`/reports?id=${encodeURIComponent(id)}`);
   showToast("تم الحذف ✔️", "#10b981");
   await loadReports();
 }
@@ -726,8 +999,9 @@ async function loadReportDetail() {
   renderMismatchTable(mismatches, document.getElementById("mismatchTableHost"));
 }
 
-function downloadCSV(id) {
-  window.location.href = `/download?id=${encodeURIComponent(id)}`;
+function downloadErrors(id, format) {
+  const fmt = format || "excel";
+  window.location.href = `/download?id=${encodeURIComponent(id)}&format=${encodeURIComponent(fmt)}`;
 }
 
 async function startAnalyze() {
@@ -767,7 +1041,137 @@ function initAnalyzePage() {
   document.getElementById("startBtn")?.addEventListener("click", () => startAnalyze());
 }
 
+async function initAuthUI() {
+  const host = document.getElementById("authArea");
+  if (!host) return;
+
+  function ensureAuthModal() {
+    let modal = document.getElementById("authModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.id = "authModal";
+    modal.className = "hidden fixed inset-0 z-[70] bg-black/50 items-center justify-center p-4";
+    modal.innerHTML = `
+      <div class="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-2xl p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h3 id="authModalTitle" class="text-xl font-extrabold text-slate-900"></h3>
+          <button id="authCloseBtn" class="px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">✕</button>
+        </div>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-sm font-extrabold text-slate-700 mb-1">اسم المستخدم</label>
+            <input id="authUsername" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10" />
+          </div>
+          <div>
+            <label class="block text-sm font-extrabold text-slate-700 mb-1">كلمة المرور</label>
+            <input id="authPassword" type="password" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10" />
+          </div>
+        </div>
+        <div class="mt-4 flex items-center justify-end gap-2">
+          <button id="authCancelBtn" class="px-4 py-2 rounded-xl border border-slate-200 text-sm font-extrabold hover:bg-slate-50">إلغاء</button>
+          <button id="authSubmitBtn" class="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-extrabold hover:bg-slate-800"></button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function openAuthModal(mode) {
+    const modal = ensureAuthModal();
+    const title = document.getElementById("authModalTitle");
+    const submit = document.getElementById("authSubmitBtn");
+    const cancel = document.getElementById("authCancelBtn");
+    const close = document.getElementById("authCloseBtn");
+    const u = document.getElementById("authUsername");
+    const p = document.getElementById("authPassword");
+    if (!title || !submit || !cancel || !close || !u || !p) return;
+
+    title.innerText = mode === "register" ? "إنشاء حساب جديد" : "تسجيل الدخول";
+    submit.innerText = mode === "register" ? "تسجيل" : "دخول";
+    u.value = "";
+    p.value = "";
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+    u.focus();
+
+    const closeModal = () => {
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    };
+
+    close.onclick = closeModal;
+    cancel.onclick = closeModal;
+    modal.onclick = (e) => {
+      if (e.target === modal) closeModal();
+    };
+    submit.onclick = async () => {
+      const username = (u.value || "").trim();
+      const password = (p.value || "").trim();
+      if (!username || !password) {
+        showToast("أدخل اسم المستخدم وكلمة المرور", "#ef4444");
+        return;
+      }
+      try {
+        if (mode === "register") {
+          await apiPostJson("/auth/register", { username, password });
+          showToast("تم إنشاء الحساب وتسجيل الدخول ✔️");
+        } else {
+          await apiPostJson("/auth/login", { username, password });
+          showToast("تم تسجيل الدخول ✔️");
+        }
+        closeModal();
+        window.location.reload();
+      } catch (e) {
+        showToast(e.message || "فشل العملية", "#ef4444");
+      }
+    };
+  }
+
+  async function render() {
+    try {
+      const me = await apiGet("/auth/me");
+      if (me?.csrf_token) localStorage.setItem("csrf_token", me.csrf_token);
+      const username = me?.username || "";
+      if (username) {
+        host.innerHTML = `
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-extrabold text-slate-700">مرحباً ${username}</span>
+            <button id="logoutBtn" class="px-3 py-1.5 rounded-xl border border-slate-200 text-sm font-extrabold hover:bg-slate-50">خروج</button>
+          </div>
+        `;
+        document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+          await apiPostJson("/auth/logout", {});
+          showToast("تم تسجيل الخروج");
+          window.location.reload();
+        });
+        return;
+      }
+    } catch (_) {
+      // not logged in
+    }
+
+    host.innerHTML = `
+      <div class="flex items-center gap-2">
+        <button id="loginBtn" class="px-3 py-1.5 rounded-xl border border-slate-200 text-sm font-extrabold hover:bg-slate-50">تسجيل دخول</button>
+        <button id="registerBtn" class="px-3 py-1.5 rounded-xl bg-slate-900 text-white text-sm font-extrabold hover:bg-slate-800">تسجيل</button>
+      </div>
+    `;
+
+    document.getElementById("registerBtn")?.addEventListener("click", () => {
+      openAuthModal("register");
+    });
+
+    document.getElementById("loginBtn")?.addEventListener("click", () => {
+      openAuthModal("login");
+    });
+  }
+
+  await render();
+}
+
 window.deleteReport = deleteReport;
+window.initAuthUI = initAuthUI;
 """
 
 INDEX_HTML = r"""<!doctype html>
@@ -790,12 +1194,13 @@ INDEX_HTML = r"""<!doctype html>
 
     <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
       <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 text-lg">AuditFlow</div>
+        <div class="font-extrabold text-slate-900 text-lg">AuditFlow | نظام التدقيق</div>
         <nav class="flex gap-3">
           <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-slate-900 text-white" href="/">لوحة التحكم</a>
           <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/analyze">تحليل</a>
           <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/reports">التقارير</a>
         </nav>
+        <div id="authArea"></div>
       </div>
     </header>
 
@@ -826,11 +1231,15 @@ INDEX_HTML = r"""<!doctype html>
         <div id="dashReportsHost" class="mt-4 grid gap-3 md:grid-cols-2"></div>
       </section>
     </main>
+    <footer class="max-w-6xl mx-auto px-4 pb-8 text-center text-slate-500 text-sm font-extrabold">
+      تطوير الموقع: محمد علي السوداني
+    </footer>
 
     <script src="/static/app.js"></script>
     <script>
       (async function () {
         try {
+          await initAuthUI();
           const data = await apiGet("/reports");
           const items = data.items || [];
           document.getElementById("dashTotalReports").innerText = String(items.length);
@@ -888,12 +1297,13 @@ ANALYZE_HTML = r"""<!doctype html>
 
     <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
       <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 text-lg">AuditFlow</div>
+        <div class="font-extrabold text-slate-900 text-lg">AuditFlow | نظام التدقيق</div>
         <nav class="flex gap-3">
           <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/">لوحة التحكم</a>
           <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-slate-900 text-white" href="/analyze">تحليل</a>
           <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/reports">التقارير</a>
         </nav>
+        <div id="authArea"></div>
       </div>
     </header>
 
@@ -948,9 +1358,13 @@ ANALYZE_HTML = r"""<!doctype html>
         </div>
       </div>
     </main>
+    <footer class="max-w-6xl mx-auto px-4 pb-8 text-center text-slate-500 text-sm font-extrabold">
+      تطوير الموقع: محمد علي السوداني
+    </footer>
 
     <script src="/static/app.js"></script>
     <script>
+      initAuthUI();
       let type1 = "excel";
       let type2 = "pdf";
 
@@ -1040,12 +1454,13 @@ REPORTS_HTML = r"""<!doctype html>
 
     <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
       <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 text-lg">AuditFlow</div>
+        <div class="font-extrabold text-slate-900 text-lg">AuditFlow | نظام التدقيق</div>
         <nav class="flex gap-3">
           <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/">لوحة التحكم</a>
           <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/analyze">تحليل</a>
           <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-slate-900 text-white" href="/reports">التقارير</a>
         </nav>
+        <div id="authArea"></div>
       </div>
     </header>
 
@@ -1059,9 +1474,13 @@ REPORTS_HTML = r"""<!doctype html>
         <div id="reportsHost" class="mt-6 grid gap-4 md:grid-cols-2"></div>
       </div>
     </main>
+    <footer class="max-w-6xl mx-auto px-4 pb-8 text-center text-slate-500 text-sm font-extrabold">
+      تطوير الموقع: محمد علي السوداني
+    </footer>
 
     <script src="/static/app.js"></script>
     <script>
+      initAuthUI();
       loadReports().catch((e) => {
         console.error(e);
         showToast("فشل تحميل التقارير", "#ef4444");
@@ -1091,12 +1510,13 @@ REPORT_HTML = r"""<!doctype html>
 
     <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
       <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 text-lg">AuditFlow</div>
+        <div class="font-extrabold text-slate-900 text-lg">AuditFlow | نظام التدقيق</div>
         <nav class="flex gap-3">
           <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/">لوحة التحكم</a>
           <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/analyze">تحليل</a>
           <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/reports">التقارير</a>
         </nav>
+        <div id="authArea"></div>
       </div>
     </header>
 
@@ -1109,11 +1529,18 @@ REPORT_HTML = r"""<!doctype html>
           </div>
           <div class="flex gap-2">
             <button
-              id="downloadBtn"
+              id="downloadExcelBtn"
               class="px-4 py-2 rounded-2xl bg-emerald-500 text-white font-extrabold hover:bg-emerald-600"
-              onclick="downloadCSV(qs('id'))"
+              onclick="downloadErrors(qs('id'),'excel')"
             >
-              تحميل CSV
+              تنزيل الأخطاء Excel
+            </button>
+            <button
+              id="downloadPdfBtn"
+              class="px-4 py-2 rounded-2xl bg-blue-500 text-white font-extrabold hover:bg-blue-600"
+              onclick="downloadErrors(qs('id'),'pdf')"
+            >
+              تنزيل الأخطاء PDF
             </button>
           </div>
         </div>
@@ -1152,14 +1579,75 @@ REPORT_HTML = r"""<!doctype html>
         <div id="mismatchTableHost" class="mt-4 overflow-auto rounded-2xl border border-slate-200"></div>
       </div>
     </main>
+    <footer class="max-w-6xl mx-auto px-4 pb-8 text-center text-slate-500 text-sm font-extrabold">
+      تطوير الموقع: محمد علي السوداني
+    </footer>
 
     <script src="/static/app.js"></script>
     <script>
       window.addEventListener("DOMContentLoaded", () => {
+        initAuthUI();
         loadReportDetail().catch((e) => {
           console.error(e);
           showToast("فشل تحميل التقرير", "#ef4444");
         });
+      });
+    </script>
+  </body>
+</html>
+"""
+
+SETTINGS_HTML = r"""<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>الإعدادات - AuditFlow</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>body { font-family: "IBM Plex Sans Arabic", system-ui, sans-serif; }</style>
+  </head>
+  <body class="bg-slate-50 text-slate-900">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold"></div>
+    <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
+      <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+        <div class="font-extrabold text-slate-900 text-lg">AuditFlow | نظام التدقيق</div>
+        <nav class="flex gap-3">
+          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/">لوحة التحكم</a>
+          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-slate-900 text-white" href="/settings">الإعدادات</a>
+        </nav>
+        <div id="authArea"></div>
+      </div>
+    </header>
+    <main class="max-w-4xl mx-auto px-4 py-8">
+      <div class="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+        <h1 class="text-2xl font-extrabold">إعدادات الحساب</h1>
+        <p class="text-slate-600 mt-2">يمكنك تغيير كلمة المرور وإنشاء نسخة احتياطية.</p>
+        <div class="mt-6 grid gap-3">
+          <input id="oldPass" type="password" placeholder="كلمة المرور الحالية" class="rounded-xl border border-slate-200 px-3 py-2" />
+          <input id="newPass" type="password" placeholder="كلمة المرور الجديدة" class="rounded-xl border border-slate-200 px-3 py-2" />
+          <button id="changePassBtn" class="px-4 py-2 rounded-xl bg-slate-900 text-white font-extrabold w-fit">تغيير كلمة المرور</button>
+        </div>
+        <div class="mt-8">
+          <button onclick="window.location.href='/backup'" class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-extrabold">تنزيل نسخة احتياطية</button>
+        </div>
+      </div>
+    </main>
+    <footer class="max-w-4xl mx-auto px-4 pb-8 text-center text-slate-500 text-sm font-extrabold">تطوير الموقع: محمد علي السوداني</footer>
+    <script src="/static/app.js"></script>
+    <script>
+      initAuthUI();
+      document.getElementById("changePassBtn").addEventListener("click", async () => {
+        const old_password = document.getElementById("oldPass").value || "";
+        const new_password = document.getElementById("newPass").value || "";
+        try {
+          await apiPostJson("/auth/change-password", { old_password, new_password });
+          showToast("تم تغيير كلمة المرور ✔️");
+          document.getElementById("oldPass").value = "";
+          document.getElementById("newPass").value = "";
+        } catch (e) {
+          showToast(e.message || "فشل تغيير كلمة المرور", "#ef4444");
+        }
       });
     </script>
   </body>
@@ -1185,6 +1673,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+run_migrations()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -1197,19 +1686,180 @@ def ui_analyze():
     return HTMLResponse(ANALYZE_HTML)
 
 
+@app.get("/settings", response_class=HTMLResponse)
+def ui_settings():
+    return HTMLResponse(SETTINGS_HTML)
+
+
 @app.get("/static/app.js")
 def ui_js():
     return Response(content=APP_JS.encode("utf-8"), media_type="application/javascript; charset=utf-8")
 
 
+@app.get("/auth/me")
+def auth_me(request: Request):
+    db = db_session()
+    try:
+        u = current_user_from_request(db, request)
+        csrf = request.cookies.get(CSRF_COOKIE) or issue_csrf_token()
+        username = u.username if u else None
+        res = Response(
+            content=json.dumps({"username": username, "csrf_token": csrf}),
+            media_type="application/json",
+        )
+        res.set_cookie(
+            key=CSRF_COOKIE,
+            value=csrf,
+            httponly=False,
+            samesite="lax",
+            max_age=SESSION_DAYS * 24 * 60 * 60,
+        )
+        return res
+    finally:
+        db.close()
+
+
+@app.post("/auth/register")
+async def auth_register(request: Request):
+    payload = await request.json()
+    username = str((payload or {}).get("username", "")).strip()
+    password = str((payload or {}).get("password", "")).strip()
+    if len(username) < 3:
+        raise HTTPException(400, "اسم المستخدم قصير")
+    if len(password) < 4:
+        raise HTTPException(400, "كلمة المرور قصيرة")
+
+    db = db_session()
+    try:
+        require_csrf(request)
+        exists = db.query(User).filter(User.username == username).first()
+        if exists:
+            raise HTTPException(400, "اسم المستخدم موجود بالفعل")
+        user = User(id=uuid.uuid4().hex, username=username, password_hash=hash_password(password))
+        db.add(user)
+        db.commit()
+
+        token = create_session(db, user.id)
+        csrf = issue_csrf_token()
+        log_event(db, "auth.register", user.id, {"username": username})
+        res = Response(content='{"ok":true}', media_type="application/json")
+        res.set_cookie(
+            key=SESSION_COOKIE,
+            value=token,
+            httponly=True,
+            samesite="lax",
+            max_age=SESSION_DAYS * 24 * 60 * 60,
+        )
+        res.set_cookie(key=CSRF_COOKIE, value=csrf, httponly=False, samesite="lax", max_age=SESSION_DAYS * 24 * 60 * 60)
+        return res
+    finally:
+        db.close()
+
+
+@app.post("/auth/login")
+async def auth_login(request: Request):
+    payload = await request.json()
+    username = str((payload or {}).get("username", "")).strip()
+    password = str((payload or {}).get("password", "")).strip()
+
+    db = db_session()
+    try:
+        require_csrf(request)
+        user = db.query(User).filter(User.username == username).first()
+        if not user:
+            raise HTTPException(401, "بيانات الدخول غير صحيحة")
+        if user.locked_until and user.locked_until > dt.datetime.utcnow():
+            raise HTTPException(429, "الحساب مقفل مؤقتاً. حاول لاحقاً")
+        if not verify_password(password, user.password_hash):
+            user.failed_attempts = int(user.failed_attempts or 0) + 1
+            if user.failed_attempts >= 5:
+                user.locked_until = dt.datetime.utcnow() + dt.timedelta(minutes=LOCK_MINUTES)
+                user.failed_attempts = 0
+            db.commit()
+            raise HTTPException(401, "بيانات الدخول غير صحيحة")
+
+        if "$" not in user.password_hash:
+            user.password_hash = hash_password(password)
+        user.failed_attempts = 0
+        user.locked_until = None
+        db.commit()
+
+        token = create_session(db, user.id)
+        csrf = issue_csrf_token()
+        log_event(db, "auth.login", user.id, {"username": username})
+        res = Response(content='{"ok":true}', media_type="application/json")
+        res.set_cookie(
+            key=SESSION_COOKIE,
+            value=token,
+            httponly=True,
+            samesite="lax",
+            max_age=SESSION_DAYS * 24 * 60 * 60,
+        )
+        res.set_cookie(key=CSRF_COOKIE, value=csrf, httponly=False, samesite="lax", max_age=SESSION_DAYS * 24 * 60 * 60)
+        return res
+    finally:
+        db.close()
+
+
+@app.post("/auth/logout")
+def auth_logout(request: Request):
+    db = db_session()
+    try:
+        require_csrf(request)
+        user = current_user_from_request(db, request)
+        token = request.cookies.get(SESSION_COOKIE)
+        if token:
+            s = db.query(UserSession).filter(UserSession.token == token).first()
+            if s:
+                db.delete(s)
+                db.commit()
+        if user:
+            log_event(db, "auth.logout", user.id)
+        res = Response(content='{"ok":true}', media_type="application/json")
+        res.delete_cookie(SESSION_COOKIE)
+        res.delete_cookie(CSRF_COOKIE)
+        return res
+    finally:
+        db.close()
+
+
+@app.post("/auth/change-password")
+async def auth_change_password(request: Request):
+    require_csrf(request)
+    payload = await request.json()
+    old_password = str((payload or {}).get("old_password", ""))
+    new_password = str((payload or {}).get("new_password", ""))
+    if len(new_password) < 8:
+        raise HTTPException(400, "كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل")
+    db = db_session()
+    try:
+        user = require_user(db, request)
+        if not verify_password(old_password, user.password_hash):
+            raise HTTPException(400, "كلمة المرور الحالية غير صحيحة")
+        user.password_hash = hash_password(new_password)
+        db.commit()
+        log_event(db, "auth.change_password", user.id)
+        return {"ok": True}
+    finally:
+        db.close()
+
+
 @app.post("/analyze")
 def analyze_api(
+    request: Request,
     file1: UploadFile = File(...),
     file2: UploadFile = File(...),
     b1: str = Form(...),
     b2: str = Form(...),
     title: Optional[str] = Form(None),
 ):
+    require_csrf(request)
+    db = db_session()
+    try:
+        user = require_user(db, request)
+    finally:
+        db.close()
+
     report_id = uuid.uuid4().hex
     saved1, original1 = save_upload_file(file1, UPLOAD_DIR / report_id / "file1")
     saved2, original2 = save_upload_file(file2, UPLOAD_DIR / report_id / "file2")
@@ -1225,6 +1875,7 @@ def analyze_api(
 
     created = AnalysisReport(
         id=report_id,
+        user_id=user.id,
         title=title,
         branch1_name=b1,
         branch2_name=b2,
@@ -1254,6 +1905,7 @@ def analyze_api(
     try:
         db.add(created)
         db.commit()
+        log_event(db, "analysis.create", user.id, {"report_id": report_id})
     finally:
         db.close()
 
@@ -1267,8 +1919,13 @@ def reports(request: Request):
 
     db = db_session()
     try:
+        user = require_user(db, request)
         rows: List[AnalysisReport] = (
-            db.query(AnalysisReport).order_by(AnalysisReport.created_at.desc()).limit(200).all()
+            db.query(AnalysisReport)
+            .filter(AnalysisReport.user_id == user.id)
+            .order_by(AnalysisReport.created_at.desc())
+            .limit(200)
+            .all()
         )
         items = []
         for r in rows:
@@ -1301,7 +1958,12 @@ def report(request: Request, id: str = Query(...)):
 
     db = db_session()
     try:
-        r: AnalysisReport | None = db.query(AnalysisReport).filter(AnalysisReport.id == id).first()
+        user = require_user(db, request)
+        r: AnalysisReport | None = (
+            db.query(AnalysisReport)
+            .filter(AnalysisReport.id == id, AnalysisReport.user_id == user.id)
+            .first()
+        )
         if not r:
             raise HTTPException(404, "Report not found")
 
@@ -1329,34 +1991,104 @@ def report(request: Request, id: str = Query(...)):
 
 
 @app.get("/download")
-def download(id: str = Query(...)):
+def download(request: Request, id: str = Query(...), format: str = Query("excel")):
     db = db_session()
     try:
-        r: AnalysisReport | None = db.query(AnalysisReport).filter(AnalysisReport.id == id).first()
+        user = require_user(db, request)
+        r: AnalysisReport | None = (
+            db.query(AnalysisReport)
+            .filter(AnalysisReport.id == id, AnalysisReport.user_id == user.id)
+            .first()
+        )
         if not r:
             raise HTTPException(404, "Report not found")
         mismatches = (r.analysis_json or {}).get("mismatches", []) or []
-        csv_bytes = mismatches_to_csv_bytes(mismatches)
-        filename = f"report_{r.id}.csv"
-        return Response(
-            content=csv_bytes,
-            media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename=\"{filename}\"'},
-        )
+        fmt = (format or "excel").lower().strip()
+
+        if fmt in ("excel", "xlsx"):
+            excel_bytes = mismatches_to_excel_bytes(mismatches)
+            filename = f"report_{r.id}.xlsx"
+            log_event(db, "download.excel", user.id, {"report_id": r.id})
+            return Response(
+                content=excel_bytes,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": f'attachment; filename=\"{filename}\"'},
+            )
+
+        if fmt == "pdf":
+            pdf_bytes = mismatches_to_pdf_bytes(mismatches)
+            filename = f"report_{r.id}.pdf"
+            log_event(db, "download.pdf", user.id, {"report_id": r.id})
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'attachment; filename=\"{filename}\"'},
+            )
+
+        if fmt == "csv":
+            csv_bytes = mismatches_to_csv_bytes(mismatches)
+            filename = f"report_{r.id}.csv"
+            return Response(
+                content=csv_bytes,
+                media_type="text/csv; charset=utf-8",
+                headers={"Content-Disposition": f'attachment; filename=\"{filename}\"'},
+            )
+
+        raise HTTPException(400, "format يجب أن يكون: excel أو pdf")
     finally:
         db.close()
 
 
 @app.delete("/reports")
-def delete_report(id: str = Query(...)):
+def delete_report(request: Request, id: str = Query(...)):
+    require_csrf(request)
     db = db_session()
     try:
-        r: AnalysisReport | None = db.query(AnalysisReport).filter(AnalysisReport.id == id).first()
+        user = require_user(db, request)
+        r: AnalysisReport | None = (
+            db.query(AnalysisReport)
+            .filter(AnalysisReport.id == id, AnalysisReport.user_id == user.id)
+            .first()
+        )
         if not r:
             raise HTTPException(404, "Report not found")
         db.delete(r)
         db.commit()
+        log_event(db, "report.delete", user.id, {"report_id": id})
         return {"deleted": True}
     finally:
         db.close()
+
+
+@app.get("/backup")
+def download_backup(request: Request):
+    db = db_session()
+    try:
+        user = require_user(db, request)
+    finally:
+        db.close()
+    ensure_dir(BACKUP_DIR)
+    stamp = dt.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    zip_path = BACKUP_DIR / f"auditflow_backup_{stamp}.zip"
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        if DB_PATH.exists():
+            zf.write(DB_PATH, arcname="auditflow.db")
+        if UPLOAD_DIR.exists():
+            for root, _, files in os.walk(UPLOAD_DIR):
+                for f in files:
+                    abs_f = Path(root) / f
+                    rel_f = abs_f.relative_to(BASE_DIR)
+                    zf.write(abs_f, arcname=str(rel_f))
+    db2 = db_session()
+    try:
+        log_event(db2, "backup.download", user.id, {"zip": zip_path.name})
+    finally:
+        db2.close()
+    with open(zip_path, "rb") as fh:
+        content = fh.read()
+    return Response(
+        content=content,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_path.name}"'},
+    )
 
