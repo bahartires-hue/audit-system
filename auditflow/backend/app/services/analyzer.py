@@ -9,16 +9,94 @@ import pandas as pd
 import pdfplumber
 
 
+def _is_plausible_currency_amount(x: float) -> bool:
+    try:
+        xf = float(x)
+    except (TypeError, ValueError):
+        return False
+    if pd.isna(xf) or xf != xf:
+        return False
+    ax = abs(xf)
+    if ax < 1e-9:
+        return True
+    if ax >= 1e11:
+        return False
+    if float(x) == int(x) and ax >= 1e6:
+        nd = len(str(int(ax)))
+        if nd >= 12:
+            return False
+        if nd >= 10 and ax >= 1e9:
+            return False
+    return True
+
+
 def safe(v: Any) -> Optional[float]:
     try:
         if v is None:
             return None
-        v = str(v).replace(",", "").strip()
-        if v == "":
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            if isinstance(v, float) and pd.isna(v):
+                return None
+            x = float(v)
+            return round(x, 2) if _is_plausible_currency_amount(x) else None
+        s = str(v).replace(",", "").replace("٬", "").strip()
+        if not s or s.lower() in ("nan", "none", "-"):
             return None
-        return round(float(v), 2)
+        s = re.sub(r"(?i)\b(debit|credit|مدين|دائن|dr|cr)\b", "", s)
+        s = s.strip()
+        try:
+            x = float(s)
+        except ValueError:
+            m = re.search(r"[-+]?\d+(?:\.\d+)?", s)
+            if not m:
+                return None
+            x = float(m.group(0))
+        if not _is_plausible_currency_amount(x):
+            return None
+        return round(x, 2)
     except Exception:
         return None
+
+
+def _column_name_excludes_from_amount(col: Any) -> bool:
+    name = str(col).lower().strip()
+    if not name or name.isdigit():
+        return False
+    block = (
+        "رقم السند",
+        "رقم سند",
+        "السند",
+        "سند",
+        "الرصيد",
+        "رصيد",
+        "balance",
+        "تسلسل",
+        "مسلسل",
+        "seq",
+        "serial",
+        "ضريبي",
+        "هوية",
+        "الرقم الضريبي",
+        "السجل التجاري",
+    )
+    for b in block:
+        if b in name:
+            return True
+    if name in ("#", "م", "no", "no."):
+        return True
+    return False
+
+
+def _column_values_look_like_ids(series: pd.Series) -> bool:
+    nums = pd.to_numeric(series, errors="coerce").dropna()
+    if len(nums) == 0:
+        return False
+    mx = float(nums.max())
+    if mx >= 1e11:
+        return True
+    if mx == int(mx) and mx >= 1e9:
+        return len(str(int(mx))) >= 10
+    return False
 
 
 def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Optional[str]]:
@@ -28,19 +106,21 @@ def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Opti
     credit_col = None
     date_col = None
 
-    # 1) by header names
     for col in df.columns:
         name = str(col).lower()
-        if any(x in name for x in ["مدين", "debit", "dr"]):
+        if _column_name_excludes_from_amount(col):
+            continue
+        if any(x in name for x in ["مدين", "debit", "dr"]) and "دائن" not in name and "credit" not in name:
             debit_col = col
-        if any(x in name for x in ["دائن", "credit", "cr"]):
+        if any(x in name for x in ["دائن", "credit", "cr"]) and "مدين" not in name and "debit" not in name:
             credit_col = col
         if any(x in name for x in ["تاريخ", "التاريخ", "التأريخ", "date"]):
             date_col = col
 
-    # 2) fallback: numeric columns by mean
     numeric_cols: List[Tuple[str, float]] = []
     for col in df.columns:
+        if _column_name_excludes_from_amount(col):
+            continue
         nums = pd.to_numeric(df[col], errors="coerce")
         valid = nums.dropna()
         frac = 0.3 if len(df) >= 12 else 0.15
@@ -49,20 +129,22 @@ def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Opti
             need = max(2, need)
         if len(valid) < need:
             continue
+        if _column_values_look_like_ids(df[col]):
+            continue
         mean_val = valid.mean()
         max_val = float(valid.max())
         if mean_val < 10 and max_val < 10:
             continue
+        if not _is_plausible_currency_amount(max_val):
+            continue
         numeric_cols.append((col, float(mean_val)))
 
     numeric_cols.sort(key=lambda x: x[1], reverse=True)
-
     if not debit_col and len(numeric_cols) >= 1:
         debit_col = numeric_cols[0][0]
     if not credit_col and len(numeric_cols) >= 2:
         credit_col = numeric_cols[1][0]
 
-    # 3) date fallback: column with many parseable dates
     if not date_col:
         for col in df.columns:
             parsed = pd.to_datetime(df[col], errors="coerce")
@@ -71,6 +153,32 @@ def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Opti
                 break
 
     return debit_col, credit_col, date_col
+
+
+def detect_document_type_column(df: pd.DataFrame) -> Optional[str]:
+    for col in df.columns:
+        n = str(col).strip().lower()
+        if "رقم السند" in n or "رقم سند" in n or n in ("#", "م"):
+            continue
+        if n in ("العنوان", "عنوان", "العميل", "اسم العميل", "المورد"):
+            continue
+        if "ضريبي" in n or "سجل التجاري" in n:
+            continue
+        if "نوع المستند" in n:
+            return col
+    for col in df.columns:
+        n = str(col).strip().lower()
+        if "رقم السند" in n or "رقم سند" in n:
+            continue
+        if n == "المستند" or n.endswith(" المستند"):
+            return col
+    for col in df.columns:
+        n = str(col).strip().lower()
+        if "رقم السند" in n or "رقم سند" in n:
+            continue
+        if n == "نوع" or (n.startswith("نوع") and "عميل" not in n and "مورد" not in n and "حساب" not in n):
+            return col
+    return None
 
 
 def extract_row_date_doc(
@@ -207,7 +315,11 @@ def _extract_pdf_rows_from_text(raw_text: str) -> List[Dict[str, Any]]:
         if not effective_date:
             continue
 
-        numbers = [n for n in num_pat.findall(work_line) if _parse_number_token(n) is not None]
+        numbers = [
+            n
+            for n in num_pat.findall(work_line)
+            if (pv := _parse_number_token(n)) is not None and _is_plausible_currency_amount(pv)
+        ]
         if not numbers:
             continue
 
@@ -436,31 +548,13 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
 
     df.columns = df.columns.astype(str).str.strip()
     debit_col, credit_col, date_col = detect_columns(df)
+    doc_col = detect_document_type_column(df)
 
-    # doc column
-    doc_col = None
-    for col in df.columns:
-        name = str(col).lower().strip()
-        if any(
-            x in name
-            for x in [
-                "مستند",
-                "المستند",
-                "نوع",
-                "بيان",
-                "وصف",
-                "description",
-                "desc",
-                "document",
-            ]
-        ):
-            doc_col = col
-            break
-
-    # fallback if debit/credit not found
     if not debit_col and not credit_col:
         numeric_cols: List[Tuple[str, float]] = []
         for col in df.columns:
+            if _column_name_excludes_from_amount(col):
+                continue
             nums = pd.to_numeric(df[col], errors="coerce").dropna()
             frac = 0.3 if len(df) >= 12 else 0.15
             need = max(1, int(len(df) * frac + 0.5))
@@ -468,9 +562,13 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
                 need = max(2, need)
             if len(nums) < need:
                 continue
+            if _column_values_look_like_ids(df[col]):
+                continue
             mean_val = float(nums.mean())
             max_val = float(nums.max())
             if mean_val < 10 and max_val < 10:
+                continue
+            if not _is_plausible_currency_amount(max_val):
                 continue
             numeric_cols.append((col, mean_val))
         numeric_cols.sort(key=lambda x: x[1], reverse=True)
