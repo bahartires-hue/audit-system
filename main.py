@@ -1,150 +1,513 @@
-from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Header
-from fastapi.responses import HTMLResponse, FileResponse
+===== README.md =====
+## AuditFlow (Backend + Frontend)
 
-from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.orm import sessionmaker, declarative_base, Session
+### التشغيل
 
-import pandas as pd
-import uuid
-import pdfplumber
-import jwt
+#### 1) Backend
+افتح PowerShell:
 
-from passlib.hash import pbkdf2_sha256
+```powershell
+cd "C:\Users\DELL\OneDrive\Desktop\audit-system\auditflow\backend"
+.\venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+```
 
-app = FastAPI()
+افتح المتصفح:
+- `http://127.0.0.1:8001/`
 
-# ================= DB =================
-engine = create_engine("sqlite:///new.db", connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(bind=engine)
+### ملاحظات
+- الكود في:
+  - `backend/app/main.py` (API + استضافة صفحات الواجهة)
+  - `backend/app/services/analyzer.py` (التحليل المحلي)
+  - `frontend/` (صفحات HTML + `app.js`)
+
+
+
+
+
+===== backend\requirements.txt =====
+fastapi
+uvicorn[standard]
+sqlalchemy
+pandas
+pdfplumber
+openpyxl
+python-multipart
+
+
+
+
+===== backend\app\__init__.py =====
+
+
+
+
+
+===== backend\app\db.py =====
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
+
+BASE_DIR = Path(__file__).resolve().parents[1]  # auditflow/backend
+DB_PATH = Path(os.getenv("DATABASE_PATH", str(BASE_DIR / "data.db")))
+
+engine = create_engine(
+    f"sqlite:///{DB_PATH}",
+    connect_args={"check_same_thread": False},
+)
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-class User(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True)
-    username = Column(String, unique=True)
-    password = Column(String)
 
-Base.metadata.create_all(engine)
 
-# ================= AUTH =================
-SECRET = "SECRET_KEY"
 
-def create_token(username):
-    return jwt.encode({"user": username}, SECRET, algorithm="HS256")
 
-def check_auth(token: str):
+===== backend\app\models.py =====
+from __future__ import annotations
+
+import datetime as dt
+
+from sqlalchemy import Column, DateTime, Integer, String, JSON
+
+from .db import Base
+
+
+class AnalysisReport(Base):
+    __tablename__ = "analysis_reports"
+
+    id = Column(String, primary_key=True)  # uuid4 hex
+    title = Column(String, nullable=True)
+
+    branch1_name = Column(String, nullable=False)
+    branch2_name = Column(String, nullable=False)
+
+    file1_original = Column(String, nullable=True)
+    file2_original = Column(String, nullable=True)
+    file1_path = Column(String, nullable=True)
+    file2_path = Column(String, nullable=True)
+
+    status = Column(String, default="completed", nullable=False)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+    # summary stats (fast query)
+    total_ops = Column(Integer, nullable=False, default=0)
+    matched_ops = Column(Integer, nullable=False, default=0)
+    mismatch_ops = Column(Integer, nullable=False, default=0)
+    errors_count = Column(Integer, nullable=False, default=0)
+    warnings_count = Column(Integer, nullable=False, default=0)
+
+    # full analysis data (JSON)
+    stats_json = Column(JSON, nullable=False, default=dict)
+    analysis_json = Column(JSON, nullable=False, default=dict)
+
+
+def init_db():
+    from .db import engine
+
+    Base.metadata.create_all(bind=engine)
+
+
+
+
+
+===== backend\app\schemas.py =====
+from __future__ import annotations
+
+import datetime as dt
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field
+
+
+class AnalyzeResponse(BaseModel):
+    reportId: str
+
+
+class ReportStats(BaseModel):
+    total_ops: int
+    matched_ops: int
+    mismatch_ops: int
+    errors_count: int
+    warnings_count: int
+
+
+class ReportListItem(BaseModel):
+    id: str
+    title: Optional[str] = None
+    branch1_name: str
+    branch2_name: str
+    status: str
+    created_at: dt.datetime
+    stats: ReportStats
+
+
+class ReportDetail(BaseModel):
+    id: str
+    title: Optional[str] = None
+    branch1_name: str
+    branch2_name: str
+    status: str
+    created_at: dt.datetime
+    stats: ReportStats
+
+    file1_original: Optional[str] = None
+    file2_original: Optional[str] = None
+
+    stats_json: Dict[str, Any] = Field(default_factory=dict)
+    analysis_json: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AnalyzeFormResponse(BaseModel):
+    message: str
+
+
+class AnalyzeErrorResponse(BaseModel):
+    detail: str
+
+
+
+
+
+===== backend\app\main.py =====
+from __future__ import annotations
+
+import uuid
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.staticfiles import StaticFiles
+
+from .db import SessionLocal as _SessionLocal  # type: ignore
+from .models import AnalysisReport, init_db
+from .services.analyzer import analyze as analyze_pairs
+from .services.analyzer import compute_summary, process
+from .services.reports import mismatches_to_csv_bytes
+from .services.storage import save_upload_file
+
+# NOTE: relative imports simplified below
+
+app = FastAPI(title="AuditFlow API")
+
+origins = ["*"]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+BASE_DIR = Path(__file__).resolve().parents[2]  # auditflow/backend
+UPLOAD_DIR = BASE_DIR / "uploads"
+FRONTEND_DIR = BASE_DIR / "frontend"
+
+app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+
+init_db()
+
+
+def _wants_html(request: Request) -> bool:
+    accept = request.headers.get("accept", "").lower()
+    if "application/json" in accept:
+        return False
+    # Browsers usually send text/html, but some clients may send */*.
+    return ("text/html" in accept) or (accept == "" or "*/*" in accept)
+
+
+@app.get("/", response_class=HTMLResponse)
+def ui_home():
+    return FileResponse(str(FRONTEND_DIR / "index.html"))
+
+
+@app.get("/analyze", response_class=HTMLResponse)
+def ui_analyze(request: Request):
+    # GET /analyze is the UI route (POST /analyze is the API)
+    return FileResponse(str(FRONTEND_DIR / "analyze.html"))
+
+
+def _classify_reason(entry: Dict[str, Any]) -> str:
+    reason = entry.get("reason") or ""
+    if entry.get("type") == "error":
+        return "error"
+    if "⚠️" in reason:
+        return "warning"
+    if "❌" in reason:
+        return "error"
+    if "لا يوجد مقابل" in reason:
+        return "error"
+    return "mismatch"
+
+
+def _compute_entry_counts(entries: List[Dict[str, Any]]) -> Dict[str, int]:
+    errors = sum(1 for e in entries if _classify_reason(e) == "error")
+    warnings = sum(1 for e in entries if _classify_reason(e) == "warning")
+    return {"errors": errors, "warnings": warnings}
+
+
+@app.post("/analyze")
+def analyze_api(
+    file1: UploadFile = File(...),
+    file2: UploadFile = File(...),
+    b1: str = Form(...),
+    b2: str = Form(...),
+    title: Optional[str] = Form(None),
+):
+    # store uploads
+    report_id = uuid.uuid4().hex
+    saved1, original1 = save_upload_file(file1, UPLOAD_DIR / report_id / "file1")
+    saved2, original2 = save_upload_file(file2, UPLOAD_DIR / report_id / "file2")
+
+    # analyze locally
     try:
-        jwt.decode(token, SECRET, algorithms=["HS256"])
-    except:
-        raise HTTPException(401, "غير مصرح")
+        d1 = process(saved1, original1, b1)
+        d2 = process(saved2, original2, b2)
+        mismatch_entries, counts = analyze_pairs(d1, d2)
+    except Exception as e:
+        raise HTTPException(400, f"Failed to analyze files: {e}")
 
-# ================= UTILS =================
-def get_db():
-    db = SessionLocal()
-    try: yield db
-    finally: db.close()
+    summary = compute_summary(d1, d2, mismatch_entries)
+    entry_counts = _compute_entry_counts(mismatch_entries)
 
-def safe(v):
+    created = AnalysisReport(
+        id=report_id,
+        title=title,
+        branch1_name=b1,
+        branch2_name=b2,
+        file1_original=original1,
+        file2_original=original2,
+        file1_path=saved1,
+        file2_path=saved2,
+        total_ops=summary["total_ops"],
+        matched_ops=summary["matched_ops"],
+        mismatch_ops=summary["mismatch_ops"],
+        errors_count=entry_counts["errors"],
+        warnings_count=entry_counts["warnings"],
+        stats_json={
+            "counts": counts,
+            "branch1_total": len(d1),
+            "branch2_total": len(d2),
+        },
+        analysis_json={
+            "extracted_branch1": d1,
+            "extracted_branch2": d2,
+            "mismatches": mismatch_entries,
+            "counts": counts,
+        },
+    )
+
+    db = _SessionLocal()
+    try:
+        db.add(created)
+        db.commit()
+    finally:
+        db.close()
+
+    return {"reportId": report_id}
+
+
+@app.get("/reports")
+def list_reports(request: Request):
+    if _wants_html(request):
+        return FileResponse(str(FRONTEND_DIR / "reports.html"))
+
+    db = _SessionLocal()
+    try:
+        rows: List[AnalysisReport] = (
+            db.query(AnalysisReport).order_by(AnalysisReport.created_at.desc()).limit(200).all()
+        )
+        items = []
+        for r in rows:
+            items.append(
+                {
+                    "id": r.id,
+                    "title": r.title,
+                    "branch1_name": r.branch1_name,
+                    "branch2_name": r.branch2_name,
+                    "status": r.status,
+                    "created_at": r.created_at,
+                    "stats": {
+                        "total_ops": r.total_ops,
+                        "matched_ops": r.matched_ops,
+                        "mismatch_ops": r.mismatch_ops,
+                        "errors_count": r.errors_count,
+                        "warnings_count": r.warnings_count,
+                    },
+                }
+            )
+        return {"items": items}
+    finally:
+        db.close()
+
+
+@app.get("/report")
+def get_report(request: Request, id: str = Query(...)):
+    if _wants_html(request):
+        # report.html uses JS to fetch JSON via the same endpoint
+        return FileResponse(str(FRONTEND_DIR / "report.html"))
+
+    db = _SessionLocal()
+    try:
+        r: AnalysisReport | None = db.query(AnalysisReport).filter(AnalysisReport.id == id).first()
+        if not r:
+            raise HTTPException(404, "Report not found")
+
+        return {
+            "id": r.id,
+            "title": r.title,
+            "branch1_name": r.branch1_name,
+            "branch2_name": r.branch2_name,
+            "status": r.status,
+            "created_at": r.created_at,
+            "stats": {
+                "total_ops": r.total_ops,
+                "matched_ops": r.matched_ops,
+                "mismatch_ops": r.mismatch_ops,
+                "errors_count": r.errors_count,
+                "warnings_count": r.warnings_count,
+            },
+            "file1_original": r.file1_original,
+            "file2_original": r.file2_original,
+            "stats_json": r.stats_json,
+            "analysis_json": r.analysis_json,
+        }
+    finally:
+        db.close()
+
+
+@app.get("/download")
+def download_report(id: str = Query(...)):
+    db = _SessionLocal()
+    try:
+        r: AnalysisReport | None = db.query(AnalysisReport).filter(AnalysisReport.id == id).first()
+        if not r:
+            raise HTTPException(404, "Report not found")
+
+        mismatches = (r.analysis_json or {}).get("mismatches", []) or []
+        csv_bytes = mismatches_to_csv_bytes(mismatches)
+        filename = f"report_{r.id}.csv"
+
+        return Response(
+            content=csv_bytes,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    finally:
+        db.close()
+
+
+@app.delete("/reports")
+def delete_reports(id: str = Query(...)):
+    db = _SessionLocal()
+    try:
+        r: AnalysisReport | None = db.query(AnalysisReport).filter(AnalysisReport.id == id).first()
+        if not r:
+            raise HTTPException(404, "Report not found")
+
+        db.delete(r)
+        db.commit()
+        return {"deleted": True}
+    finally:
+        db.close()
+
+
+
+
+
+===== backend\app\services\analyzer.py =====
+from __future__ import annotations
+
+import re
+from difflib import SequenceMatcher
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+import pandas as pd
+import pdfplumber
+
+
+def safe(v: Any) -> Optional[float]:
     try:
         if v is None:
             return None
-
         v = str(v).replace(",", "").strip()
-
         if v == "":
             return None
-
         return round(float(v), 2)
-
-    except:
+    except Exception:
         return None
 
-# ================= SMART DETECTION =================
-def detect_columns(df):
+
+def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     df.columns = df.columns.astype(str).str.strip()
 
     debit_col = None
     credit_col = None
     date_col = None
 
-    # =========================================
-    # 1. تحديد بالأسماء (أقوى شيء)
-    # =========================================
+    # 1) by header names
     for col in df.columns:
         name = str(col).lower()
-
         if any(x in name for x in ["مدين", "debit", "dr"]):
             debit_col = col
-
         if any(x in name for x in ["دائن", "credit", "cr"]):
             credit_col = col
-
-        if any(x in name for x in ["تاريخ","التاريخ","التأريخ","date"]):
+        if any(x in name for x in ["تاريخ", "التاريخ", "التأريخ", "date"]):
             date_col = col
 
-    # =========================================
-    # 2. fallback ذكي (مو أي رقم)
-    # =========================================
-    numeric_cols = []
-
+    # 2) fallback: numeric columns by mean
+    numeric_cols: List[Tuple[str, float]] = []
     for col in df.columns:
-        nums = pd.to_numeric(df[col], errors='coerce')
-
+        nums = pd.to_numeric(df[col], errors="coerce")
         valid = nums.dropna()
-
         if len(valid) < len(df) * 0.3:
             continue
-
         mean_val = valid.mean()
-
-        # 🔥 استبعد الأعمدة اللي شكلها IDs
+        # heuristic to ignore IDs
         if mean_val < 10:
             continue
+        numeric_cols.append((col, float(mean_val)))
 
-        numeric_cols.append((col, mean_val))
-
-    # رتب حسب متوسط القيمة
     numeric_cols.sort(key=lambda x: x[1], reverse=True)
 
     if not debit_col and len(numeric_cols) >= 1:
         debit_col = numeric_cols[0][0]
-
     if not credit_col and len(numeric_cols) >= 2:
         credit_col = numeric_cols[1][0]
 
-    # =========================================
-    # 3. التاريخ fallback
-    # =========================================
+    # 3) date fallback: column with many parseable dates
     if not date_col:
         for col in df.columns:
-            parsed = pd.to_datetime(df[col], errors='coerce')
+            parsed = pd.to_datetime(df[col], errors="coerce")
             if parsed.notna().sum() > len(df) * 0.5:
                 date_col = col
                 break
 
     return debit_col, credit_col, date_col
 
-# ================= READ =================
 
-def read_excel(file):
-    df = pd.read_excel(file)
-
+def read_excel(file_path: str) -> Optional[pd.DataFrame]:
+    df = pd.read_excel(file_path)
     if df is None or df.empty:
         return None
-
     df = df.dropna(how="all")
     return df
 
 
-def read_pdf(file):
-    rows = []
-
-    with pdfplumber.open(file) as pdf:
+def read_pdf(file_path: str) -> Optional[pd.DataFrame]:
+    rows: List[List[Any]] = []
+    with pdfplumber.open(file_path) as pdf:
         for page in pdf.pages:
             tables = page.extract_tables()
             if not tables:
                 continue
-
             for table in tables:
                 for row in table:
                     if row and any(cell is not None for cell in row):
@@ -153,211 +516,72 @@ def read_pdf(file):
     if not rows:
         return None
 
-    df = pd.DataFrame(rows)
-
-    df = df.dropna(how="all")
-
-    # 🔥 حماية من crash
+    df = pd.DataFrame(rows).dropna(how="all")
     if len(df) < 2:
         return None
 
-    # أول صف = header
+    # first row as header
     df.columns = df.iloc[0]
-    df = df[1:]
-
-    df = df.dropna(how="all")
-
+    df = df[1:].dropna(how="all")
     return df
 
 
-def read_any(file, filename):
-    name = filename.lower()
-
+def read_any(file_path: str, filename: str) -> pd.DataFrame:
+    name = (filename or "").lower()
     if name.endswith(".xlsx") or name.endswith(".xls"):
-        return read_excel(file)
-
-    elif name.endswith(".pdf"):
-        return read_pdf(file)
-
-    else:
-        raise Exception("نوع الملف غير مدعوم")
-
-
-def process(file, filename, branch):
-    df = read_any(file, filename)
-
-    if df is None or len(df) == 0:
-        return []
-
-    df.columns = df.columns.astype(str).str.strip()
-
-    debit_col, credit_col, date_col = detect_columns(df)
-
-    # =========================================
-    # 🔥 كشف عمود المستند
-    # =========================================
-    doc_col = None
-
-    for col in df.columns:
-        name = str(col).lower().strip()
-
-        if any(x in name for x in [
-            "مستند","المستند","نوع","بيان","وصف",
-            "description","desc","document"
-        ]):
-            doc_col = col
-            break
+        out = read_excel(file_path)
+        if out is None:
+            raise ValueError("Excel file has no readable data")
+        return out
+    if name.endswith(".pdf"):
+        out = read_pdf(file_path)
+        if out is None:
+            raise ValueError("PDF file has no readable data")
+        return out
+    raise ValueError("نوع الملف غير مدعوم")
 
 
-    # =========================================
-    # fallback الأعمدة
-    # =========================================
-    if not debit_col and not credit_col:
-        numeric_cols = []
-
-        for col in df.columns:
-            nums = pd.to_numeric(df[col], errors='coerce').dropna()
-
-            if len(nums) < len(df) * 0.3:
-                continue
-
-            if nums.mean() < 10:
-                continue
-
-            numeric_cols.append((col, nums.mean()))
-
-        numeric_cols.sort(key=lambda x: x[1], reverse=True)
-
-        if len(numeric_cols) >= 1:
-            debit_col = numeric_cols[0][0]
-
-        if len(numeric_cols) >= 2:
-            credit_col = numeric_cols[1][0]
-
-    data = []
-
-    for _, row in df.iterrows():
-
-        if row.isna().all():
-            continue
-
-        debit  = safe(row[debit_col]) if debit_col in df.columns else None
-        credit = safe(row[credit_col]) if credit_col in df.columns else None
-
-        if debit is None and credit is None:
-            continue
-
-        # خطأ مدين + دائن
-        if debit and credit and debit > 0 and credit > 0:
-            amount = max(debit, credit)
-
-            data.append({
-                "amount": float(amount),
-                "type": "error",
-                "branch": branch,
-                "date": None,
-                "doc": "",
-                "reason": "خطأ: الصف يحتوي مدين ودائن"
-            })
-            continue
-
-        # تحديد النوع
-        if credit and credit > 0:
-            amount = credit
-            t = "credit"
-
-        elif debit and debit > 0:
-            amount = debit
-            t = "debit"
-
-        else:
-            continue
-
-        # التاريخ
-        date = None
-
-        if date_col and date_col in df.columns:
-            try:
-                val = row[date_col]
-
-                if pd.isna(val):
-                    date = None
-                else:
-                    d = pd.to_datetime(val, errors='coerce', dayfirst=False)
-                    if not pd.isna(d):
-                        date = d.strftime("%Y-%m-%d")
-                    else:
-                        date = None
-            except:
-                date = str(row[date_col])
-
-        # المستند
-        doc = None
-
-        if doc_col and doc_col in df.columns:
-            val = row[doc_col]
-            if pd.notna(val):
-                doc = str(val).strip()
-
-        data.append({
-            "amount": float(amount),
-            "type": t,
-            "branch": branch,
-            "date": date,
-            "doc": doc
-        })
-
-    return data
-    
-# ================= ANALYZE =================
-
-doc_map = {
+doc_map: Dict[str, str] = {
     "مردود مبيعات": "مردود مشتريات",
     "مردود مشتريات": "مردود مبيعات",
-
     "سند قبض": "سند صرف",
     "سند صرف": "سند قبض",
-
     "تحويل مخزني": "تحويل مخزني",
     "توريد مخزني": "صرف مخزني",
     "صرف مخزني": "توريد مخزني",
-
     "قيد يومية": "قيد يومية",
     "قيد افتتاحي": "قيد افتتاحي",
-
     "مبيعات": "مشتريات",
-    "مشتريات": "مبيعات"
+    "مشتريات": "مبيعات",
 }
 
-import re
-from difflib import SequenceMatcher
 
-def clean(s):
+def clean_doc(s: Any) -> str:
     if not s:
         return ""
-
     s = str(s).lower().strip()
-
-    # إزالة كلمات مزعجة
-    for w in ["رقم", "no", "doc", "ref"]:
-        s = s.replace(w, "")
-
-    # حذف الأرقام 🔥
-    s = re.sub(r'\d+', '', s)
-
-    # إزالة رموز
-    for ch in [" ", "-", "_", "/", "\\", ".", ","]:
-        s = s.replace(ch, "")
-
+    s = s.replace("رقم", "")
+    s = s.replace("-", "")
+    s = s.replace("_", "")
+    s = s.replace("  ", " ")
     return s
 
 
-def match_doc(d1, d2):
+def clean(s: Any) -> str:
+    if not s:
+        return ""
+    s = str(s).lower().strip()
+    for w in ["رقم", "no", "doc", "ref"]:
+        s = s.replace(w, "")
+    s = re.sub(r"\d+", "", s)
+    for ch in [" ", "-", "_", "/", "\\", ".", ","]:
+        s = s.replace(ch, "")
+    return s
 
-    # 🔥 تصحيح منطقي
+
+def match_doc(d1: Any, d2: Any) -> bool:
     if not d1 and not d2:
         return True
-
     if not d1 or not d2:
         return False
 
@@ -366,136 +590,198 @@ def match_doc(d1, d2):
 
     if not d1 and not d2:
         return True
-
     if not d1 or not d2:
         return False
-
-    # 1. تطابق مباشر
     if d1 == d2:
         return True
-
-    # 2. تطابق جزئي مضبوط
     if len(d1) > 3 and len(d2) > 3:
         if d1 in d2 or d2 in d1:
             return True
 
-    # 3. mapping
     for key, val in doc_map.items():
         k = clean(key)
         v = clean(val)
-
         if (k in d1 and v in d2) or (v in d1 and k in d2):
             return True
 
-    # 4. fuzzy حقيقي 🔥
     similarity = SequenceMatcher(None, d1, d2).ratio()
-    if similarity > 0.7:
-        return True
+    return similarity > 0.7
 
-    return False
-    
-# ================= HELPERS =================
 
-def date_diff_days(d1, d2):
+def date_diff_days(d1: Any, d2: Any) -> Optional[int]:
     try:
-        d1 = pd.to_datetime(d1, errors='coerce')
-        d2 = pd.to_datetime(d2, errors='coerce')
-
-        if pd.isna(d1) or pd.isna(d2):
+        dd1 = pd.to_datetime(d1, errors="coerce")
+        dd2 = pd.to_datetime(d2, errors="coerce")
+        if pd.isna(dd1) or pd.isna(dd2):
             return None
-
-        return abs((d1 - d2).days)
-    except:
+        return abs((dd1 - dd2).days)
+    except Exception:
         return None
 
 
-def clean_doc(s):
-    s = str(s).lower().strip()
+def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
+    df = read_any(file_path, filename)
+    if df is None or len(df) == 0:
+        return []
 
-    s = s.replace("رقم", "")
-    s = s.replace("-", "")
-    s = s.replace("_", "")
-    s = s.replace("  ", " ")
+    df.columns = df.columns.astype(str).str.strip()
+    debit_col, credit_col, date_col = detect_columns(df)
 
-    return s
+    # doc column
+    doc_col = None
+    for col in df.columns:
+        name = str(col).lower().strip()
+        if any(
+            x in name
+            for x in [
+                "مستند",
+                "المستند",
+                "نوع",
+                "بيان",
+                "وصف",
+                "description",
+                "desc",
+                "document",
+            ]
+        ):
+            doc_col = col
+            break
+
+    # fallback if debit/credit not found
+    if not debit_col and not credit_col:
+        numeric_cols: List[Tuple[str, float]] = []
+        for col in df.columns:
+            nums = pd.to_numeric(df[col], errors="coerce").dropna()
+            if len(nums) < len(df) * 0.3:
+                continue
+            if nums.mean() < 10:
+                continue
+            numeric_cols.append((col, float(nums.mean())))
+        numeric_cols.sort(key=lambda x: x[1], reverse=True)
+        if len(numeric_cols) >= 1:
+            debit_col = numeric_cols[0][0]
+        if len(numeric_cols) >= 2:
+            credit_col = numeric_cols[1][0]
+
+    data: List[Dict[str, Any]] = []
+    for _, row in df.iterrows():
+        if row.isna().all():
+            continue
+
+        debit = safe(row[debit_col]) if debit_col and debit_col in df.columns else None
+        credit = safe(row[credit_col]) if credit_col and credit_col in df.columns else None
+
+        if debit is None and credit is None:
+            continue
+
+        # error row: debit + credit positive
+        if debit and credit and debit > 0 and credit > 0:
+            amount = max(debit, credit)
+            data.append(
+                {
+                    "amount": float(amount),
+                    "type": "error",
+                    "branch": branch,
+                    "date": None,
+                    "doc": "",
+                    "reason": "خطأ: الصف يحتوي مدين ودائن",
+                }
+            )
+            continue
+
+        # determine direction
+        if credit and credit > 0:
+            amount = credit
+            t = "credit"
+        elif debit and debit > 0:
+            amount = debit
+            t = "debit"
+        else:
+            continue
+
+        # date
+        date_out: Optional[str] = None
+        if date_col and date_col in df.columns:
+            try:
+                val = row[date_col]
+                if pd.isna(val):
+                    date_out = None
+                else:
+                    d = pd.to_datetime(val, errors="coerce", dayfirst=False)
+                    date_out = None if pd.isna(d) else d.strftime("%Y-%m-%d")
+            except Exception:
+                date_out = str(row[date_col])
+
+        # doc
+        doc_out: Optional[str] = None
+        if doc_col and doc_col in df.columns:
+            val = row[doc_col]
+            if pd.notna(val):
+                doc_out = str(val).strip()
+
+        data.append(
+            {
+                "amount": float(amount),
+                "type": t,
+                "branch": branch,
+                "date": date_out,
+                "doc": doc_out,
+            }
+        )
+
+    return data
 
 
-# ================= ANALYZE =================
-
-def analyze(d1, d2):
-    res = []
+def analyze(d1: List[Dict[str, Any]], d2: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+    res: List[Dict[str, Any]] = []
     used = [False] * len(d2)
-    counts = {}
+    counts: Dict[str, int] = {}
 
-    # =========================================
-    # حذف العمليات العكسية
-    # =========================================
-    def remove_reversals(data):
-        cleaned = []
+    def remove_reversals(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        cleaned: List[Dict[str, Any]] = []
         used_local = [False] * len(data)
-
         for i, x1 in enumerate(data):
             if used_local[i]:
                 continue
-
             found = False
-
             for j, x2 in enumerate(data):
                 if i == j or used_local[j]:
                     continue
-
                 if x1["branch"] != x2["branch"]:
                     continue
-
                 if x1["type"] == x2["type"]:
                     continue
-
                 if abs(x1["amount"] - x2["amount"]) > 0.01:
                     continue
-
                 days = date_diff_days(x1["date"], x2["date"])
                 if days is None or days > 1:
                     continue
-
                 if x1.get("doc") and x2.get("doc"):
                     if not match_doc(x1["doc"], x2["doc"]):
                         continue
-
                 used_local[i] = True
                 used_local[j] = True
                 found = True
                 break
-
             if not found:
                 cleaned.append(x1)
-
         return cleaned
 
-    # تطبيق الحذف
     d1 = remove_reversals(d1)
     d2 = remove_reversals(d2)
 
-    # =========================================
-    # لو الفرع الثاني فاضي
-    # =========================================
+    # if branch2 empty
     if not d2:
         for x in d1:
-            res.append({
-                **x,
-                "reason": "لا يوجد مقابل ❌ (الفرع الثاني فارغ)"
-            })
+            res.append({**x, "reason": "لا يوجد مقابل ❌ (الفرع الثاني فارغ)"})
             b = x.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
         return res, counts
 
-    # =========================================
-    # نظام التقييم
-    # =========================================
-    def match_score(x1, x2):
+    def match_score(x1: Dict[str, Any], x2: Dict[str, Any]) -> Tuple[int, List[str]]:
         score = 0
-        reasons = []
+        reasons: List[str] = []
 
-        # المبلغ
         diff = abs(x1["amount"] - x2["amount"])
         if diff < 0.01:
             score += 50
@@ -506,22 +792,16 @@ def analyze(d1, d2):
         else:
             return 0, ["فرق مبلغ كبير"]
 
-        # الاتجاه
-        if (
-            (x1["type"] == "credit" and x2["type"] == "debit") or
-            (x1["type"] == "debit" and x2["type"] == "credit")
-        ):
+        if (x1["type"] == "credit" and x2["type"] == "debit") or (x1["type"] == "debit" and x2["type"] == "credit"):
             score += 30
             reasons.append("اتجاه عكسي صحيح")
         else:
             return 0, ["نفس الاتجاه"]
 
-        # 🔥 شرط المستند
         if x1.get("doc") and x2.get("doc"):
             if not match_doc(x1["doc"], x2["doc"]):
                 return 0, ["اختلاف نوع المستند"]
 
-        # التاريخ
         days = date_diff_days(x1["date"], x2["date"])
         if days is None:
             score -= 10
@@ -536,7 +816,6 @@ def analyze(d1, d2):
             score -= 10
             reasons.append("تاريخ بعيد")
 
-        # تقييم المستند
         if match_doc(x1.get("doc"), x2.get("doc")):
             score += 20
             reasons.append("نوع مستند مطابق")
@@ -546,11 +825,7 @@ def analyze(d1, d2):
 
         return score, reasons
 
-    # =========================================
-    # المطابقة
-    # =========================================
     for x1 in d1:
-
         if x1.get("type") == "error":
             res.append(x1)
             b = x1.get("branch") or "unknown"
@@ -559,7 +834,7 @@ def analyze(d1, d2):
 
         best_i = -1
         best_score = -1
-        best_reason = []
+        best_reason: List[str] = []
 
         for i, x2 in enumerate(d2):
             if used[i]:
@@ -568,7 +843,6 @@ def analyze(d1, d2):
                 continue
 
             score, reasons = match_score(x1, x2)
-
             if score > best_score:
                 best_score = score
                 best_i = i
@@ -576,862 +850,802 @@ def analyze(d1, d2):
 
         if best_score >= 80 and best_i != -1:
             used[best_i] = True
-
         elif best_score >= 60 and best_i != -1:
-            res.append({
-                **x1,
-                "reason": f"تطابق ضعيف ⚠️ | score={best_score} | {' , '.join(best_reason)}"
-            })
+            res.append({**x1, "reason": f"تطابق ضعيف ⚠️ | score={best_score} | {' , '.join(best_reason)}"})
             used[best_i] = True
-
         else:
-            res.append({
-                **x1,
-                "reason": f"لا يوجد مقابل ❌ | score={best_score} | {' , '.join(best_reason)}"
-            })
+            res.append({**x1, "reason": f"لا يوجد مقابل ❌ | score={best_score} | {' , '.join(best_reason)}"})
             b = x1.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
 
-    # =========================================
-    # الباقي من الفرع الثاني
-    # =========================================
+    # remaining from branch2
     for i, x in enumerate(d2):
         if not used[i]:
-
             if x.get("type") == "error":
                 res.append(x)
                 b = x.get("branch") or "unknown"
                 counts[b] = counts.get(b, 0) + 1
                 continue
 
-            res.append({
-                **x,
-                "reason": "لا يوجد مقابل ❌ (من الفرع الآخر)"
-            })
+            res.append({**x, "reason": "لا يوجد مقابل ❌ (من الفرع الآخر)"})
             b = x.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
 
     return res, counts
-    
-# ================= FRONTEND (نفس واجهتك) =================
-@app.get("/", response_class=HTMLResponse)
-def home():
-    return """ 
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;600;800&display=swap" rel="stylesheet">
 
-<style>
-*{font-family:Cairo;box-sizing:border-box}
-body{margin:0;background:#f1f5f9;color:#111;transition:0.3s;}
-body.dark{background:#020617;color:#fff;}
-.container{padding:20px;max-width:1100px;margin:auto;}
-.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
-.logo{font-size:20px;font-weight:800;color:#3b82f6;}
-#welcomeUser{font-size:16px;color:#1d4ed8;font-weight:900;}
-.btn{padding:10px;border:none;border-radius:10px;cursor:pointer;}
-.btn-danger{background:#ef4444;color:#fff;}
-.btn-mode{background:#e2e8f0;}
-.card{background:#fff;padding:20px;border-radius:15px;margin-bottom:20px;box-shadow:0 5px 20px rgba(0,0,0,0.05);}
-body.dark .card{background:#0f172a;}
-input{width:100%;padding:10px;margin:5px 0 10px;border-radius:8px;border:1px solid #ddd;}
-.analyze-btn{width:150px;margin:auto;display:block;padding:10px;background:#3b82f6;color:#fff;border:none;border-radius:10px;}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:15px;}
-.stat{background:#fff;padding:15px;border-radius:12px;text-align:center;border:1px solid #e5e7eb;}
-.stat b{font-size:26px;color:#3b82f6;display:block;}
-.stat span{font-size:14px;color:#666;}
-.errors{display:grid;grid-template-columns:1fr 1fr;gap:15px;}
-.error{background:#fff;border:1px solid #e5e7eb;padding:18px;border-radius:14px;margin-bottom:12px;}
-.error div{font-size:15px;margin-bottom:5px;}
-.bar{background:#e5e7eb;height:10px;border-radius:10px;margin-top:5px;overflow:hidden}
-.bar-inner{background:#ef4444;height:100%}
-.toast{position:fixed;bottom:20px;left:20px;background:#22c55e;color:#fff;padding:12px 20px;border-radius:10px;display:none;z-index:999;}
-.hidden{display:none}
 
-/* =================== Upload UI (matches design) =================== */
-#systemBox .container{padding:28px 20px 40px;max-width:980px;}
-#systemBox .topbar{display:none;}
-#systemBox .card{margin-bottom:0;box-shadow:none;border:1px solid rgba(15,23,42,0.08);}
-.audit-shell{background:#fff;border-radius:18px;padding:26px 22px;}
-.audit-title{margin:0;text-align:center;font-size:28px;font-weight:800;color:#0f172a;}
-.audit-sub{margin:8px 0 0;text-align:center;color:#64748b;font-size:14px;line-height:1.6;}
-.upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:26px;align-items:start;}
-.upload-card{border:1px solid rgba(15,23,42,0.10);border-radius:16px;padding:16px;background:#fff;}
-.upload-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
-.upload-dot{width:10px;height:10px;border-radius:50%;background:#2563eb;box-shadow:0 0 0 4px rgba(37,99,235,0.10);}
-.upload-label{font-weight:700;color:#1d4ed8;font-size:13px;}
-.branch-input{
-    border:none;
-    outline:none;
-    background:transparent;
-    font-weight:700;
-    color:#1d4ed8;
-    font-size:13px;
-    width:100%;
-    padding:0;
-    margin:0;
-    text-align:right;
-}
-.type-toggle{
-    display:flex;
-    gap:10px;
-    justify-content:center;
-    margin:8px 0 14px;
-    flex-wrap:wrap;
-}
-.toggle-btn{
-    border:1px solid rgba(148,163,184,0.55);
-    background:#fff;
-    color:#64748b;
-    font-weight:800;
-    font-size:12px;
-    padding:6px 12px;
-    border-radius:999px;
-    cursor:pointer;
-    transition:0.15s;
-}
-.toggle-btn.active-excel{
-    border-color:#10b981;
-    color:#10b981;
-    background:rgba(16,185,129,0.10);
-}
-.toggle-btn.active-pdf{
-    border-color:#2563eb;
-    color:#2563eb;
-    background:rgba(37,99,235,0.10);
-}
-.dz-excel .upload-dot{background:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,0.12);}
-
-.dropzone{
-    border:2px dashed rgba(148,163,184,0.55);
-    border-radius:14px;
-    background:#f8fafc;
-    height:120px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    flex-direction:column;
-    gap:8px;
-    cursor:pointer;
-    transition:0.15s;
-    user-select:none;
-}
-.dropzone.dragover{
-    border-color:#2563eb;
-    background:#eff6ff;
-}
-.dz-excel .dropzone.dragover{
-    border-color:#10b981;
-    background:#ecfdf5;
-}
-.dz-icon{
-    width:42px;height:42px;
-    display:flex;align-items:center;justify-content:center;
-    border-radius:12px;
-    background:rgba(37,99,235,0.08);
-    color:#2563eb;
-}
-.dz-excel .dz-icon{
-    background:rgba(16,185,129,0.10);
-    color:#10b981;
-}
-.dz-icon svg{width:22px;height:22px;stroke:currentColor;stroke-width:2;fill:none}
-.dz-title{font-size:13px;font-weight:800;color:#0f172a;}
-.dz-sub{font-size:12px;color:#64748b;line-height:1.4;}
-.file-hint{margin-top:10px;font-size:12px;color:#94a3b8;min-height:16px;}
-
-.start-row{display:flex;justify-content:center;margin-top:18px;}
-.start-btn{
-    border:none;
-    background:#2563eb;
-    color:#fff;
-    border-radius:12px;
-    padding:10px 18px;
-    font-size:14px;
-    font-weight:800;
-    cursor:pointer;
-    transition:0.15s;
-}
-.start-btn:active{transform:translateY(1px)}
-
-/* results hidden until analysis */
-#stats.hidden, #totals.hidden, #filterCard.hidden, #errorsCard.hidden {display:none !important;}
-
-.spinner{
-    width:14px;height:14px;
-    border:2px solid rgba(255,255,255,0.35);
-    border-top-color:#fff;
-    border-radius:50%;
-    display:inline-block;
-    vertical-align:middle;
-    margin-inline-start:8px;
-    animation:spin 0.7s linear infinite;
-}
-@keyframes spin{to{transform:rotate(360deg)}}
-</style>
-</head>
-
-<body>
-
-<div id="toast" class="toast"></div>
-
-<div id="loginBox" class="container">
-<div class="card" style="max-width:400px;margin:auto">
-<h2>تسجيل الدخول</h2>
-<input id="user">
-<input id="pass" type="password">
-<button class="analyze-btn" onclick="login()">دخول</button>
-<button class="btn btn-mode" onclick="goRegister()">إنشاء حساب</button>
-</div>
-</div>
-
-<div id="registerBox" class="container hidden">
-<div class="card" style="max-width:400px;margin:auto">
-<h2>إنشاء حساب</h2>
-<input id="ruser">
-<input id="rpass" type="password">
-<button class="analyze-btn" onclick="register()">تسجيل</button>
-<button class="btn btn-mode" onclick="goLogin()">رجوع</button>
-</div>
-</div>
-
-<div id="systemBox" class="hidden">
-<div class="container">
-
-<div class="topbar">
-<div>
-<div class="logo">📊 Smart Audit</div>
-<div id="welcomeUser"></div>
-</div>
-<div>
-<button class="btn btn-mode" onclick="toggleMode()">الوضع</button>
-<button class="btn btn-danger" onclick="logout()">خروج</button>
-</div>
-</div>
-
-<div class="card audit-shell">
-    <h1 class="audit-title">تدقيق مالي</h1>
-    <div class="audit-sub">ارفع ملف Excel و PDF للمقارنة وتحليل الفروقات تلقائيًا.</div>
-
-    <!-- branch inputs live inside the headers -->
-
-    <div class="upload-grid">
-        <div class="upload-card dz-excel" id="card1">
-            <div class="upload-head">
-                <span class="upload-dot"></span>
-                <input id="b1" class="branch-input" value="الفرع الأول" />
-            </div>
-
-            <div class="type-toggle" id="typeToggle1">
-                <button type="button" id="t1_excel" class="toggle-btn active-excel" onclick="setBranchType(1,'excel')">Excel</button>
-                <button type="button" id="t1_pdf" class="toggle-btn" onclick="setBranchType(1,'pdf')">PDF</button>
-            </div>
-
-            <input type="file" id="f1" accept=".xlsx,.xls,.xlsm,.xlsb,.pdf,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden">
-            <div class="dropzone" id="dz1" data-target="f1">
-                <div class="dz-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M12 3v10" stroke-linecap="round"/>
-                        <path d="M8 9l4-4 4 4" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M5 14v4a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-4" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </div>
-                <div class="dz-title" id="dz1Title">Excel</div>
-                <div class="dz-sub">اسحب وأفلت أو اضغط للاختيار</div>
-            </div>
-            <div class="file-hint" id="fileName1"> </div>
-        </div>
-
-        <div class="upload-card" id="card2">
-            <div class="upload-head">
-                <span class="upload-dot"></span>
-                <input id="b2" class="branch-input" value="الفرع الثاني" />
-            </div>
-
-            <div class="type-toggle" id="typeToggle2">
-                <button type="button" id="t2_excel" class="toggle-btn" onclick="setBranchType(2,'excel')">Excel</button>
-                <button type="button" id="t2_pdf" class="toggle-btn active-pdf" onclick="setBranchType(2,'pdf')">PDF</button>
-            </div>
-
-            <input type="file" id="f2" accept=".xlsx,.xls,.xlsm,.xlsb,.pdf,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden">
-            <div class="dropzone" id="dz2" data-target="f2">
-                <div class="dz-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M12 3v10" stroke-linecap="round"/>
-                        <path d="M8 9l4-4 4 4" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M5 14v4a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-4" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </div>
-                <div class="dz-title" id="dz2Title">PDF</div>
-                <div class="dz-sub">اسحب وأفلت أو اضغط للاختيار</div>
-            </div>
-            <div class="file-hint" id="fileName2"> </div>
-        </div>
-    </div>
-
-    <div class="start-row">
-        <button id="analyzeBtn" class="start-btn" onclick="upload()">ابدأ التحليل</button>
-    </div>
-    
-    <div style="display:flex;justify-content:center;margin-top:12px">
-        <button id="downloadBtn" class="start-btn hidden" style="background:#10b981" onclick="download()">تحميل التقرير</button>
-    </div>
-</div>
-
-<div id="stats" class="stats hidden"></div>
-<div id="totals" class="card hidden"></div>
-
-<div class="card hidden" id="filterCard">
-    <h3>فلترة الأخطاء</h3>
-
-    <input id="filterDoc" placeholder="نوع المستند">
-    <input id="filterAmount" placeholder="المبلغ">
-
-    <input id="filterType" placeholder="نوع الخطأ (❌ أو ⚠️)">
-
-    <button class="analyze-btn" onclick="applyFilter()">تطبيق</button>
-    <button class="btn btn-mode" onclick="resetFilter()">إلغاء</button>
-</div>
-
-<div class="card hidden" id="errorsCard">
-    <h3>الأخطاء</h3>
-    <div class="errors">
-        <div id="right"></div>
-        <div id="left"></div>
-    </div>
-</div>
-
-</div>
-</div>
-
-<script>
-
-let TOKEN=""
-let USERNAME=""
-let ALL_ERRORS=[]
-let SELECTED_FILE1 = null
-let SELECTED_FILE2 = null
-
-// ================= FILTER =================
-function applyFilter(){
-
-    let doc = document.getElementById("filterDoc").value.toLowerCase().trim()
-    let amount = document.getElementById("filterAmount").value.trim()
-    let type = document.getElementById("filterType").value.trim()
-
-    let filtered = ALL_ERRORS
-
-    // فلترة بالمستند
-    if(doc){
-        filtered = filtered.filter(x => 
-            (x.doc || "").toLowerCase().includes(doc)
-        )
-    }
-
-    // فلترة بالمبلغ
-    if(amount){
-        filtered = filtered.filter(x => 
-            String(x.amount) === amount
-        )
-    }
-
-    // 🔥 فلترة بنوع الخطأ
-    if(type){
-        filtered = filtered.filter(x =>
-            (x.reason || "").includes(type)
-        )
-    }
-
-    render(filtered)
-}
-
-
-// ================= RESET =================
-function resetFilter(){
-    document.getElementById("filterDoc").value = ""
-    document.getElementById("filterAmount").value = ""
-    document.getElementById("filterType").value = ""
-    render(ALL_ERRORS)
-}
-
-
-// ================= UI =================
-function showToast(msg,color="#22c55e"){
-let t=document.getElementById("toast")
-t.innerText=msg
-t.style.background=color
-t.style.display="block"
-setTimeout(()=>t.style.display="none",3000)
-}
-
-function toggleMode(){document.body.classList.toggle("dark")}
-function logout(){location.reload()}
-
-// ================= AUTH =================
-function goRegister(){
-loginBox.classList.add("hidden")
-registerBox.classList.remove("hidden")
-}
-
-function goLogin(){
-registerBox.classList.add("hidden")
-loginBox.classList.remove("hidden")
-}
-
-async function register(){
-let f=new FormData()
-f.append("username",ruser.value)
-f.append("password",rpass.value)
-let r = await fetch("/register",{method:"POST",body:f})
-let d = await r.json()
-showToast("تم إنشاء الحساب")
-goLogin()
-}
-
-async function login(){
-let f=new FormData()
-f.append("username",user.value)
-f.append("password",pass.value)
-
-let r=await fetch("/login",{method:"POST",body:f})
-let d=await r.json()
-
-if(d.token){
-TOKEN=d.token
-USERNAME=d.username
-loginBox.classList.add("hidden")
-systemBox.classList.remove("hidden")
-welcomeUser.innerText="مرحبًا "+USERNAME
-}else{
-showToast("فشل تسجيل الدخول","#ef4444")
-}
-}
-
-// ================= DROPZONE =================
-function setSelected(fileInputId, fileObj){
-    if(fileInputId === "f1"){
-        SELECTED_FILE1 = fileObj
-        let el = document.getElementById("fileName1")
-        if(el){
-            el.innerText = fileObj ? ("تم اختيار: " + (fileObj.name || "")) : ""
-        }
-    }else{
-        SELECTED_FILE2 = fileObj
-        let el = document.getElementById("fileName2")
-        if(el){
-            el.innerText = fileObj ? ("تم اختيار: " + (fileObj.name || "")) : ""
-        }
-    }
-}
-
-function validateFile(fileObj, expected){
-    if(!fileObj) return false
-    let name = (fileObj.name || "").toLowerCase().trim()
-    if(expected === "excel"){
-        return /\.(xlsx|xls|xlsm|xlsb|csv)$/.test(name)
-    }
-    if(expected === "pdf"){
-        return name.endsWith(".pdf")
-    }
-    return true
-}
-
-let EXPECTED_TYPE1 = "excel"
-let EXPECTED_TYPE2 = "pdf"
-
-function setBranchType(branch, type){
-    // type: "excel" | "pdf"
-    if(branch === 1){
-        EXPECTED_TYPE1 = type
-        let card = document.getElementById("card1")
-        if(card){ card.classList.toggle("dz-excel", type === "excel") }
-
-        let t1e = document.getElementById("t1_excel")
-        let t1p = document.getElementById("t1_pdf")
-        if(t1e){ t1e.classList.toggle("active-excel", type === "excel") }
-        if(t1p){ t1p.classList.toggle("active-pdf", type === "pdf") }
-
-        let title = document.getElementById("dz1Title")
-        if(title){ title.innerText = type === "excel" ? "Excel" : "PDF" }
-
-        if(SELECTED_FILE1 && !validateFile(SELECTED_FILE1, type)){
-            SELECTED_FILE1 = null
-            let inp = document.getElementById("f1")
-            if(inp){ inp.value = "" }
-            setSelected("f1", null)
-        }
-    }else{
-        EXPECTED_TYPE2 = type
-        let card = document.getElementById("card2")
-        if(card){ card.classList.toggle("dz-excel", type === "excel") }
-
-        let t2e = document.getElementById("t2_excel")
-        let t2p = document.getElementById("t2_pdf")
-        if(t2e){ t2e.classList.toggle("active-excel", type === "excel") }
-        if(t2p){ t2p.classList.toggle("active-pdf", type === "pdf") }
-
-        let title = document.getElementById("dz2Title")
-        if(title){ title.innerText = type === "excel" ? "Excel" : "PDF" }
-
-        if(SELECTED_FILE2 && !validateFile(SELECTED_FILE2, type)){
-            SELECTED_FILE2 = null
-            let inp = document.getElementById("f2")
-            if(inp){ inp.value = "" }
-            setSelected("f2", null)
-        }
-    }
-}
-
-function bindDropzone(dzId, inputId, expectedTypeGetter){
-    let dz = document.getElementById(dzId)
-    let inp = document.getElementById(inputId)
-    if(!dz || !inp) return
-
-    function expectedNow(){
-        return (typeof expectedTypeGetter === "function") ? expectedTypeGetter() : expectedTypeGetter
-    }
-
-    dz.addEventListener("click", ()=> inp.click())
-
-    ;["dragenter","dragover"].forEach(evtName=>{
-        dz.addEventListener(evtName, (e)=>{
-            e.preventDefault()
-            e.stopPropagation()
-            dz.classList.add("dragover")
-        })
-    })
-
-    ;["dragleave","drop"].forEach(evtName=>{
-        dz.addEventListener(evtName, (e)=>{
-            e.preventDefault()
-            e.stopPropagation()
-            dz.classList.remove("dragover")
-        })
-    })
-
-    dz.addEventListener("drop", (e)=>{
-        let dt = e.dataTransfer
-        let fileObj = dt && dt.files && dt.files.length ? dt.files[0] : null
-        if(!fileObj || !validateFile(fileObj, expectedNow())){
-            showToast("نوع الملف غير صحيح", "#ef4444")
-            setSelected(inputId, null)
-            return
-        }
-
-        setSelected(inputId, fileObj)
-    })
-
-    inp.addEventListener("change", ()=>{
-        let fileObj = inp.files && inp.files.length ? inp.files[0] : null
-        if(fileObj && !validateFile(fileObj, expectedNow())){
-            showToast("نوع الملف غير صحيح", "#ef4444")
-            inp.value = ""
-            setSelected(inputId, null)
-            return
-        }
-        setSelected(inputId, fileObj)
-    })
-}
-
-// script is at the end of <body>, so DOM is ready; bind directly.
-setBranchType(1, EXPECTED_TYPE1)
-setBranchType(2, EXPECTED_TYPE2)
-bindDropzone("dz1","f1", ()=>EXPECTED_TYPE1)
-bindDropzone("dz2","f2", ()=>EXPECTED_TYPE2)
-
-// ================= RENDER =================
-function render(errors){
-
-    let right = document.getElementById("right")
-    let left  = document.getElementById("left")
-
-    errors.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
-
-    let b1v = (document.getElementById("b1") || {}).value || "الفرع الأول"
-    let b2v = (document.getElementById("b2") || {}).value || "الفرع الثاني"
-
-    right.innerHTML = `<h4>${b1v}</h4>`
-    left.innerHTML  = `<h4>${b2v}</h4>`
-
-    errors.filter(x => x.branch == b1v).forEach(x=>{
-        right.innerHTML+=`
-        <div class="error">
-            <div>المبلغ: ${x.amount}</div>
-            <div>نوع المستند: ${x.doc || "-"}</div>
-            <div>التاريخ: ${x.date || "-"}</div>
-            <div>السبب: ${x.reason || "-"}</div>
-        </div>`
-    })
-
-    errors.filter(x => x.branch == b2v).forEach(x=>{
-        left.innerHTML+=`
-        <div class="error">
-            <div>المبلغ: ${x.amount}</div>
-            <div>نوع المستند: ${x.doc || "-"}</div>
-            <div>التاريخ: ${x.date || "-"}</div>
-            <div>السبب: ${x.reason || "-"}</div>
-        </div>`
-    })
-}
-
-
-// ================= UPLOAD (FINAL) =================
-async function upload(){
-
-    // 🔥 إضافة فقط (ما غيرنا شيء)
-    if(!TOKEN){
-        showToast("يجب تسجيل الدخول أولاً","#ef4444")
-        return
-    }
-
-    let btn = document.getElementById("analyzeBtn")
-
-    // 🔥 تشغيل loading
-    btn.disabled = true
-    btn.innerHTML = `جاري التحليل <span class="spinner"></span>`
-    btn.style.opacity = "0.6"
-
-    let file1 = SELECTED_FILE1 || (document.getElementById("f1").files ? document.getElementById("f1").files[0] : null)
-    let file2 = SELECTED_FILE2 || (document.getElementById("f2").files ? document.getElementById("f2").files[0] : null)
-
-    if(!file1 || !file2){
-        showToast("اختار الملفين أولاً","#ef4444")
-
-        btn.disabled = false
-        btn.innerText = "تحليل"
-        btn.style.opacity = "1"
-        return
-    }
-
-    let b1v = (document.getElementById("b1") || {}).value || "الفرع الأول"
-    let b2v = (document.getElementById("b2") || {}).value || "الفرع الثاني"
-
-    let f=new FormData()
-    f.append("file1", file1)
-    f.append("file2", file2)
-    f.append("b1",b1v)
-    f.append("b2",b2v)
-
-    try{
-
-        let r=await fetch("/analyze",{
-            method:"POST",
-            body:f,
-            headers:{
-                "Authorization":"Bearer "+TOKEN
-            }
-        })
-
-        // 🔥 إضافة فقط
-        if(r.status === 401){
-            showToast("انتهت الجلسة، سجل دخول مرة ثانية","#ef4444")
-            logout()
-            return
-        }
-
-        if(!r.ok){
-            let text = await r.text()
-            console.log("❌ response:", text)
-            showToast("خطأ في التحليل","#ef4444")
-
-            btn.disabled = false
-            btn.innerText = "تحليل"
-            btn.style.opacity = "1"
-            return
-        }
-
-        let d = await r.json()
-
-        // 🔥 حماية من crash
-        if (!d || !d.errors || !Array.isArray(d.errors)) {
-            console.log("❌ رد السيرفر غلط:", d)
-            showToast("التحليل رجع بيانات غير صحيحة","#ef4444")
-
-            btn.disabled = false
-            btn.innerText = "تحليل"
-            btn.style.opacity = "1"
-            return
-        }
-
-        if (!d.counts) {
-            d.counts = {}
-        }
-
-        // 🔥 تخزين الأخطاء
-        ALL_ERRORS = d.errors
-
-        // =========================================
-        // 🔥 stats (عدد + نسبة)
-        // =========================================
-        let c1 = d.counts?.[b1v] || 0
-        let c2 = d.counts?.[b2v] || 0
-
-        let totalErrors = ALL_ERRORS.length || 1
-
-        let p1 = Math.round((c1 / totalErrors) * 100)
-        let p2 = Math.round((c2 / totalErrors) * 100)
-
-        let stats = document.getElementById("stats")
-
-        stats.innerHTML = `
-<div class="stat">
-    <span>${b1v}</span>
-    <b>${c1}</b>
-    <span>عدد الأخطاء</span>
-    <small>${p1}%</small>
-</div>
-
-<div class="stat">
-    <span>${b2v}</span>
-    <b>${c2}</b>
-    <span>عدد الأخطاء</span>
-    <small>${p2}%</small>
-</div>
-`
-
-        // 🔥 عرض الكل
-        render(ALL_ERRORS)
-
-        showToast("تم التحليل ✔️")
-        
-        // Show results UI
-        document.getElementById("stats").classList.remove("hidden")
-        document.getElementById("totals").classList.remove("hidden")
-        document.getElementById("filterCard").classList.remove("hidden")
-        document.getElementById("errorsCard").classList.remove("hidden")
-        document.getElementById("downloadBtn").classList.remove("hidden")
-
-    } catch(e){
-        console.error("❌ error:", e)
-        showToast("حصل خطأ غير متوقع","#ef4444")
-    }
-
-    // 🔥 إرجاع الزر طبيعي
-    btn.disabled = false
-    btn.innerText = "تحليل"
-    btn.style.opacity = "1"
-}
-
-// ================= FILTER ERRORS =================
-function filterErrors(){
-
-    if (!ALL_ERRORS || !Array.isArray(ALL_ERRORS)) {
-        console.log("مافي بيانات للفلترة")
-        return
-    }
-
-    let filtered = ALL_ERRORS.filter(x =>
-        x.reason && x.reason.includes("❌")
-    )
-
-    render(filtered)
-}
-
-
-// ================= SHOW ALL =================
-function showAll(){
-    render(ALL_ERRORS)
-}
-
-// ================= DOWNLOAD =================
-function download(){
-fetch("/download",{headers:{"Authorization":"Bearer "+TOKEN}})
-.then(res=>res.blob())
-.then(blob=>{
-let url=URL.createObjectURL(blob)
-let a=document.createElement("a")
-a.href=url
-a.download="report.xlsx"
-a.click()
-})
-}
-</script>
-
-</body>
-</html>
-    """
-
-# ================= API =================
-last_errors = []
-
-@app.post("/register")
-def register(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
-    if db.query(User).filter_by(username=username).first():
-        return {"msg":"المستخدم موجود"}
-    db.add(User(username=username, password=pbkdf2_sha256.hash(password)))
-    db.commit()
-    return {"msg":"تم"}
-
-
-@app.post("/login")
-def login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
-    user = db.query(User).filter_by(username=username).first()
-
-    if not user:
-        return {"error": "user_not_found"}
-
-    if not pbkdf2_sha256.verify(password, user.password):
-        return {"error": "wrong_password"}
-
+def compute_summary(
+    d1: List[Dict[str, Any]],
+    d2: List[Dict[str, Any]],
+    mismatch_entries: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    total_ops = len(d1) + len(d2)
+    mismatch_ops = len(mismatch_entries)
+    matched_ops = max(0, total_ops - mismatch_ops)
+
+    errors_count = 0
+    warnings_count = 0
+    for e in mismatch_entries:
+        reason = (e.get("reason") or "").lower()
+        if e.get("type") == "error" or "❌" in e.get("reason", "") or "لا يوجد مقابل" in reason:
+            errors_count += 1
+        elif "⚠️" in e.get("reason", ""):
+            warnings_count += 1
     return {
-        "token": create_token(username),
-        "username": username
-    }
-@app.post("/analyze")
-def analyze_api(
-    authorization: str = Header(None),
-    file1: UploadFile = File(...),
-    file2: UploadFile = File(...),
-    b1: str = Form(...),
-    b2: str = Form(...)
-):
-    # 🔥 حماية بدون ما يطيح
-    if not authorization:
-        raise HTTPException(401, "Missing token")
-
-    parts = authorization.split()
-
-    if len(parts) != 2:
-        raise HTTPException(401, "Invalid token format")
-
-    scheme, token = parts
-
-    check_auth(token)
-
-    d1 = process(file1.file, file1.filename, b1)
-    d2 = process(file2.file, file2.filename, b2)
-
-    errors, counts = analyze(d1, d2)
-
-    global last_errors
-    last_errors = errors
-
-    totals = {
-        b1: len(d1),
-        b2: len(d2)
+        "total_ops": total_ops,
+        "matched_ops": matched_ops,
+        "mismatch_ops": mismatch_ops,
+        "errors_count": errors_count,
+        "warnings_count": warnings_count,
     }
 
-    return {"errors": errors, "counts": counts, "totals": totals}
-    
-@app.get("/download")
-def download(authorization: str = Header(None)):
-    # 🔥 حماية بدون crash
-    if not authorization:
-        raise HTTPException(401, "Missing token")
 
-    parts = authorization.split()
 
-    if len(parts) != 2:
-        raise HTTPException(401, "Invalid token format")
 
-    scheme, token = parts
 
-    check_auth(token)
+===== backend\app\services\reports.py =====
+from __future__ import annotations
 
-    df = pd.DataFrame(last_errors)
-    name = f"report_{uuid.uuid4().hex}.xlsx"
-    df.to_excel(name, index=False)
+import csv
+import io
+from typing import Any, Dict, List
 
-    return FileResponse(name, filename="report.xlsx")
+
+def mismatches_to_csv_bytes(entries: List[Dict[str, Any]]) -> bytes:
+    """
+    Return CSV bytes encoded so that Excel opens Arabic correctly.
+    """
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    writer.writerow(["الفرع", "المبلغ", "نوع العملية", "التاريخ", "المستند", "السبب"])
+    for e in entries:
+        writer.writerow(
+            [
+                e.get("branch", ""),
+                e.get("amount", ""),
+                e.get("type", ""),
+                e.get("date", "") or "",
+                e.get("doc", "") or "",
+                e.get("reason", "") or "",
+            ]
+        )
+
+    # utf-8-sig helps Excel detect Arabic correctly
+    return output.getvalue().encode("utf-8-sig")
+
+
+
+
+
+===== backend\app\services\storage.py =====
+from __future__ import annotations
+
+import os
+import uuid
+from pathlib import Path
+from typing import Tuple
+
+from fastapi import UploadFile
+
+
+def ensure_dir(p: Path) -> None:
+    p.mkdir(parents=True, exist_ok=True)
+
+
+def save_upload_file(upload: UploadFile, dest_dir: Path) -> Tuple[str, str]:
+    """
+    Returns: (saved_path, original_filename)
+    """
+    ensure_dir(dest_dir)
+    original = upload.filename or "upload"
+    suffix = Path(original).suffix
+    saved_name = f"{uuid.uuid4().hex}{suffix}"
+    saved_path = dest_dir / saved_name
+
+    # UploadFile.file is a SpooledTemporaryFile; we read bytes once.
+    content = upload.file.read()
+    with open(saved_path, "wb") as f:
+        f.write(content)
+
+    return str(saved_path), original
+
+
+
+
+
+===== frontend\app.js =====
+function qs(name) {
+  return new URLSearchParams(window.location.search).get(name);
+}
+
+async function apiGet(url) {
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function apiPostForm(url, formData) {
+  const res = await fetch(url, { method: "POST", body: formData, headers: { Accept: "application/json" } });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+function showToast(msg, color = "#10b981") {
+  const t = document.getElementById("toast");
+  if (!t) return;
+  t.innerText = msg;
+  t.style.background = color;
+  t.classList.remove("hidden");
+  setTimeout(() => t.classList.add("hidden"), 3000);
+}
+
+function setLoading(btn, loading, text) {
+  if (!btn) return;
+  if (loading) {
+    btn.disabled = true;
+    btn.dataset.oldText = btn.innerText;
+    btn.innerHTML = text || "جارٍ التحليل ...";
+  } else {
+    btn.disabled = false;
+    btn.innerText = btn.dataset.oldText || (text || "ابدأ التحليل");
+  }
+}
+
+function renderReportRow(item) {
+  const li = document.createElement("div");
+  li.className = "bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-2";
+  li.innerHTML = `
+    <div class="flex items-start justify-between gap-4">
+      <div class="min-w-0">
+        <div class="font-extrabold text-slate-900 truncate">
+          ${item.title ? item.title : "تقرير بدون عنوان"}
+        </div>
+        <div class="text-sm text-slate-600 mt-1">
+          ${item.branch1_name} مقابل ${item.branch2_name}
+        </div>
+      </div>
+      <a class="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-sm font-extrabold" href="/report?id=${item.id}">عرض</a>
+    </div>
+    <div class="flex gap-3 flex-wrap">
+      <div class="text-sm text-slate-700"><span class="font-extrabold">متطابق:</span> ${item.stats.matched_ops}</div>
+      <div class="text-sm text-slate-700"><span class="font-extrabold">أخطاء:</span> ${item.stats.errors_count}</div>
+      <div class="text-sm text-slate-700"><span class="font-extrabold">تحذيرات:</span> ${item.stats.warnings_count}</div>
+    </div>
+    <button class="self-end px-3 py-1.5 rounded-lg border border-rose-200 text-rose-600 text-sm font-extrabold hover:bg-rose-50" onclick="deleteReport('${item.id}')">حذف</button>
+  `;
+  return li;
+}
+
+async function deleteReport(id) {
+  if (!confirm("هل تريد حذف هذا التقرير؟")) return;
+  const res = await fetch(`/reports?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: { Accept: "application/json" } });
+  if (!res.ok) {
+    showToast("فشل حذف التقرير", "#ef4444");
+    return;
+  }
+  showToast("تم الحذف ✔️", "#10b981");
+  await loadReports();
+}
+
+async function loadReports() {
+  const host = document.getElementById("reportsHost");
+  if (!host) return;
+  host.innerHTML = `
+    <div class="text-slate-600 text-center py-10">جارٍ تحميل التقارير ...</div>
+  `;
+  const data = await apiGet("/reports");
+  const items = data.items || [];
+  host.innerHTML = "";
+  if (!items.length) {
+    host.innerHTML = `<div class="text-slate-600 text-center py-10">لا توجد تقارير بعد.</div>`;
+    return;
+  }
+  for (const item of items) {
+    host.appendChild(renderReportRow(item));
+  }
+}
+
+function renderMismatchTable(entries, host) {
+  const rows = entries
+    .map((e) => {
+      const reason = e.reason || "";
+      const severity = e.type === "error" || reason.includes("❌") ? "error" : reason.includes("⚠️") ? "warning" : "mismatch";
+      const sevColor = severity === "error" ? "bg-rose-50 text-rose-700 border-rose-200" : severity === "warning" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-slate-50 text-slate-700 border-slate-200";
+      const sevText = severity === "error" ? "خطأ" : severity === "warning" ? "تحذير" : "مخالفة";
+      return `
+        <tr class="border-b border-slate-200">
+          <td class="px-3 py-3 text-sm text-slate-800">${e.branch || "-"}</td>
+          <td class="px-3 py-3 text-sm text-slate-800">${e.amount ?? "-"}</td>
+          <td class="px-3 py-3 text-sm text-slate-800">${e.type || "-"}</td>
+          <td class="px-3 py-3 text-sm text-slate-800">${e.date || "-"}</td>
+          <td class="px-3 py-3 text-sm text-slate-800">${e.doc || "-"}</td>
+          <td class="px-3 py-3 text-sm">
+            <span class="inline-flex items-center px-2 py-1 rounded-full border ${sevColor} text-xs font-extrabold">${sevText}</span>
+          </td>
+          <td class="px-3 py-3 text-sm text-slate-700">${reason || "-"}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  host.innerHTML = `
+    <table class="w-full text-right table-fixed">
+      <thead class="bg-slate-50">
+        <tr>
+          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold w-[120px]">الفرع</th>
+          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold w-[110px]">المبلغ</th>
+          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold w-[90px]">نوع</th>
+          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold w-[110px]">التاريخ</th>
+          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold">المستند</th>
+          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold w-[110px]">الحالة</th>
+          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold">السبب</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows || `<tr><td colspan="7" class="px-3 py-6 text-center text-slate-600">لا توجد بيانات</td></tr>`}
+      </tbody>
+    </table>
+  `;
+}
+
+function applyTableFilters(entries) {
+  const host = document.getElementById("mismatchTableHost");
+  if (!host) return;
+
+  const fDoc = (document.getElementById("filterDoc")?.value || "").toLowerCase().trim();
+  const fAmount = (document.getElementById("filterAmount")?.value || "").trim();
+  const fType = (document.getElementById("filterType")?.value || "").trim();
+
+  let filtered = entries;
+  if (fDoc) filtered = filtered.filter((x) => (x.doc || "").toLowerCase().includes(fDoc));
+  if (fAmount) filtered = filtered.filter((x) => String(x.amount ?? "") === fAmount);
+  if (fType) {
+    filtered = filtered.filter((x) => (x.reason || "").includes(fType));
+  }
+  renderMismatchTable(filtered, host);
+}
+
+async function loadReportDetail() {
+  const reportId = qs("id");
+  if (!reportId) {
+    showToast("معرّف التقرير غير موجود", "#ef4444");
+    return;
+  }
+  const data = await apiGet(`/report?id=${encodeURIComponent(reportId)}`);
+
+  document.getElementById("reportTitle").innerText = data.title || "تقرير بدون عنوان";
+  document.getElementById("reportBranches").innerText = `${data.branch1_name} مقابل ${data.branch2_name}`;
+
+  const stats = data.stats;
+  document.getElementById("statTotal").innerText = String(stats.total_ops);
+  document.getElementById("statMatched").innerText = String(stats.matched_ops);
+  document.getElementById("statErrors").innerText = String(stats.errors_count);
+  document.getElementById("statWarnings").innerText = String(stats.warnings_count);
+
+  const analysis = data.analysis_json || {};
+  const mismatches = analysis.mismatches || [];
+
+  window.__MISMATCHES__ = mismatches;
+  renderMismatchTable(mismatches, document.getElementById("mismatchTableHost"));
+}
+
+function downloadCSV(id) {
+  window.location.href = `/download?id=${encodeURIComponent(id)}`;
+}
+
+async function startAnalyze() {
+  const btn = document.getElementById("startBtn");
+  setLoading(btn, true, "جارٍ التحليل ...");
+  try {
+    const file1 = document.getElementById("file1").files?.[0] || null;
+    const file2 = document.getElementById("file2").files?.[0] || null;
+    const b1 = document.getElementById("b1").value || "الفرع الأول";
+    const b2 = document.getElementById("b2").value || "الفرع الثاني";
+    const title = document.getElementById("title").value || null;
+
+    if (!file1 || !file2) {
+      showToast("اختَر الملفين أولاً", "#ef4444");
+      return;
+    }
+
+    const fd = new FormData();
+    fd.append("file1", file1);
+    fd.append("file2", file2);
+    fd.append("b1", b1);
+    fd.append("b2", b2);
+    if (title) fd.append("title", title);
+
+    const data = await apiPostForm("/analyze", fd);
+    const id = data.reportId;
+    showToast("تم التحليل ✔️", "#10b981");
+    window.location.href = `/report?id=${encodeURIComponent(id)}`;
+  } catch (e) {
+    showToast(e.message || "فشل التحليل", "#ef4444");
+  } finally {
+    setLoading(btn, false, "ابدأ التحليل");
+  }
+}
+
+function initAnalyzePage() {
+  document.getElementById("startBtn")?.addEventListener("click", () => startAnalyze());
+}
+
+// deleteReport is global for inline onclick usage
+window.deleteReport = deleteReport;
+
+
+
+
+
+===== frontend\index.html =====
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AuditFlow</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+    </style>
+  </head>
+  <body class="bg-slate-50 text-slate-900">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold"></div>
+
+    <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
+      <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+        <div class="font-extrabold text-slate-900 text-lg">AuditFlow</div>
+        <nav class="flex gap-3">
+          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-slate-900 text-white" href="/">لوحة التحكم</a>
+          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/analyze">تحليل</a>
+          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/reports">التقارير</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-8">
+      <h1 class="text-3xl font-extrabold text-center">نظام المطابقة المالية</h1>
+      <p class="text-center text-slate-600 mt-2">ارفع ملفي Excel / PDF وقارن العمليات تلقائياً.</p>
+
+      <div class="grid md:grid-cols-3 gap-4 mt-8">
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <div class="text-slate-500 font-extrabold text-sm">آخر التقارير</div>
+          <div id="dashTotalReports" class="text-3xl font-extrabold mt-2">0</div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <div class="text-slate-500 font-extrabold text-sm">إجمالي الأخطاء (آخر تقرير)</div>
+          <div id="dashErrors" class="text-3xl font-extrabold mt-2">0</div>
+        </div>
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <div class="text-slate-500 font-extrabold text-sm">إجمالي التحذيرات (آخر تقرير)</div>
+          <div id="dashWarnings" class="text-3xl font-extrabold mt-2">0</div>
+        </div>
+      </div>
+
+      <section class="mt-8">
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="text-xl font-extrabold">آخر التقارير</h2>
+          <a class="text-sm font-extrabold text-slate-900 hover:underline" href="/reports">عرض الكل</a>
+        </div>
+        <div id="dashReportsHost" class="mt-4 grid gap-3 md:grid-cols-2"></div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+    <script>
+      (async function () {
+        try {
+          const data = await apiGet("/reports");
+          const items = data.items || [];
+          document.getElementById("dashTotalReports").innerText = String(items.length);
+          if (items.length) {
+            document.getElementById("dashErrors").innerText = String(items[0].stats.errors_count);
+            document.getElementById("dashWarnings").innerText = String(items[0].stats.warnings_count);
+          }
+
+          const host = document.getElementById("dashReportsHost");
+          host.innerHTML = "";
+          (items.slice(0, 6) || []).forEach((item) => {
+            const card = document.createElement("div");
+            card.className = "bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col gap-3";
+            card.innerHTML = `
+              <div class="flex items-start justify-between gap-4">
+                <div class="min-w-0">
+                  <div class="font-extrabold truncate">${item.title ? item.title : "تقرير بدون عنوان"}</div>
+                  <div class="text-sm text-slate-600 mt-1">${item.branch1_name} مقابل ${item.branch2_name}</div>
+                </div>
+                <a class="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-sm font-extrabold" href="/report?id=${item.id}">عرض</a>
+              </div>
+              <div class="flex gap-3 flex-wrap text-sm">
+                <div class="font-extrabold text-slate-800">أخطاء: <span class="text-rose-600">${item.stats.errors_count}</span></div>
+                <div class="font-extrabold text-slate-800">تحذيرات: <span class="text-amber-600">${item.stats.warnings_count}</span></div>
+              </div>
+            `;
+            host.appendChild(card);
+          });
+        } catch (e) {
+          console.error(e);
+        }
+      })();
+    </script>
+  </body>
+</html>
+
+
+
+
+
+===== frontend\analyze.html =====
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>تحليل - AuditFlow</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+    </style>
+  </head>
+  <body class="bg-slate-50 text-slate-900">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold"></div>
+
+    <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
+      <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+        <div class="font-extrabold text-slate-900 text-lg">AuditFlow</div>
+        <nav class="flex gap-3">
+          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/">لوحة التحكم</a>
+          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-slate-900 text-white" href="/analyze">تحليل</a>
+          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/reports">التقارير</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-8">
+      <div class="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 shadow-sm">
+        <h1 class="text-2xl md:text-3xl font-extrabold text-center">تحليل المطابقة المالية</h1>
+        <p class="text-center text-slate-600 mt-2">ارفع ملفي الفرع الأول والثاني (Excel/PDF) ثم شغّل التحليل.</p>
+
+        <div class="grid lg:grid-cols-2 gap-4 mt-6">
+          <section class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+            <div class="font-extrabold text-slate-900 mb-3">الفرع الأول</div>
+
+            <label class="block text-sm font-extrabold text-slate-700 mb-1">اسم الفرع</label>
+            <input id="b1" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10" value="الفرع الأول" />
+
+            <div class="flex gap-2 justify-center mt-3 mb-3">
+              <button type="button" id="b1_excel" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs active:bg-emerald-50 active:border-emerald-200 active:text-emerald-700" onclick="setType(1,'excel')">Excel</button>
+              <button type="button" id="b1_pdf" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs" onclick="setType(1,'pdf')">PDF</button>
+            </div>
+
+            <input type="file" id="file1" class="hidden" />
+            <div id="dz1" class="dropzone border-2 border-dashed border-slate-300 rounded-2xl bg-white h-28 flex items-center justify-center flex-col gap-1 cursor-pointer hover:border-slate-400" draggable="false">
+              <div class="text-sm font-extrabold text-slate-900">اسحب وأفلت</div>
+              <div class="text-xs text-slate-500">أو اضغط للاختيار</div>
+            </div>
+            <div id="fileName1" class="text-xs text-slate-500 mt-2 min-h-4"></div>
+          </section>
+
+          <section class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+            <div class="font-extrabold text-slate-900 mb-3">الفرع الثاني</div>
+
+            <label class="block text-sm font-extrabold text-slate-700 mb-1">اسم الفرع</label>
+            <input id="b2" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10" value="الفرع الثاني" />
+
+            <div class="flex gap-2 justify-center mt-3 mb-3">
+              <button type="button" id="b2_excel" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs" onclick="setType(2,'excel')">Excel</button>
+              <button type="button" id="b2_pdf" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs" onclick="setType(2,'pdf')">PDF</button>
+            </div>
+
+            <input type="file" id="file2" class="hidden" />
+            <div id="dz2" class="dropzone border-2 border-dashed border-slate-300 rounded-2xl bg-white h-28 flex items-center justify-center flex-col gap-1 cursor-pointer hover:border-slate-400" draggable="false">
+              <div class="text-sm font-extrabold text-slate-900">اسحب وأفلت</div>
+              <div class="text-xs text-slate-500">أو اضغط للاختيار</div>
+            </div>
+            <div id="fileName2" class="text-xs text-slate-500 mt-2 min-h-4"></div>
+          </section>
+        </div>
+
+        <div class="mt-6 flex items-center justify-center gap-3 flex-wrap">
+          <button id="startBtn" class="px-6 py-3 bg-slate-900 text-white rounded-2xl font-extrabold hover:bg-slate-800" onclick="startAnalyze()">ابدأ التحليل</button>
+          <input id="title" class="w-72 max-w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none" placeholder="عنوان التقرير (اختياري)" />
+        </div>
+      </div>
+    </main>
+
+    <script src="/static/app.js"></script>
+    <script>
+      let type1 = "excel";
+      let type2 = "pdf";
+
+      function setType(branch, type) {
+        if (branch === 1) type1 = type;
+        if (branch === 2) type2 = type;
+
+        const b1e = document.getElementById("b1_excel");
+        const b1p = document.getElementById("b1_pdf");
+        const b2e = document.getElementById("b2_excel");
+        const b2p = document.getElementById("b2_pdf");
+
+        if (b1e) b1e.className = "px-3 py-1.5 rounded-full border border-slate-200 font-extrabold text-xs" + (type1 === "excel" ? " bg-emerald-50 border-emerald-200 text-emerald-700" : " text-slate-600");
+        if (b1p) b1p.className = "px-3 py-1.5 rounded-full border border-slate-200 font-extrabold text-xs" + (type1 === "pdf" ? " bg-blue-50 border-blue-200 text-blue-700" : " text-slate-600");
+        if (b2e) b2e.className = "px-3 py-1.5 rounded-full border border-slate-200 font-extrabold text-xs" + (type2 === "excel" ? " bg-emerald-50 border-emerald-200 text-emerald-700" : " text-slate-600");
+        if (b2p) b2p.className = "px-3 py-1.5 rounded-full border border-slate-200 font-extrabold text-xs" + (type2 === "pdf" ? " bg-blue-50 border-blue-200 text-blue-700" : " text-slate-600");
+      }
+
+      function validate(file, expected) {
+        if (!file) return false;
+        const n = (file.name || "").toLowerCase();
+        if (expected === "excel") return /\.(xlsx|xls|xlsm|xlsb|csv)$/.test(n);
+        if (expected === "pdf") return n.endsWith(".pdf");
+        return true;
+      }
+
+      function bindDZ(dzId, inputId, expectedGetter, fileNameId) {
+        const dz = document.getElementById(dzId);
+        const inp = document.getElementById(inputId);
+        const fileName = document.getElementById(fileNameId);
+        if (!dz || !inp) return;
+
+        dz.addEventListener("click", () => inp.click());
+        dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.classList.add("border-slate-500"); });
+        dz.addEventListener("dragleave", () => dz.classList.remove("border-slate-500"));
+        dz.addEventListener("drop", (e) => {
+          e.preventDefault();
+          dz.classList.remove("border-slate-500");
+          const file = e.dataTransfer?.files?.[0];
+          if (!file || !validate(file, expectedGetter())) {
+            showToast("نوع الملف غير صحيح", "#ef4444");
+            return;
+          }
+          inp.files = e.dataTransfer.files;
+          if (fileName) fileName.innerText = "تم اختيار: " + file.name;
+        });
+
+        inp.addEventListener("change", () => {
+          const file = inp.files?.[0] || null;
+          if (file && !validate(file, expectedGetter())) {
+            showToast("نوع الملف غير صحيح", "#ef4444");
+            inp.value = "";
+            if (fileName) fileName.innerText = "";
+            return;
+          }
+          if (fileName) fileName.innerText = file ? ("تم اختيار: " + file.name) : "";
+        });
+      }
+
+      bindDZ("dz1", "file1", () => type1, "fileName1");
+      bindDZ("dz2", "file2", () => type2, "fileName2");
+
+      // activate defaults
+      setType(1, "excel");
+      setType(2, "pdf");
+
+      async function startAnalyze() {
+        const btn = document.getElementById("startBtn");
+        setLoading(btn, true, "جارٍ التحليل ...");
+        try {
+          const file1 = document.getElementById("file1").files?.[0] || null;
+          const file2 = document.getElementById("file2").files?.[0] || null;
+          const b1 = document.getElementById("b1").value || "الفرع الأول";
+          const b2 = document.getElementById("b2").value || "الفرع الثاني";
+          const title = document.getElementById("title").value || "";
+
+          if (!file1 || !file2) {
+            showToast("اختَر ملفي الفرعين أولاً", "#ef4444");
+            return;
+          }
+
+          const fd = new FormData();
+          fd.append("file1", file1);
+          fd.append("file2", file2);
+          fd.append("b1", b1);
+          fd.append("b2", b2);
+          if (title) fd.append("title", title);
+
+          const data = await apiPostForm("/analyze", fd);
+          showToast("تم التحليل ✔️", "#10b981");
+          window.location.href = `/report?id=${encodeURIComponent(data.reportId)}`;
+        } catch (e) {
+          showToast(e.message || "فشل التحليل", "#ef4444");
+        } finally {
+          setLoading(btn, false, "ابدأ التحليل");
+        }
+      }
+    </script>
+  </body>
+</html>
+
+
+
+
+
+===== frontend\reports.html =====
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>التقارير - AuditFlow</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+    </style>
+  </head>
+  <body class="bg-slate-50 text-slate-900">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold"></div>
+
+    <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
+      <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+        <div class="font-extrabold text-slate-900 text-lg">AuditFlow</div>
+        <nav class="flex gap-3">
+          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/">لوحة التحكم</a>
+          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/analyze">تحليل</a>
+          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-slate-900 text-white" href="/reports">التقارير</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-8">
+      <div class="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <h1 class="text-2xl font-extrabold">التقارير</h1>
+          <a href="/analyze" class="px-4 py-2 rounded-2xl bg-slate-900 text-white font-extrabold hover:bg-slate-800">تحليل جديد</a>
+        </div>
+
+        <div id="reportsHost" class="mt-6 grid gap-4 md:grid-cols-2"></div>
+      </div>
+    </main>
+
+    <script src="/static/app.js"></script>
+    <script>
+      loadReports().catch((e) => {
+        console.error(e);
+        showToast("فشل تحميل التقارير", "#ef4444");
+      });
+    </script>
+  </body>
+</html>
+
+
+
+
+
+===== frontend\report.html =====
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>تقرير - AuditFlow</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+    </style>
+  </head>
+  <body class="bg-slate-50 text-slate-900">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold"></div>
+
+    <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
+      <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+        <div class="font-extrabold text-slate-900 text-lg">AuditFlow</div>
+        <nav class="flex gap-3">
+          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/">لوحة التحكم</a>
+          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/analyze">تحليل</a>
+          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/reports">التقارير</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-8">
+      <div class="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 shadow-sm">
+        <div class="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 id="reportTitle" class="text-2xl font-extrabold">تقرير</h1>
+            <div id="reportBranches" class="text-slate-600 font-extrabold mt-2"></div>
+          </div>
+          <div class="flex gap-2">
+            <button
+              id="downloadBtn"
+              class="px-4 py-2 rounded-2xl bg-emerald-500 text-white font-extrabold hover:bg-emerald-600"
+              onclick="downloadCSV(qs('id'))"
+            >
+              تحميل CSV
+            </button>
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-4 gap-4 mt-6">
+          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+            <div class="text-slate-500 font-extrabold text-sm">الإجمالي</div>
+            <div id="statTotal" class="text-3xl font-extrabold mt-2">0</div>
+          </div>
+          <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
+            <div class="text-emerald-700 font-extrabold text-sm">متطابق</div>
+            <div id="statMatched" class="text-3xl font-extrabold mt-2 text-emerald-800">0</div>
+          </div>
+          <div class="bg-rose-50 border border-rose-200 rounded-2xl p-4">
+            <div class="text-rose-700 font-extrabold text-sm">أخطاء</div>
+            <div id="statErrors" class="text-3xl font-extrabold mt-2 text-rose-800">0</div>
+          </div>
+          <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+            <div class="text-amber-700 font-extrabold text-sm">تحذيرات</div>
+            <div id="statWarnings" class="text-3xl font-extrabold mt-2 text-amber-800">0</div>
+          </div>
+        </div>
+
+        <div class="mt-6 bg-slate-50 border border-slate-200 rounded-2xl p-4">
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <h2 class="font-extrabold">فلترة الأخطاء</h2>
+            <div class="flex gap-2 flex-wrap">
+              <input id="filterDoc" placeholder="نوع المستند" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none" />
+              <input id="filterAmount" placeholder="المبلغ" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none w-32" />
+              <input id="filterType" placeholder="نوع الخطأ (❌ أو ⚠️)" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none w-44" />
+              <button class="px-4 py-2 rounded-xl bg-slate-900 text-white font-extrabold text-sm" onclick="applyTableFilters(window.__MISMATCHES__ || [])">تطبيق</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="mismatchTableHost" class="mt-4 overflow-auto rounded-2xl border border-slate-200"></div>
+      </div>
+    </main>
+
+    <script src="/static/app.js"></script>
+    <script>
+      window.addEventListener("DOMContentLoaded", () => {
+        loadReportDetail().catch((e) => {
+          console.error(e);
+          showToast("فشل تحميل التقرير", "#ef4444");
+        });
+      });
+    </script>
+  </body>
+</html>
+
+
+
+
+
