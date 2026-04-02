@@ -746,12 +746,13 @@ def mismatches_to_excel_bytes(entries: List[Dict[str, Any]]) -> bytes:
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
-    # Ordered to match requested visual layout (RTL): amount, date, doc, reason
-    headers = ["المبلغ", "التاريخ", "المستند", "السبب"]
+    # Ordered to match requested visual layout (RTL) with branch restored
+    headers = ["الفرع", "المبلغ", "التاريخ", "المستند", "السبب"]
     rows = []
     for e in entries:
         rows.append(
             [
+                e.get("branch", "") or "",
                 e.get("amount", ""),
                 e.get("date", "") or "",
                 e.get("doc", "") or "",
@@ -788,10 +789,11 @@ def mismatches_to_excel_bytes(entries: List[Dict[str, Any]]) -> bytes:
             cell.border = border
 
     # Widths close to screenshot proportions
-    ws.column_dimensions["A"].width = 14  # المبلغ
-    ws.column_dimensions["B"].width = 16  # التاريخ
-    ws.column_dimensions["C"].width = 20  # المستند
-    ws.column_dimensions["D"].width = 48  # السبب
+    ws.column_dimensions["A"].width = 20  # الفرع
+    ws.column_dimensions["B"].width = 14  # المبلغ
+    ws.column_dimensions["C"].width = 16  # التاريخ
+    ws.column_dimensions["D"].width = 20  # المستند
+    ws.column_dimensions["E"].width = 48  # السبب
 
     ws.freeze_panes = "A2"
 
@@ -819,10 +821,11 @@ def mismatches_to_pdf_bytes(entries: List[Dict[str, Any]]) -> bytes:
     )
 
     # Keep same order/shape as Excel export
-    data = [["المبلغ", "التاريخ", "المستند", "السبب"]]
+    data = [["الفرع", "المبلغ", "التاريخ", "المستند", "السبب"]]
     for e in entries:
         data.append(
             [
+                str(e.get("branch", "") or ""),
                 str(e.get("amount", "") or ""),
                 str(e.get("date", "") or ""),
                 str(e.get("doc", "") or ""),
@@ -830,7 +833,7 @@ def mismatches_to_pdf_bytes(entries: List[Dict[str, Any]]) -> bytes:
             ]
         )
 
-    table = Table(data, colWidths=[70, 90, 110, 260], repeatRows=1)
+    table = Table(data, colWidths=[90, 60, 80, 90, 210], repeatRows=1)
     table.setStyle(
         TableStyle(
             [
@@ -1050,6 +1053,27 @@ async function loadReportDetail() {
 
   const analysis = data.analysis_json || {};
   const mismatches = analysis.mismatches || [];
+  const counts = analysis.counts || {};
+  const statsJson = data.stats_json || {};
+  const b1Total = Number(statsJson.branch1_total || 0);
+  const b2Total = Number(statsJson.branch2_total || 0);
+  const b1Err = Number(counts[data.branch1_name] || 0);
+  const b2Err = Number(counts[data.branch2_name] || 0);
+  const b1Rate = b1Total > 0 ? ((b1Err / b1Total) * 100).toFixed(1) : "0.0";
+  const b2Rate = b2Total > 0 ? ((b2Err / b2Total) * 100).toFixed(1) : "0.0";
+
+  const b1ErrEl = document.getElementById("branch1Errors");
+  const b2ErrEl = document.getElementById("branch2Errors");
+  const b1RateEl = document.getElementById("branch1Rate");
+  const b2RateEl = document.getElementById("branch2Rate");
+  const b1Label = document.getElementById("branch1Label");
+  const b2Label = document.getElementById("branch2Label");
+  if (b1ErrEl) b1ErrEl.innerText = String(b1Err);
+  if (b2ErrEl) b2ErrEl.innerText = String(b2Err);
+  if (b1RateEl) b1RateEl.innerText = `${b1Rate}%`;
+  if (b2RateEl) b2RateEl.innerText = `${b2Rate}%`;
+  if (b1Label) b1Label.innerText = data.branch1_name;
+  if (b2Label) b2Label.innerText = data.branch2_name;
 
   window.__MISMATCHES__ = mismatches;
   renderMismatchTable(mismatches, document.getElementById("mismatchTableHost"));
@@ -1066,12 +1090,16 @@ async function startAnalyze() {
   try {
     const file1 = document.getElementById("file1").files?.[0] || null;
     const file2 = document.getElementById("file2").files?.[0] || null;
-    const b1 = document.getElementById("b1").value || "الفرع الأول";
-    const b2 = document.getElementById("b2").value || "الفرع الثاني";
+    const b1 = (document.getElementById("b1").value || "").trim();
+    const b2 = (document.getElementById("b2").value || "").trim();
     const title = document.getElementById("title").value || null;
 
     if (!file1 || !file2) {
       showToast("اختَر الملفين أولاً", "#ef4444");
+      return;
+    }
+    if (!b1 || !b2) {
+      showToast("اكتب اسم الفرع الأول والثاني", "#ef4444");
       return;
     }
 
@@ -1373,7 +1401,7 @@ ANALYZE_HTML = r"""<!doctype html>
             <div class="font-extrabold text-slate-900 mb-3">الفرع الأول</div>
 
             <label class="block text-sm font-extrabold text-slate-700 mb-1">اسم الفرع</label>
-            <input id="b1" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10" value="الفرع الأول" />
+            <input id="b1" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="اكتب اسم الفرع الأول هنا" />
 
             <div class="flex gap-2 justify-center mt-3 mb-3">
               <button type="button" id="b1_excel" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs active:bg-emerald-50 active:border-emerald-200 active:text-emerald-700" onclick="setType(1,'excel')">Excel</button>
@@ -1392,7 +1420,7 @@ ANALYZE_HTML = r"""<!doctype html>
             <div class="font-extrabold text-slate-900 mb-3">الفرع الثاني</div>
 
             <label class="block text-sm font-extrabold text-slate-700 mb-1">اسم الفرع</label>
-            <input id="b2" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10" value="الفرع الثاني" />
+            <input id="b2" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="اكتب اسم الفرع الثاني هنا" />
 
             <div class="flex gap-2 justify-center mt-3 mb-3">
               <button type="button" id="b2_excel" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs" onclick="setType(2,'excel')">Excel</button>
@@ -1617,6 +1645,19 @@ REPORT_HTML = r"""<!doctype html>
           <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4">
             <div class="text-amber-700 font-extrabold text-sm">تحذيرات</div>
             <div id="statWarnings" class="text-3xl font-extrabold mt-2 text-amber-800">0</div>
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4 mt-4">
+          <div class="bg-rose-50 border border-rose-200 rounded-2xl p-4">
+            <div class="text-rose-700 font-extrabold text-sm">أخطاء <span id="branch1Label">الفرع الأول</span></div>
+            <div id="branch1Errors" class="text-3xl font-extrabold mt-2 text-rose-800">0</div>
+            <div class="text-sm text-rose-700 mt-1">نسبة الخطأ: <span id="branch1Rate" class="font-extrabold">0.0%</span></div>
+          </div>
+          <div class="bg-rose-50 border border-rose-200 rounded-2xl p-4">
+            <div class="text-rose-700 font-extrabold text-sm">أخطاء <span id="branch2Label">الفرع الثاني</span></div>
+            <div id="branch2Errors" class="text-3xl font-extrabold mt-2 text-rose-800">0</div>
+            <div class="text-sm text-rose-700 mt-1">نسبة الخطأ: <span id="branch2Rate" class="font-extrabold">0.0%</span></div>
           </div>
         </div>
 
