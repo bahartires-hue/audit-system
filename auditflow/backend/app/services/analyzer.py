@@ -62,11 +62,11 @@ def _column_name_excludes_from_amount(col: Any) -> bool:
     name = str(col).lower().strip()
     if not name or name.isdigit():
         return False
+    if name in ("السند", "سند"):
+        return True
     block = (
         "رقم السند",
         "رقم سند",
-        "السند",
-        "سند",
         "الرصيد",
         "رصيد",
         "balance",
@@ -99,6 +99,24 @@ def _column_values_look_like_ids(series: pd.Series) -> bool:
     return False
 
 
+def _is_balance_column_name(col: Any) -> bool:
+    n = str(col).lower()
+    return "رصيد" in n or "balance" in n
+
+
+def _currency_amount_rank(series: pd.Series) -> float:
+    nums = pd.to_numeric(series, errors="coerce").dropna()
+    if len(nums) == 0:
+        return float("-inf")
+    mean_v = float(nums.mean())
+    max_v = float(nums.max())
+    frac_decimal = ((nums % 1).abs() > 0.001).sum() / len(nums)
+    score = mean_v + frac_decimal * min(500_000.0, mean_v * 2.0 + 1.0)
+    if frac_decimal < 0.08 and max_v <= 99_999_999:
+        score -= min(400_000.0, mean_v * 1.5 + 100_000.0)
+    return score
+
+
 def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     df.columns = df.columns.astype(str).str.strip()
 
@@ -117,9 +135,14 @@ def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Opti
         if any(x in name for x in ["تاريخ", "التاريخ", "التأريخ", "date"]):
             date_col = col
 
-    numeric_cols: List[Tuple[str, float]] = []
+    named_debit = debit_col is not None
+    named_credit = credit_col is not None
+
+    numeric_cols: List[Tuple[str, float, float]] = []
     for col in df.columns:
         if _column_name_excludes_from_amount(col):
+            continue
+        if _is_balance_column_name(col):
             continue
         nums = pd.to_numeric(df[col], errors="coerce")
         valid = nums.dropna()
@@ -137,13 +160,33 @@ def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Opti
             continue
         if not _is_plausible_currency_amount(max_val):
             continue
-        numeric_cols.append((col, float(mean_val)))
+        numeric_cols.append((col, float(mean_val), _currency_amount_rank(df[col])))
 
-    numeric_cols.sort(key=lambda x: x[1], reverse=True)
-    if not debit_col and len(numeric_cols) >= 1:
-        debit_col = numeric_cols[0][0]
-    if not credit_col and len(numeric_cols) >= 2:
-        credit_col = numeric_cols[1][0]
+    ranked_by_score = sorted(numeric_cols, key=lambda x: x[2], reverse=True)
+
+    if not named_debit and not named_credit:
+        ordered = sorted(
+            numeric_cols,
+            key=lambda t: list(df.columns).index(t[0]),
+        )
+        r_tail = max(ordered[-2][2], ordered[-1][2]) if len(ordered) >= 2 else (ordered[0][2] if ordered else 0.0)
+        while len(ordered) > 2 and r_tail > 0 and ordered[0][2] < r_tail * 0.2:
+            ordered.pop(0)
+        if len(ordered) >= 2:
+            debit_col, credit_col = ordered[-2][0], ordered[-1][0]
+        elif len(ordered) == 1:
+            debit_col = ordered[0][0]
+    else:
+        if not debit_col and len(ranked_by_score) >= 1:
+            for col, _, _ in ranked_by_score:
+                if col != credit_col:
+                    debit_col = col
+                    break
+        if not credit_col and len(ranked_by_score) >= 1:
+            for col, _, _ in ranked_by_score:
+                if col != debit_col:
+                    credit_col = col
+                    break
 
     if not date_col:
         for col in df.columns:
@@ -178,11 +221,36 @@ def detect_document_type_column(df: pd.DataFrame) -> Optional[str]:
             continue
         if n == "نوع" or (n.startswith("نوع") and "عميل" not in n and "مورد" not in n and "حساب" not in n):
             return col
+    for col in df.columns:
+        n = str(col).strip().lower()
+        if "رقم السند" in n or "رقم سند" in n:
+            continue
+        for key in ("نوع القيد", "نوع الحركة", "طبيعة القيد", "تصنيف الحركة"):
+            if key in n:
+                return col
     return None
 
 
+def resolve_document_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str]]:
+    primary = detect_document_type_column(df)
+    fallback: Optional[str] = None
+    if primary is None:
+        for col in df.columns:
+            n = str(col).strip().lower()
+            if "رقم السند" in n or "رقم سند" in n or n in ("#", "م"):
+                continue
+            if "بيان" in n and "ضريبي" not in n:
+                fallback = col
+                break
+    return primary, fallback
+
+
 def extract_row_date_doc(
-    row: pd.Series, df: pd.DataFrame, date_col: Optional[str], doc_col: Optional[str]
+    row: pd.Series,
+    df: pd.DataFrame,
+    date_col: Optional[str],
+    doc_col: Optional[str],
+    doc_fallback_col: Optional[str] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
     date_out: Optional[str] = None
     if date_col and date_col in df.columns:
@@ -197,12 +265,19 @@ def extract_row_date_doc(
             date_out = str(row[date_col])
 
     doc_out: Optional[str] = None
-    if doc_col and doc_col in df.columns:
-        val = row[doc_col]
-        if pd.notna(val):
-            raw = str(val).strip()
-            if not _is_voucher_number_string(raw):
-                doc_out = raw
+    for col in (doc_col, doc_fallback_col):
+        if not col or col not in df.columns:
+            continue
+        val = row[col]
+        if pd.isna(val):
+            continue
+        raw = str(val).strip()
+        if not raw:
+            continue
+        if _is_voucher_number_string(raw):
+            continue
+        doc_out = raw if len(raw) <= 200 else (raw[:200] + "…")
+        break
 
     return date_out, doc_out
 
@@ -240,6 +315,20 @@ def _debit_credit_from_tail_numbers(numbers: List[str]) -> Tuple[Optional[float]
     vals = [v for v in vals if v is not None]
     if not vals:
         return None, None
+    while len(vals) >= 4 and vals[0] is not None:
+        v0 = vals[0]
+        if v0 == int(v0) and 1 <= abs(v0) <= 999:
+            vals = vals[1:]
+            continue
+        if (
+            v0 == int(v0)
+            and 1_000 <= abs(v0) <= 9_999_999
+            and vals[1] is not None
+            and abs(vals[1]) > abs(v0) * 3
+        ):
+            vals = vals[1:]
+            continue
+        break
     if len(vals) == 1:
         return vals[0], None
     if len(vals) >= 5:
@@ -330,13 +419,22 @@ def _extract_pdf_rows_from_text(raw_text: str) -> List[Dict[str, Any]]:
         if (debit_val is None or abs(debit_val) < 0.0001) and (credit_val is None or abs(credit_val) < 0.0001):
             continue
 
+        doc_text = work_line
+        if numbers:
+            fm = num_pat.search(work_line)
+            if fm:
+                doc_text = work_line[: fm.start()].strip()
+        doc_text = re.sub(r"\s+", " ", doc_text).strip()
+        if len(doc_text) > 160:
+            doc_text = doc_text[:160] + "…"
+
         rows.append(
             {
                 "التاريخ": effective_date,
                 "مدين": debit_val if debit_val is not None else "",
                 "دائن": credit_val if credit_val is not None else "",
                 "بيان": raw_line.strip(),
-                "مستند": "",
+                "مستند": doc_text or "",
             }
         )
 
@@ -570,34 +668,7 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
 
     df.columns = df.columns.astype(str).str.strip()
     debit_col, credit_col, date_col = detect_columns(df)
-    doc_col = detect_document_type_column(df)
-
-    if not debit_col and not credit_col:
-        numeric_cols: List[Tuple[str, float]] = []
-        for col in df.columns:
-            if _column_name_excludes_from_amount(col):
-                continue
-            nums = pd.to_numeric(df[col], errors="coerce").dropna()
-            frac = 0.3 if len(df) >= 12 else 0.15
-            need = max(1, int(len(df) * frac + 0.5))
-            if len(df) >= 4:
-                need = max(2, need)
-            if len(nums) < need:
-                continue
-            if _column_values_look_like_ids(df[col]):
-                continue
-            mean_val = float(nums.mean())
-            max_val = float(nums.max())
-            if mean_val < 10 and max_val < 10:
-                continue
-            if not _is_plausible_currency_amount(max_val):
-                continue
-            numeric_cols.append((col, mean_val))
-        numeric_cols.sort(key=lambda x: x[1], reverse=True)
-        if len(numeric_cols) >= 1:
-            debit_col = numeric_cols[0][0]
-        if len(numeric_cols) >= 2:
-            credit_col = numeric_cols[1][0]
+    doc_col, doc_fb = resolve_document_columns(df)
 
     data: List[Dict[str, Any]] = []
     for _, row in df.iterrows():
@@ -611,7 +682,7 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
             continue
 
         if debit and credit and debit > 0 and credit > 0:
-            date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col)
+            date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col, doc_fb)
             amount = max(debit, credit)
             t = "credit" if credit >= debit else "debit"
             data.append(
@@ -634,7 +705,7 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
         else:
             continue
 
-        date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col)
+        date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col, doc_fb)
         data.append(
             {
                 "amount": float(amount),
@@ -723,19 +794,24 @@ def analyze(d1: List[Dict[str, Any]], d2: List[Dict[str, Any]]) -> Tuple[List[Di
             score += 20
             reasons.append("نوع مستند مطابق")
 
+        both_no_doc = not d1m and not d2m
         days = date_diff_days(x1["date"], x2["date"])
         if days is None:
-            score -= 10
+            score -= 5
             reasons.append("تاريخ غير واضح")
         elif days == 0:
             score += 20
             reasons.append("نفس اليوم")
-        elif days <= 2:
+        elif days <= 7:
             score += 10
             reasons.append("تاريخ قريب")
+        elif days <= 45:
+            reasons.append("فارق تاريخ ضمن المدى")
+        elif both_no_doc:
+            reasons.append("فارق تاريخ (بدون بيان مستند)")
         else:
-            score -= 10
-            reasons.append("تاريخ بعيد")
+            score -= 5
+            reasons.append("تاريخ بعيد جدا مع اختلاف بيان المستند")
 
         return score, reasons
 
