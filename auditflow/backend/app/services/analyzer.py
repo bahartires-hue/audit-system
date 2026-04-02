@@ -200,7 +200,9 @@ def extract_row_date_doc(
     if doc_col and doc_col in df.columns:
         val = row[doc_col]
         if pd.notna(val):
-            doc_out = str(val).strip()
+            raw = str(val).strip()
+            if not _is_voucher_number_string(raw):
+                doc_out = raw
 
     return date_out, doc_out
 
@@ -501,10 +503,30 @@ def clean(s: Any) -> str:
     return s
 
 
+def _is_voucher_number_string(s: Any) -> bool:
+    if s is None or (isinstance(s, float) and pd.isna(s)):
+        return False
+    t = str(s).strip().translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789"))
+    t = t.replace(",", "").replace("٬", "").replace(" ", "")
+    if not t or "." in t or "٫" in str(s):
+        return False
+    return bool(re.fullmatch(r"\d{3,20}", t))
+
+
+def _doc_for_matching(d: Any) -> Optional[str]:
+    if d is None or (isinstance(d, str) and not str(d).strip()):
+        return None
+    if _is_voucher_number_string(d):
+        return None
+    return str(d).strip()
+
+
 def match_doc(d1: Any, d2: Any) -> bool:
     if not d1 and not d2:
         return True
     if not d1 or not d2:
+        return False
+    if _is_voucher_number_string(d1) or _is_voucher_number_string(d2):
         return False
 
     d1 = clean(d1)
@@ -650,8 +672,9 @@ def analyze(d1: List[Dict[str, Any]], d2: List[Dict[str, Any]]) -> Tuple[List[Di
                 days = date_diff_days(x1["date"], x2["date"])
                 if days is None or days > 1:
                     continue
-                if x1.get("doc") and x2.get("doc"):
-                    if not match_doc(x1["doc"], x2["doc"]):
+                dm1, dm2 = _doc_for_matching(x1.get("doc")), _doc_for_matching(x2.get("doc"))
+                if dm1 and dm2:
+                    if not match_doc(dm1, dm2):
                         continue
                 used_local[i] = True
                 used_local[j] = True
@@ -692,9 +715,13 @@ def analyze(d1: List[Dict[str, Any]], d2: List[Dict[str, Any]]) -> Tuple[List[Di
         else:
             return 0, ["نفس الاتجاه"]
 
-        if x1.get("doc") and x2.get("doc"):
-            if not match_doc(x1["doc"], x2["doc"]):
+        d1m = _doc_for_matching(x1.get("doc"))
+        d2m = _doc_for_matching(x2.get("doc"))
+        if d1m and d2m:
+            if not match_doc(d1m, d2m):
                 return 0, ["اختلاف نوع المستند"]
+            score += 20
+            reasons.append("نوع مستند مطابق")
 
         days = date_diff_days(x1["date"], x2["date"])
         if days is None:
@@ -709,13 +736,6 @@ def analyze(d1: List[Dict[str, Any]], d2: List[Dict[str, Any]]) -> Tuple[List[Di
         else:
             score -= 10
             reasons.append("تاريخ بعيد")
-
-        if match_doc(x1.get("doc"), x2.get("doc")):
-            score += 20
-            reasons.append("نوع مستند مطابق")
-        else:
-            score -= 10
-            reasons.append("اختلاف نوع المستند")
 
         return score, reasons
 
