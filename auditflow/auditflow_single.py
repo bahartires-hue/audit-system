@@ -339,6 +339,68 @@ def read_excel(file_path: str) -> Optional[pd.DataFrame]:
     return df.dropna(how="all")
 
 
+def _normalize_arabic_digits(text: str) -> str:
+    trans = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
+    return text.translate(trans)
+
+
+def _parse_number_token(token: str) -> Optional[float]:
+    t = _normalize_arabic_digits(str(token))
+    t = t.replace("٬", "").replace(",", "")
+    t = t.replace("٫", ".")
+    t = re.sub(r"[^\d\.\-+]", "", t)
+    if not t:
+        return None
+    try:
+        return float(t)
+    except Exception:
+        return None
+
+
+def _extract_pdf_rows_from_text(raw_text: str) -> List[Dict[str, Any]]:
+    date_pat = re.compile(r"(\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})")
+    num_pat = re.compile(r"[-+]?\d[\d,٬٫\.]*")
+
+    rows: List[Dict[str, Any]] = []
+    for raw_line in (raw_text or "").splitlines():
+        line = _normalize_arabic_digits(raw_line).strip()
+        if len(line) < 8:
+            continue
+
+        date_m = date_pat.search(line)
+        if not date_m:
+            continue
+
+        numbers = [n for n in num_pat.findall(line) if _parse_number_token(n) is not None]
+        if not numbers:
+            continue
+
+        # In most statements, the last two numeric values are debit/credit.
+        debit_val: Optional[float] = None
+        credit_val: Optional[float] = None
+        if len(numbers) >= 2:
+            debit_val = _parse_number_token(numbers[-2])
+            credit_val = _parse_number_token(numbers[-1])
+        else:
+            debit_val = _parse_number_token(numbers[-1])
+
+        if (debit_val is None or abs(debit_val) < 0.0001) and (credit_val is None or abs(credit_val) < 0.0001):
+            continue
+
+        statement = line
+        rows.append(
+            {
+                "التاريخ": date_m.group(1),
+                "مدين": debit_val if debit_val is not None else "",
+                "دائن": credit_val if credit_val is not None else "",
+                "بيان": statement,
+                "مستند": "",
+            }
+        )
+
+    return rows
+
+
 def read_pdf(file_path: str) -> Optional[pd.DataFrame]:
     rows: List[List[Any]] = []
     with pdfplumber.open(file_path) as pdf:
@@ -351,15 +413,22 @@ def read_pdf(file_path: str) -> Optional[pd.DataFrame]:
                     if row and any(cell is not None for cell in row):
                         rows.append(row)
 
-    if not rows:
-        return None
+    # Path 1: classic table extraction
+    if rows:
+        df = pd.DataFrame(rows).dropna(how="all")
+        if len(df) >= 2:
+            df.columns = df.iloc[0]
+            df = df[1:].dropna(how="all")
+            if not df.empty:
+                return df
 
-    df = pd.DataFrame(rows).dropna(how="all")
-    if len(df) < 2:
+    # Path 2: text fallback for semi-structured statements
+    with pdfplumber.open(file_path) as pdf:
+        all_text = "\n".join([(p.extract_text() or "") for p in pdf.pages])
+    parsed_rows = _extract_pdf_rows_from_text(all_text)
+    if not parsed_rows:
         return None
-    df.columns = df.iloc[0]
-    df = df[1:].dropna(how="all")
-    return df
+    return pd.DataFrame(parsed_rows).dropna(how="all")
 
 
 def read_any(file_path: str, filename: str) -> pd.DataFrame:
