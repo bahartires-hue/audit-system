@@ -554,12 +554,8 @@ def extract_row_date_doc(
 def _skip_likely_pdf_line_index_row(
     amount: float, debit: Optional[float], credit: Optional[float], both_positive: bool
 ) -> bool:
-    if both_positive:
-        return False
-    if amount != int(amount):
-        return False
-    a = int(abs(amount))
-    return 1 <= a <= 9
+    # Do not drop tiny amounts (e.g., 1 SAR invoices).
+    return False
 
 
 def _row_narrative_for_amounts(
@@ -1151,7 +1147,7 @@ def analyze(
             score += 30
             reasons.append("مبلغ قريب")
         else:
-            return 0, ["فرق مبلغ كبير"]
+            reasons.append("فرق مبلغ (غير مانع)")
 
         if (x1["type"] == "credit" and x2["type"] == "debit") or (x1["type"] == "debit" and x2["type"] == "credit"):
             score += 30
@@ -1214,9 +1210,9 @@ def analyze(
                 best_i = i
                 best_reason = reasons
 
-        if best_score >= 80 and best_i != -1:
+        if best_score >= 60 and best_i != -1:
             used[best_i] = True
-        elif best_score >= 60 and best_i != -1:
+        elif best_score >= 45 and best_i != -1:
             res.append({**x1, "reason": f"تطابق ضعيف ⚠️ | score={best_score} | {' , '.join(best_reason)}"})
             used[best_i] = True
         else:
