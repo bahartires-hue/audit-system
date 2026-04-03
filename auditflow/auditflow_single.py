@@ -983,6 +983,21 @@ def _debit_credit_from_tail_numbers(numbers: List[str]) -> Tuple[Optional[float]
             return vals[-2], vals[-1]
         return vals[-3], vals[-2]
     if len(vals) == 3:
+        # غالباً: (مدين، دائن، رصيد) أو (رصيد، مدين، 0) — لا نأخذ الرصيد كمبلغ حركة.
+        near_z = [i for i, v in enumerate(vals) if abs(float(v)) < 0.01]
+        nz = [float(v) for v in vals if abs(float(v)) >= 0.01]
+        if len(near_z) == 1 and len(nz) == 2:
+            p, q = sorted(nz)
+            if q >= p * 1.12 - 1e-9:
+                zi = near_z[0]
+                if zi == 2:
+                    if vals[0] is not None and vals[1] is not None and float(vals[0]) > float(vals[1]) * 1.12:
+                        return vals[1], None
+                    return vals[0], None
+                if zi == 1:
+                    return vals[0], None
+                if zi == 0:
+                    return None, vals[1]
         third = vals[0]
         if third is not None and third == int(third) and abs(third) >= 10000:
             return vals[-2], vals[-1]
@@ -1067,6 +1082,10 @@ def _extract_pdf_rows_from_text(raw_text: str) -> List[Dict[str, Any]]:
 
         effective_date = (date_m.group(1).strip() if date_m else None) or last_date
         if not effective_date:
+            continue
+
+        low_for_totals = _arabic_letters_for_match(work_line)
+        if "اجمال" in low_for_totals:
             continue
 
         numbers = [
