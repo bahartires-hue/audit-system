@@ -23,6 +23,7 @@ import os
 import re
 import secrets
 import shutil
+import unicodedata
 import uuid
 import zipfile
 from difflib import SequenceMatcher
@@ -299,6 +300,35 @@ def _is_plausible_currency_amount(x: float) -> bool:
     return True
 
 
+def _normalize_doc_text(s: Any) -> str:
+    t = unicodedata.normalize("NFKC", str(s or ""))
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def _extract_best_amount_from_text(s: str) -> Optional[float]:
+    tokens = re.findall(r"[-+]?\d[\d,٬٫\.]*", _normalize_arabic_digits(s or ""))
+    vals: List[float] = []
+    for tok in tokens:
+        v = _parse_number_token(tok)
+        if v is None or not _is_plausible_currency_amount(v):
+            continue
+        vals.append(float(v))
+    if not vals:
+        return None
+
+    if len(vals) >= 2:
+        vals = [v for v in vals if not (v == int(v) and (1 <= abs(v) <= 31 or 1900 <= abs(v) <= 2100))] or vals
+
+    non_zero = [v for v in vals if abs(v) >= 0.0001]
+    if not non_zero:
+        return 0.0
+    decimals = [v for v in non_zero if abs(v - int(v)) > 0.0001]
+    if decimals:
+        return round(decimals[-1], 2)
+    return round(non_zero[-1], 2)
+
+
 def safe(v: Any) -> Optional[float]:
     try:
         if v is None:
@@ -313,13 +343,12 @@ def safe(v: Any) -> Optional[float]:
             return None
         s = re.sub(r"(?i)\b(debit|credit|مدين|دائن|dr|cr)\b", "", s)
         s = s.strip()
-        try:
+        if re.fullmatch(r"[-+]?\d+(?:\.\d+)?", s):
             x = float(s)
-        except ValueError:
-            m = re.search(r"[-+]?\d+(?:\.\d+)?", s)
-            if not m:
+        else:
+            x = _extract_best_amount_from_text(s)
+            if x is None:
                 return None
-            x = float(m.group(0))
         if not _is_plausible_currency_amount(x):
             return None
         return round(x, 2)
@@ -666,14 +695,13 @@ def _extract_pdf_rows_from_text(raw_text: str) -> List[Dict[str, Any]]:
         if (debit_val is None or abs(debit_val) < 0.0001) and (credit_val is None or abs(credit_val) < 0.0001):
             continue
 
-        doc_text = work_line
+        doc_text = _normalize_doc_text(work_line)
         if numbers:
             fm = num_pat.search(work_line)
             if fm:
-                doc_text = work_line[: fm.start()].strip()
-        doc_text = re.sub(r"\s+", " ", doc_text).strip()
+                doc_text = _normalize_doc_text(work_line[: fm.start()])
         if len(doc_text) > 160:
-            doc_text = doc_text[:160] + "…"
+            doc_text = doc_text[:160] + "..."
 
         rows.append(
             {
@@ -924,12 +952,12 @@ def extract_row_date_doc(
         val = row[col]
         if pd.isna(val):
             continue
-        raw = str(val).strip()
+        raw = _normalize_doc_text(val)
         if not raw:
             continue
         if _is_voucher_number_string(raw):
             continue
-        doc_out = raw if len(raw) <= 200 else (raw[:200] + "…")
+        doc_out = raw if len(raw) <= 200 else (raw[:200] + "...")
         break
 
     return date_out, doc_out
