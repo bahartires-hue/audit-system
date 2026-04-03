@@ -1,6 +1,10 @@
 # Local / build
 __pycache__/
 *.pyc
+venv/
+.venv/
+auditflow/backend/venv/
+build/
 *.pyo
 .pytest_cache/
 node_modules/
