@@ -495,6 +495,75 @@ def _currency_amount_rank(series: pd.Series) -> float:
     return score
 
 
+def _column_header_indicates_debit(col: Any) -> bool:
+    """الاعتماد الأساسي على اسم العمود: مدين / debit (وليس دائن)."""
+    name = str(col).lower().strip()
+    if _column_name_excludes_from_amount(col):
+        return False
+    if "دائن" in name or "credit" in name:
+        return False
+    if "مدين" in name or "debit" in name:
+        return True
+    if re.fullmatch(r"dr|d\.r\.?", name) or re.search(r"(^|[^a-z])dr([^a-z]|$)", name):
+        return True
+    return False
+
+
+def _column_header_indicates_credit(col: Any) -> bool:
+    """الاعتماد الأساسي على اسم العمود: دائن / credit (وليس مدين)."""
+    name = str(col).lower().strip()
+    if _column_name_excludes_from_amount(col):
+        return False
+    if "مدين" in name or "debit" in name:
+        return False
+    if "دائن" in name or "credit" in name:
+        return True
+    if re.fullmatch(r"cr\.?", name):
+        return True
+    return False
+
+
+def _promote_ledger_header_row(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    جداول PDF غالبًا بلا عناوين أعمدة حقيقية؛ إن وُجد صف فيه كلمتا مدين ودائن نستخدمه كرأس.
+    """
+    if df is None or df.empty:
+        return df
+    dfc = df.copy()
+    dfc.columns = dfc.columns.astype(str).str.strip()
+    hdr = " ".join(str(c).lower() for c in dfc.columns)
+    if "مدين" in hdr and "دائن" in hdr:
+        return dfc
+    ncols = len(dfc.columns)
+    for idx in range(min(25, len(dfc))):
+        cells_raw = dfc.iloc[idx].tolist()
+        cell_texts: List[str] = []
+        for v in cells_raw:
+            if pd.isna(v):
+                continue
+            t = str(v).strip().lower()
+            if t:
+                cell_texts.append(t)
+        if len(cell_texts) < 2:
+            continue
+        has_deb = any("مدين" in c and "دائن" not in c for c in cell_texts)
+        has_cred = any("دائن" in c and "مدين" not in c for c in cell_texts)
+        if not (has_deb and has_cred):
+            continue
+        new_cols: List[str] = []
+        for j in range(ncols):
+            v = cells_raw[j] if j < len(cells_raw) else None
+            if v is None or (isinstance(v, float) and pd.isna(v)) or not str(v).strip():
+                new_cols.append(f"_c{j}")
+            else:
+                new_cols.append(str(v).strip())
+        dfc.columns = new_cols
+        dfc = dfc.iloc[idx + 1 :].dropna(how="all").reset_index(drop=True)
+        return dfc
+
+    return dfc
+
+
 def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     df.columns = df.columns.astype(str).str.strip()
 
@@ -504,14 +573,29 @@ def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Opti
 
     for col in df.columns:
         name = str(col).lower()
-        if _column_name_excludes_from_amount(col):
-            continue
-        if any(x in name for x in ["مدين", "debit", "dr"]) and "دائن" not in name and "credit" not in name:
-            debit_col = col
-        if any(x in name for x in ["دائن", "credit", "cr"]) and "مدين" not in name and "debit" not in name:
-            credit_col = col
-        if any(x in name for x in ["تاريخ", "التاريخ", "التأريخ", "date"]):
+        if date_col is None and any(x in name for x in ["تاريخ", "التاريخ", "التأريخ", "date"]):
             date_col = col
+            continue
+        if debit_col is None and _column_header_indicates_debit(col):
+            debit_col = col
+            continue
+        if credit_col is None and _column_header_indicates_credit(col):
+            credit_col = col
+
+    if debit_col and not credit_col:
+        for col in df.columns:
+            if col == debit_col or _column_name_excludes_from_amount(col):
+                continue
+            if _column_header_indicates_credit(col):
+                credit_col = col
+                break
+    if credit_col and not debit_col:
+        for col in df.columns:
+            if col == credit_col or _column_name_excludes_from_amount(col):
+                continue
+            if _column_header_indicates_debit(col):
+                debit_col = col
+                break
 
     named_debit = debit_col is not None
     named_credit = credit_col is not None
@@ -830,6 +914,8 @@ def _estimate_extractable_rows(df: Optional[pd.DataFrame]) -> int:
     try:
         dfc = df.copy()
         dfc.columns = dfc.columns.astype(str).str.strip()
+        dfc = _promote_ledger_header_row(dfc)
+        dfc.columns = dfc.columns.astype(str).str.strip()
         debit_col, credit_col, _ = detect_columns(dfc)
     except Exception:
         return 0
@@ -1046,6 +1132,8 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
     if df is None or len(df) == 0:
         return []
 
+    df.columns = df.columns.astype(str).str.strip()
+    df = _promote_ledger_header_row(df)
     df.columns = df.columns.astype(str).str.strip()
     debit_col, credit_col, date_col = detect_columns(df)
     doc_col, doc_fb = resolve_document_columns(df)
