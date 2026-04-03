@@ -1127,6 +1127,18 @@ def extract_row_date_doc(
     return date_out, doc_out
 
 
+def _skip_likely_pdf_line_index_row(
+    amount: float, debit: Optional[float], credit: Optional[float], both_positive: bool
+) -> bool:
+    """تجاهل شظايا استخراج النص حيث يُقرأ رقم السطر (1-9) كمبلغ مدين/دائن."""
+    if both_positive:
+        return False
+    if amount != int(amount):
+        return False
+    a = int(abs(amount))
+    return 1 <= a <= 9
+
+
 def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
     df = read_any(file_path, filename)
     if df is None or len(df) == 0:
@@ -1188,6 +1200,9 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
             amount = debit
             t = "debit"
         else:
+            continue
+
+        if _skip_likely_pdf_line_index_row(amount, debit, credit, False):
             continue
 
         date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col, doc_fb)

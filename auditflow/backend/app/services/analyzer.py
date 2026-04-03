@@ -427,6 +427,17 @@ def extract_row_date_doc(
     return date_out, doc_out
 
 
+def _skip_likely_pdf_line_index_row(
+    amount: float, debit: Optional[float], credit: Optional[float], both_positive: bool
+) -> bool:
+    if both_positive:
+        return False
+    if amount != int(amount):
+        return False
+    a = int(abs(amount))
+    return 1 <= a <= 9
+
+
 def _row_narrative_for_amounts(
     row: pd.Series,
     df: pd.DataFrame,
@@ -911,6 +922,9 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
             amount = debit
             t = "debit"
         else:
+            continue
+
+        if _skip_likely_pdf_line_index_row(amount, debit, credit, False):
             continue
 
         date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col, doc_fb)
