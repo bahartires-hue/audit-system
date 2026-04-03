@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import math
-import numbers
 import re
-import unicodedata
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -33,211 +30,6 @@ def _is_plausible_currency_amount(x: float) -> bool:
     return True
 
 
-def _normalize_doc_text(s: Any) -> str:
-    t = unicodedata.normalize("NFKC", str(s or ""))
-    t = re.sub(r"\s+", " ", t).strip()
-    return t
-
-
-def _arabic_letters_for_match(s: str) -> str:
-    t = unicodedata.normalize("NFKC", s or "")
-    for a, b in (
-        ("ى", "ي"),
-        ("ی", "ي"),
-        ("ئ", "ي"),
-        ("ة", "ه"),
-        ("ۀ", "ه"),
-        ("ٱ", "ا"),
-        ("أ", "ا"),
-        ("إ", "ا"),
-        ("آ", "ا"),
-    ):
-        t = t.replace(a, b)
-    return t.lower()
-
-
-_DOC_KIND_SPECS: List[Tuple[str, str]] = [
-    ("مردود مشتريات", "مردود مشتريات"),
-    ("مردود مبيعات", "مردود مبيعات"),
-    # كلمات شائعة بخطأ اتجاه/عكس حروف في مستخرج PDF
-    ("هروتاف", "فاتورة"),
-    ("تاعیبم", "مبيعات"),
-    ("تاعيبم", "مبيعات"),
-    ("تایرتشم", "مشتريات"),
-    ("تارتشم", "مشتريات"),
-    ("تايرتشم", "مشتريات"),
-    ("مشتريات", "مشتريات"),
-    ("مبیعات", "مبيعات"),
-    ("مبيعات", "مبيعات"),
-    ("فاتوره", "فاتورة"),
-    ("فاتورة مبيعات", "فاتورة مبيعات"),
-    ("فاتورة مشتريات", "فاتورة مشتريات"),
-    ("فاتورة", "فاتورة"),
-    ("سند قبض", "سند قبض"),
-    ("سند صرف", "سند صرف"),
-    ("قيد يومية", "قيد يومية"),
-    ("طلب شراء", "مشتريات"),
-    ("طلب بيع", "مبيعات"),
-]
-
-
-def _has_arabic(s: str) -> bool:
-    return any("\u0600" <= c <= "\u06ff" for c in (s or ""))
-
-
-def _expand_text_for_doc_kind(s: str) -> str:
-    t = _normalize_doc_text(s)
-    if not t:
-        return ""
-    parts = [t]
-    words = t.split()
-    rev = []
-    for w in words:
-        if _has_arabic(w) and len(w) >= 3:
-            rev.append(w[::-1])
-        else:
-            rev.append(w)
-    parts.append(" ".join(rev))
-    return " \n ".join(parts)
-
-
-def infer_document_kind_from_narrative(text: Optional[str]) -> Optional[str]:
-    if not text or not str(text).strip():
-        return None
-    hay_raw = _expand_text_for_doc_kind(str(text))
-    hay = _arabic_letters_for_match(hay_raw)
-    if "هروتاف" in hay and "تاعيبم" in hay:
-        return "فاتورة مبيعات"
-    if "هروتاف" in hay and "تايرتشم" in hay:
-        return "فاتورة مشتريات"
-    for needle, label in _DOC_KIND_SPECS:
-        n = _arabic_letters_for_match(needle)
-        if n in hay or needle in hay_raw:
-            return label
-    return None
-
-
-def _enrich_doc_field(doc_out: Optional[str], narrative: str) -> Optional[str]:
-    kind = infer_document_kind_from_narrative(narrative) or infer_document_kind_from_narrative(doc_out or "")
-    if kind:
-        return kind
-    return doc_out
-
-
-def _finalize_doc_for_row(doc_out: Optional[str], narrative: str) -> Optional[str]:
-    """إن بقي المستند نصاً طويلاً مشوّهاً نستنتج نوع الحركة من كلمات مبيعات/مشتريات داخل البيان."""
-    doc_out = _enrich_doc_field(doc_out, narrative)
-    if doc_out and len(str(doc_out)) > 52:
-        kind = infer_document_kind_from_narrative(narrative) or infer_document_kind_from_narrative(str(doc_out))
-        if kind:
-            return kind
-        h = _arabic_letters_for_match(_expand_text_for_doc_kind(f"{narrative or ''} {doc_out}"))
-        if "مشتريات" in h:
-            return "فاتورة مشتريات" if "هروتاف" in h else "مشتريات"
-        if "مبيعات" in h:
-            return "فاتورة مبيعات" if "هروتاف" in h else "مبيعات"
-    return doc_out
-
-
-def _dedupe_extracted_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    order: List[Tuple[Any, ...]] = []
-    by_key: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
-
-    def score_doc(d: Any) -> int:
-        s = str(d or "")
-        if not s:
-            return 0
-        if s in (
-            "مبيعات",
-            "مشتريات",
-            "مردود مبيعات",
-            "مردود مشتريات",
-            "فاتورة",
-            "فاتورة مبيعات",
-            "فاتورة مشتريات",
-            "سند قبض",
-            "سند صرف",
-            "قيد يومية",
-        ) or s.startswith("فاتورة "):
-            return 100
-        return max(0, 80 - len(s))
-
-    for r in rows:
-        k = (
-            r.get("branch"),
-            round(float(r["amount"]), 2),
-            r.get("type"),
-            r.get("date") or "",
-        )
-        if k not in by_key:
-            by_key[k] = r
-            order.append(k)
-        elif score_doc(r.get("doc")) > score_doc(by_key[k].get("doc")):
-            by_key[k] = r
-
-    return [by_key[k] for k in order]
-
-
-def _parse_currency_numbers_from_narrative(narrative: str) -> List[float]:
-    s = _normalize_arabic_digits(narrative or "")
-    tokens = re.findall(r"[-+]?\d[\d,٬٫\.]*", s)
-    vals: List[float] = []
-    for tok in tokens:
-        v = _parse_number_token(tok)
-        if v is None or not _is_plausible_currency_amount(v):
-            continue
-        vals.append(float(v))
-    if len(vals) >= 2:
-        vals = [v for v in vals if not (v == int(v) and (1 <= abs(v) <= 31 or 1900 <= abs(v) <= 2100))] or vals
-    return vals
-
-
-def _looks_like_serial_voucher_amount(x: float) -> bool:
-    if x is None or (isinstance(x, float) and pd.isna(x)):
-        return False
-    xf = float(x)
-    if abs(xf - int(xf)) > 0.0001:
-        return False
-    ax = abs(xf)
-    if 1900 <= ax <= 2100:
-        return False
-    return 100 <= ax <= 49999
-
-
-def _replace_voucher_with_ledger_from_narrative(column_amount: float, narrative: str) -> float:
-    narrative = _normalize_doc_text(narrative)
-    if not narrative:
-        return column_amount
-    vals = _parse_currency_numbers_from_narrative(narrative)
-    if not vals:
-        return column_amount
-    decimals = [v for v in vals if abs(v - int(v)) > 0.0001 and abs(v) >= 0.0001]
-    for d in decimals:
-        if abs(d - column_amount) < 0.02:
-            return column_amount
-    if _looks_like_serial_voucher_amount(column_amount) and decimals:
-        return round(decimals[0], 2)
-    for v in vals:
-        if abs(v - column_amount) < 0.02:
-            return column_amount
-    if decimals:
-        return round(decimals[0], 2)
-    return column_amount
-
-
-def _extract_best_amount_from_text(s: str) -> Optional[float]:
-    vals = _parse_currency_numbers_from_narrative(s or "")
-    if not vals:
-        return None
-    non_zero = [v for v in vals if abs(v) >= 0.0001]
-    if not non_zero:
-        return 0.0
-    decimals = [v for v in non_zero if abs(v - int(v)) > 0.0001]
-    if decimals:
-        return round(decimals[-1], 2)
-    return round(non_zero[-1], 2)
-
-
 def safe(v: Any) -> Optional[float]:
     try:
         if v is None:
@@ -252,12 +44,13 @@ def safe(v: Any) -> Optional[float]:
             return None
         s = re.sub(r"(?i)\b(debit|credit|مدين|دائن|dr|cr)\b", "", s)
         s = s.strip()
-        if re.fullmatch(r"[-+]?\d+(?:\.\d+)?", s):
+        try:
             x = float(s)
-        else:
-            x = _extract_best_amount_from_text(s)
-            if x is None:
+        except ValueError:
+            m = re.search(r"[-+]?\d+(?:\.\d+)?", s)
+            if not m:
                 return None
+            x = float(m.group(0))
         if not _is_plausible_currency_amount(x):
             return None
         return round(x, 2)
@@ -269,11 +62,11 @@ def _column_name_excludes_from_amount(col: Any) -> bool:
     name = str(col).lower().strip()
     if not name or name.isdigit():
         return False
-    if name in ("السند", "سند"):
-        return True
     block = (
         "رقم السند",
         "رقم سند",
+        "السند",
+        "سند",
         "الرصيد",
         "رصيد",
         "balance",
@@ -306,88 +99,6 @@ def _column_values_look_like_ids(series: pd.Series) -> bool:
     return False
 
 
-def _is_balance_column_name(col: Any) -> bool:
-    n = str(col).lower()
-    return "رصيد" in n or "balance" in n
-
-
-def _currency_amount_rank(series: pd.Series) -> float:
-    nums = pd.to_numeric(series, errors="coerce").dropna()
-    if len(nums) == 0:
-        return float("-inf")
-    mean_v = float(nums.mean())
-    max_v = float(nums.max())
-    frac_decimal = ((nums % 1).abs() > 0.001).sum() / len(nums)
-    score = mean_v + frac_decimal * min(500_000.0, mean_v * 2.0 + 1.0)
-    if frac_decimal < 0.08 and max_v <= 99_999_999:
-        score -= min(400_000.0, mean_v * 1.5 + 100_000.0)
-    return score
-
-
-def _column_header_indicates_debit(col: Any) -> bool:
-    name = str(col).lower().strip()
-    if _column_name_excludes_from_amount(col):
-        return False
-    if "دائن" in name or "credit" in name:
-        return False
-    if "مدين" in name or "debit" in name:
-        return True
-    if re.fullmatch(r"dr|d\.r\.?", name) or re.search(r"(^|[^a-z])dr([^a-z]|$)", name):
-        return True
-    return False
-
-
-def _column_header_indicates_credit(col: Any) -> bool:
-    name = str(col).lower().strip()
-    if _column_name_excludes_from_amount(col):
-        return False
-    if "مدين" in name or "debit" in name:
-        return False
-    if "دائن" in name or "credit" in name:
-        return True
-    if re.fullmatch(r"cr\.?", name):
-        return True
-    return False
-
-
-def _promote_ledger_header_row(df: pd.DataFrame) -> pd.DataFrame:
-    if df is None or df.empty:
-        return df
-    dfc = df.copy()
-    dfc.columns = dfc.columns.astype(str).str.strip()
-    hdr = " ".join(str(c).lower() for c in dfc.columns)
-    if "مدين" in hdr and "دائن" in hdr:
-        return dfc
-    ncols = len(dfc.columns)
-    for idx in range(min(25, len(dfc))):
-        cells_raw = dfc.iloc[idx].tolist()
-        cell_texts: List[str] = []
-        for v in cells_raw:
-            if pd.isna(v):
-                continue
-            t = str(v).strip().lower()
-            if t:
-                cell_texts.append(t)
-        if len(cell_texts) < 2:
-            continue
-        has_deb = any("مدين" in c and "دائن" not in c for c in cell_texts)
-        has_cred = any("دائن" in c and "مدين" not in c for c in cell_texts)
-        if not (has_deb and has_cred):
-            continue
-        new_cols: List[str] = []
-        for j in range(ncols):
-            v = cells_raw[j] if j < len(cells_raw) else None
-            if v is None or (isinstance(v, float) and pd.isna(v)) or not str(v).strip():
-                new_cols.append(f"_c{j}")
-            else:
-                new_cols.append(str(v).strip())
-        dfc.columns = new_cols
-        dfc = dfc.iloc[idx + 1 :].dropna(how="all").reset_index(drop=True)
-        return dfc
-
-    return dfc
-
-
 def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     df.columns = df.columns.astype(str).str.strip()
 
@@ -397,38 +108,18 @@ def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Opti
 
     for col in df.columns:
         name = str(col).lower()
-        if date_col is None and any(x in name for x in ["تاريخ", "التاريخ", "التأريخ", "date"]):
-            date_col = col
-            continue
-        if debit_col is None and _column_header_indicates_debit(col):
-            debit_col = col
-            continue
-        if credit_col is None and _column_header_indicates_credit(col):
-            credit_col = col
-
-    if debit_col and not credit_col:
-        for col in df.columns:
-            if col == debit_col or _column_name_excludes_from_amount(col):
-                continue
-            if _column_header_indicates_credit(col):
-                credit_col = col
-                break
-    if credit_col and not debit_col:
-        for col in df.columns:
-            if col == credit_col or _column_name_excludes_from_amount(col):
-                continue
-            if _column_header_indicates_debit(col):
-                debit_col = col
-                break
-
-    named_debit = debit_col is not None
-    named_credit = credit_col is not None
-
-    numeric_cols: List[Tuple[str, float, float]] = []
-    for col in df.columns:
         if _column_name_excludes_from_amount(col):
             continue
-        if _is_balance_column_name(col):
+        if any(x in name for x in ["مدين", "debit", "dr"]) and "دائن" not in name and "credit" not in name:
+            debit_col = col
+        if any(x in name for x in ["دائن", "credit", "cr"]) and "مدين" not in name and "debit" not in name:
+            credit_col = col
+        if any(x in name for x in ["تاريخ", "التاريخ", "التأريخ", "date"]):
+            date_col = col
+
+    numeric_cols: List[Tuple[str, float]] = []
+    for col in df.columns:
+        if _column_name_excludes_from_amount(col):
             continue
         nums = pd.to_numeric(df[col], errors="coerce")
         valid = nums.dropna()
@@ -446,37 +137,17 @@ def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Opti
             continue
         if not _is_plausible_currency_amount(max_val):
             continue
-        numeric_cols.append((col, float(mean_val), _currency_amount_rank(df[col])))
+        numeric_cols.append((col, float(mean_val)))
 
-    ranked_by_score = sorted(numeric_cols, key=lambda x: x[2], reverse=True)
-
-    if not named_debit and not named_credit:
-        ordered = sorted(
-            numeric_cols,
-            key=lambda t: list(df.columns).index(t[0]),
-        )
-        r_tail = max(ordered[-2][2], ordered[-1][2]) if len(ordered) >= 2 else (ordered[0][2] if ordered else 0.0)
-        while len(ordered) > 2 and r_tail > 0 and ordered[0][2] < r_tail * 0.2:
-            ordered.pop(0)
-        if len(ordered) >= 2:
-            debit_col, credit_col = ordered[-2][0], ordered[-1][0]
-        elif len(ordered) == 1:
-            debit_col = ordered[0][0]
-    else:
-        if not debit_col and len(ranked_by_score) >= 1:
-            for col, _, _ in ranked_by_score:
-                if col != credit_col:
-                    debit_col = col
-                    break
-        if not credit_col and len(ranked_by_score) >= 1:
-            for col, _, _ in ranked_by_score:
-                if col != debit_col:
-                    credit_col = col
-                    break
+    numeric_cols.sort(key=lambda x: x[1], reverse=True)
+    if not debit_col and len(numeric_cols) >= 1:
+        debit_col = numeric_cols[0][0]
+    if not credit_col and len(numeric_cols) >= 2:
+        credit_col = numeric_cols[1][0]
 
     if not date_col:
         for col in df.columns:
-            parsed = _series_to_datetimes_for_detection(df[col])
+            parsed = pd.to_datetime(df[col], errors="coerce")
             if parsed.notna().sum() > len(df) * 0.5:
                 date_col = col
                 break
@@ -507,284 +178,33 @@ def detect_document_type_column(df: pd.DataFrame) -> Optional[str]:
             continue
         if n == "نوع" or (n.startswith("نوع") and "عميل" not in n and "مورد" not in n and "حساب" not in n):
             return col
-    for col in df.columns:
-        n = str(col).strip().lower()
-        if "رقم السند" in n or "رقم سند" in n:
-            continue
-        for key in ("نوع القيد", "نوع الحركة", "طبيعة القيد", "تصنيف الحركة"):
-            if key in n:
-                return col
-    return None
-
-
-def resolve_document_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str]]:
-    primary = detect_document_type_column(df)
-    fallback: Optional[str] = None
-    if primary is None:
-        for col in df.columns:
-            n = str(col).strip().lower()
-            if "رقم السند" in n or "رقم سند" in n or n in ("#", "م"):
-                continue
-            if "بيان" in n and "ضريبي" not in n:
-                fallback = col
-                break
-    return primary, fallback
-
-
-def _series_to_datetimes_for_detection(series: pd.Series) -> pd.Series:
-    """
-    Excel غالباً يخزّن التاريخ كرقم تسلسلي؛ pd.to_datetime(45321) يعطي 1970 بشكل خاطئ.
-    إن غلبت القيم في المدى النموذجي للتسلسل، نحوّل عبر أصل Excel.
-    """
-    num = pd.to_numeric(series, errors="coerce")
-    valid_n = num.notna().sum()
-    if valid_n == 0:
-        return pd.to_datetime(series, errors="coerce")
-    in_serial_band = num.between(39500.0, 56500.0, inclusive="both")
-    if float(in_serial_band.sum()) >= max(2.0, valid_n * 0.45):
-        converted = pd.to_datetime(num, unit="D", origin="1899-12-30", errors="coerce")
-        if converted.notna().sum() >= max(1, int(len(series) * 0.35)):
-            return converted
-    return pd.to_datetime(series, errors="coerce")
-
-
-def _parsed_timestamp_or_nat(val: Any) -> Any:
-    """Parse Excel/PDF date cells and Arabic digits; prefer day-first (GCC). Handles Excel serials."""
-    if val is None:
-        return pd.NaT
-    if isinstance(val, bool):
-        return pd.NaT
-
-    if isinstance(val, str):
-        t = val.strip()
-        if not t or t.lower() in ("nat", "none") or t in ("-", "—", "–"):
-            return pd.NaT
-        s = _normalize_arabic_digits(t)
-        if not s or s in ("-", "—", "–"):
-            return pd.NaT
-        for dayfirst in (True, False):
-            v = pd.to_datetime(s, errors="coerce", dayfirst=dayfirst)
-            if pd.notna(v):
-                return v
-        return pd.NaT
-
-    xf: Optional[float] = None
-    try:
-        if isinstance(val, numbers.Real):
-            xf = float(val)
-    except (TypeError, ValueError, OverflowError):
-        xf = None
-    if xf is not None:
-        if math.isnan(xf) or math.isinf(xf):
-            return pd.NaT
-        if 39500.0 <= xf <= 56500.0:
-            try:
-                return pd.to_datetime(xf, unit="D", origin="1899-12-30")
-            except Exception:
-                pass
-        ts_num = pd.to_datetime(val, errors="coerce")
-        if pd.notna(ts_num):
-            if ts_num.year <= 1971 and xf >= 10000.0:
-                try:
-                    ex = pd.to_datetime(xf, unit="D", origin="1899-12-30")
-                    if pd.notna(ex):
-                        return ex
-                except Exception:
-                    pass
-            return ts_num
-
-    if hasattr(val, "strftime") and not isinstance(val, str):
-        try:
-            v = pd.to_datetime(val, errors="coerce")
-            if pd.notna(v):
-                return v
-        except Exception:
-            pass
-
-    s = _normalize_arabic_digits(str(val).strip())
-    if not s or s in ("-", "—", "–"):
-        return pd.NaT
-    for dayfirst in (True, False):
-        v = pd.to_datetime(s, errors="coerce", dayfirst=dayfirst)
-        if pd.notna(v):
-            return v
-    return pd.NaT
-
-
-def _parse_datetime_cell_to_iso(val: Any) -> Optional[str]:
-    ts = _parsed_timestamp_or_nat(val)
-    if pd.isna(ts):
-        return None
-    return ts.strftime("%Y-%m-%d")
-
-
-def _iso_date_from_narrative(narrative: str) -> Optional[str]:
-    if not narrative:
-        return None
-    line = _normalize_arabic_digits(str(narrative))
-    date_pat = re.compile(
-        r"(\d{4}\s*[/\-\.]\s*\d{1,2}\s*[/\-\.]\s*\d{1,2}|\d{1,2}\s*[/\-\.]\s*\d{1,2}\s*[/\-\.]\s*\d{2,4})"
-    )
-    m = date_pat.search(line)
-    if not m:
-        return None
-    tok = m.group(1).strip()
-    for dayfirst in (True, False):
-        d = pd.to_datetime(tok, errors="coerce", dayfirst=dayfirst)
-        if pd.notna(d):
-            return d.strftime("%Y-%m-%d")
     return None
 
 
 def extract_row_date_doc(
-    row: pd.Series,
-    df: pd.DataFrame,
-    date_col: Optional[str],
-    doc_col: Optional[str],
-    doc_fallback_col: Optional[str] = None,
+    row: pd.Series, df: pd.DataFrame, date_col: Optional[str], doc_col: Optional[str]
 ) -> Tuple[Optional[str], Optional[str]]:
     date_out: Optional[str] = None
     if date_col and date_col in df.columns:
-        date_out = _parse_datetime_cell_to_iso(row.get(date_col))
+        try:
+            val = row[date_col]
+            if pd.isna(val):
+                date_out = None
+            else:
+                d = pd.to_datetime(val, errors="coerce", dayfirst=False)
+                date_out = None if pd.isna(d) else d.strftime("%Y-%m-%d")
+        except Exception:
+            date_out = str(row[date_col])
 
     doc_out: Optional[str] = None
-    for col in (doc_col, doc_fallback_col):
-        if not col or col not in df.columns:
-            continue
-        val = row[col]
-        if pd.isna(val):
-            continue
-        raw = _normalize_doc_text(val)
-        if not raw:
-            continue
-        if _is_voucher_number_string(raw):
-            continue
-        doc_out = raw if len(raw) <= 200 else (raw[:200] + "...")
-        break
+    if doc_col and doc_col in df.columns:
+        val = row[doc_col]
+        if pd.notna(val):
+            raw = str(val).strip()
+            if not _is_voucher_number_string(raw):
+                doc_out = raw
 
     return date_out, doc_out
-
-
-def _skip_likely_pdf_line_index_row(
-    amount: float, debit: Optional[float], credit: Optional[float], both_positive: bool
-) -> bool:
-    # Do not drop tiny amounts (e.g., 1 SAR invoices).
-    return False
-
-
-def _row_narrative_for_amounts(
-    row: pd.Series,
-    df: pd.DataFrame,
-    doc_col: Optional[str],
-    doc_fb: Optional[str],
-    debit_col: Optional[str],
-    credit_col: Optional[str],
-    date_col: Optional[str],
-) -> str:
-    seen: set[Any] = set()
-    parts: List[str] = []
-    priority: List[Any] = []
-    if doc_fb and doc_fb in df.columns:
-        priority.append(doc_fb)
-    if doc_col and doc_col in df.columns:
-        priority.append(doc_col)
-    for col in priority:
-        if col in seen:
-            continue
-        seen.add(col)
-        v = row.get(col)
-        if pd.notna(v):
-            t = str(v).strip()
-            if t:
-                parts.append(t)
-    for col in df.columns:
-        if col in (debit_col, credit_col, date_col) or col in seen:
-            continue
-        n = str(col).lower()
-        if "ضريبي" in n and "بيان" not in n:
-            continue
-        if "بيان" in n or "مستند" in n or "نوع" in n or "فاتورة" in n or "وصف" in n or "تفاصيل" in n:
-            seen.add(col)
-            v = row.get(col)
-            if pd.notna(v):
-                t = str(v).strip()
-                if t:
-                    parts.append(t)
-    return _normalize_doc_text(" ".join(parts))
-
-
-def _side_hint_from_narrative(narrative: str) -> Optional[str]:
-    hay = _arabic_letters_for_match(_expand_text_for_doc_kind(narrative or ""))
-    has_debit = "مدين" in hay
-    has_credit = ("دائن" in hay) or ("داين" in hay)
-    if has_debit and not has_credit:
-        return "debit"
-    if has_credit and not has_debit:
-        return "credit"
-    return None
-
-
-def _is_likely_pdf_extraction_noise(
-    amount: float,
-    t: str,
-    doc: Optional[str],
-    narrative: str,
-) -> bool:
-    """
-    شظايا شائعة من PDF: تذييل صفحة، أو رقم تسلسل صف مع نص «ريال» دون نوع مستند.
-    لا يُستخدم لاستبعاد فواتير صغيرة صحيحة إذا وُجد نوع مستند معرّف.
-    """
-    blob = f"{narrative} {doc or ''}"
-    if any(m in blob for m in _PDF_FOOTER_MARKERS):
-        return True
-    if "تطوير" in blob and "موقع" in blob:
-        return True
-    kind = infer_document_kind_from_narrative(narrative) or infer_document_kind_from_narrative(doc or "")
-    if kind is not None:
-        return False
-    hay_blob = _arabic_letters_for_match(blob)
-    if t == "debit" and amount == int(amount) and 1 <= abs(amount) <= 20:
-        if "يدوعس" in blob or "يدوعس" in hay_blob or "سعودي" in hay_blob:
-            if len(_normalize_doc_text(narrative)) <= 100:
-                return True
-    exp = _expand_text_for_doc_kind(blob)
-    if "ریال" in exp or "ريال" in exp or "ریال" in blob or "ريال" in blob:
-        if t == "debit" and amount == int(amount) and 1 <= abs(amount) <= 24:
-            if len(_normalize_doc_text(narrative)) <= 140:
-                return True
-    return False
-
-
-def _assign_global_matches(
-    d1: List[Dict[str, Any]],
-    d2: List[Dict[str, Any]],
-    match_score_fn: Any,
-    min_assign: int = 40,
-) -> Dict[int, Tuple[int, int, List[str]]]:
-    """أفضل مطابقة عامة: نرتّب النقاط ثم نفضّل أقل فرق مبلغ عند التساوي."""
-    triples: List[Tuple[int, float, int, int, List[str]]] = []
-    for i, x1 in enumerate(d1):
-        if x1.get("type") == "error":
-            continue
-        for j, x2 in enumerate(d2):
-            if x2.get("type") == "error":
-                continue
-            score, reasons = match_score_fn(x1, x2)
-            if score < min_assign:
-                continue
-            ad = abs(float(x1["amount"]) - float(x2["amount"]))
-            triples.append((score, ad, i, j, reasons))
-    triples.sort(key=lambda t: (-t[0], t[1]))
-    used_i: set[int] = set()
-    used_j: set[int] = set()
-    out: Dict[int, Tuple[int, int, List[str]]] = {}
-    for score, _ad, i, j, reasons in triples:
-        if i in used_i or j in used_j:
-            continue
-        used_i.add(i)
-        used_j.add(j)
-        out[i] = (j, score, reasons)
-    return out
 
 
 def read_excel(file_path: str) -> Optional[pd.DataFrame]:
@@ -820,20 +240,6 @@ def _debit_credit_from_tail_numbers(numbers: List[str]) -> Tuple[Optional[float]
     vals = [v for v in vals if v is not None]
     if not vals:
         return None, None
-    while len(vals) >= 4 and vals[0] is not None:
-        v0 = vals[0]
-        if v0 == int(v0) and 1 <= abs(v0) <= 999:
-            vals = vals[1:]
-            continue
-        if (
-            v0 == int(v0)
-            and 1_000 <= abs(v0) <= 9_999_999
-            and vals[1] is not None
-            and abs(vals[1]) > abs(v0) * 3
-        ):
-            vals = vals[1:]
-            continue
-        break
     if len(vals) == 1:
         return vals[0], None
     if len(vals) >= 5:
@@ -844,21 +250,6 @@ def _debit_credit_from_tail_numbers(numbers: List[str]) -> Tuple[Optional[float]
             return vals[-2], vals[-1]
         return vals[-3], vals[-2]
     if len(vals) == 3:
-        # غالباً: (مدين، دائن، رصيد) أو (رصيد، مدين، 0) — نرفض أخذ الرصيد كحركة.
-        near_z = [i for i, v in enumerate(vals) if abs(float(v)) < 0.01]
-        nz = [float(v) for v in vals if abs(float(v)) >= 0.01]
-        if len(near_z) == 1 and len(nz) == 2:
-            p, q = sorted(nz)
-            if q >= p * 1.12 - 1e-9:
-                zi = near_z[0]
-                if zi == 2:
-                    if vals[0] is not None and vals[1] is not None and float(vals[0]) > float(vals[1]) * 1.12:
-                        return vals[1], None
-                    return vals[0], None
-                if zi == 1:
-                    return vals[0], None
-                if zi == 0:
-                    return None, vals[1]
         third = vals[0]
         if third is not None and third == int(third) and abs(third) >= 10000:
             return vals[-2], vals[-1]
@@ -872,21 +263,6 @@ _LETTERHEAD_MARKERS = (
     "كشف حساب",
     "اسم العميل",
 )
-
-# أسطر تذييل / فوتر تُسرَّب أحياناً من PDF وتظهر كحركات وهمية
-_PDF_FOOTER_MARKERS = (
-    "تطوير الموقع",
-    "السوداني",
-    "محمد علي",
-    "Mohammed",
-    "Alsudani",
-    "alsudani",
-)
-
-# لا نعتمد أزواج «نفس الاتجاه + فقط 45 نقطة»؛ ترفع الحد تترك صف بحر بدون شريك زائف.
-MIN_ASSIGN_SCORE = 46
-STRONG_MATCH_SCORE = 60
-WEAK_MATCH_SCORE = 45
 
 
 def _skip_statement_letterhead_lines(lines: List[str]) -> List[str]:
@@ -925,12 +301,6 @@ def _extract_pdf_rows_from_text(raw_text: str) -> List[Dict[str, Any]]:
         line = _normalize_arabic_digits(raw_line).strip()
         if len(line) < 2:
             continue
-        if any(m in raw_line for m in _PDF_FOOTER_MARKERS):
-            continue
-        if "تطوير الموقع" in raw_line or ("تطوير" in raw_line and "موقع" in raw_line):
-            continue
-        if "محمد علي" in raw_line and "السوداني" in raw_line:
-            continue
         if any(m in raw_line for m in _LETTERHEAD_MARKERS) and "مدين" not in raw_line:
             continue
 
@@ -947,21 +317,12 @@ def _extract_pdf_rows_from_text(raw_text: str) -> List[Dict[str, Any]]:
         if not effective_date:
             continue
 
-        low_for_totals = _arabic_letters_for_match(work_line)
-        if "اجمال" in low_for_totals:
-            continue
-
-        numbers = [n for n in num_pat.findall(work_line) if (pv := _parse_number_token(n)) is not None and _is_plausible_currency_amount(pv)]
+        numbers = [
+            n
+            for n in num_pat.findall(work_line)
+            if (pv := _parse_number_token(n)) is not None and _is_plausible_currency_amount(pv)
+        ]
         if not numbers:
-            continue
-
-        pv_pos = [float(_parse_number_token(n) or 0) for n in numbers]
-        pv_pos = [x for x in pv_pos if x > 0.01]
-        if len(pv_pos) >= 3 and min(pv_pos) > 30:
-            if max(pv_pos) >= min(pv_pos) * 2.12 - 1e-9:
-                continue
-        ws_compact = re.sub(r"\s+", "", work_line)
-        if "4455" in ws_compact and "1759" in ws_compact and len(pv_pos) >= 3:
             continue
 
         debit_val, credit_val = _debit_credit_from_tail_numbers(numbers)
@@ -969,21 +330,13 @@ def _extract_pdf_rows_from_text(raw_text: str) -> List[Dict[str, Any]]:
         if (debit_val is None or abs(debit_val) < 0.0001) and (credit_val is None or abs(credit_val) < 0.0001):
             continue
 
-        doc_text = _normalize_doc_text(work_line)
-        if numbers:
-            fm = num_pat.search(work_line)
-            if fm:
-                doc_text = _normalize_doc_text(work_line[: fm.start()])
-        if len(doc_text) > 160:
-            doc_text = doc_text[:160] + "..."
-
         rows.append(
             {
                 "التاريخ": effective_date,
                 "مدين": debit_val if debit_val is not None else "",
                 "دائن": credit_val if credit_val is not None else "",
                 "بيان": raw_line.strip(),
-                "مستند": doc_text or "",
+                "مستند": "",
             }
         )
 
@@ -1018,78 +371,11 @@ def _trim_pdf_table_df(df: pd.DataFrame) -> pd.DataFrame:
     return dfc
 
 
-def _find_ledger_header_row_index(grid_rows: List[List[Any]], max_scan: int = 25) -> Optional[int]:
-    """First grid row whose cells clearly label مدين and دائن (PDFs often prepend title rows)."""
-    for idx in range(min(max_scan, len(grid_rows))):
-        row = grid_rows[idx]
-        if not row:
-            continue
-        cell_texts: List[str] = []
-        for v in row:
-            if v is None or (isinstance(v, float) and pd.isna(v)):
-                continue
-            t = str(v).strip().lower()
-            if t:
-                cell_texts.append(t)
-        if len(cell_texts) < 2:
-            continue
-        has_deb = any("مدين" in c and "دائن" not in c for c in cell_texts)
-        has_cred = any("دائن" in c and "مدين" not in c for c in cell_texts)
-        if has_deb and has_cred:
-            return idx
-    return None
-
-
-def _dataframe_from_pdf_grid(grid_rows: List[List[Any]]) -> Optional[pd.DataFrame]:
-    """Build a padded DataFrame from raw extract_tables rows; header row is detected, not assumed row 0."""
-    if not grid_rows:
-        return None
-    hi = _find_ledger_header_row_index(grid_rows)
-    if hi is None:
-        if len(grid_rows) < 2:
-            return None
-        header_cells = list(grid_rows[0])
-        data_rows = grid_rows[1:]
-    else:
-        header_cells = list(grid_rows[hi])
-        data_rows = grid_rows[hi + 1 :]
-    if not data_rows:
-        return None
-    max_w = max(len(r) for r in data_rows + [header_cells])
-    width = max_w
-    norm_data: List[List[Any]] = []
-    for r in data_rows:
-        rr = list(r) if r else []
-        if len(rr) < width:
-            rr = rr + [None] * (width - len(rr))
-        norm_data.append(rr[:width])
-    hdr = list(header_cells)
-    if len(hdr) < width:
-        hdr = hdr + [None] * (width - len(hdr))
-    hdr = hdr[:width]
-    col_names: List[str] = []
-    counts: Dict[str, int] = {}
-    for j in range(width):
-        h = hdr[j]
-        if h is None or (isinstance(h, float) and pd.isna(h)) or not str(h).strip():
-            base = f"_c{j}"
-        else:
-            base = unicodedata.normalize("NFKC", str(h).strip())
-        cnt = counts.get(base, 0)
-        nm = base if cnt == 0 else f"{base}.{cnt}"
-        counts[base] = cnt + 1
-        col_names.append(nm)
-    df = pd.DataFrame(norm_data, columns=col_names)
-    return df.dropna(how="all")
-
-
 def _estimate_extractable_rows(df: Optional[pd.DataFrame]) -> int:
     if df is None or df.empty:
         return 0
     try:
         dfc = df.copy()
-        dfc.columns = dfc.columns.astype(str).str.strip()
-        dfc = _promote_ledger_header_row(dfc)
         dfc.columns = dfc.columns.astype(str).str.strip()
         debit_col, credit_col, _ = detect_columns(dfc)
     except Exception:
@@ -1127,9 +413,12 @@ def read_pdf(file_path: str) -> Optional[pd.DataFrame]:
             all_text = "\n".join(text_parts)
 
             if grid_rows:
-                df = _dataframe_from_pdf_grid(grid_rows)
-                if df is not None and not df.empty:
-                    table_df = _trim_pdf_table_df(df.reset_index(drop=True))
+                df = pd.DataFrame(grid_rows).dropna(how="all")
+                if len(df) >= 2:
+                    df.columns = df.iloc[0]
+                    df = df[1:].dropna(how="all")
+                    if not df.empty:
+                        table_df = _trim_pdf_table_df(df.reset_index(drop=True))
     except Exception:
         return None
 
@@ -1188,8 +477,6 @@ doc_map: Dict[str, str] = {
     "قيد افتتاحي": "قيد افتتاحي",
     "مبيعات": "مشتريات",
     "مشتريات": "مبيعات",
-    "فاتورة مبيعات": "فاتورة مشتريات",
-    "فاتورة مشتريات": "فاتورة مبيعات",
 }
 
 
@@ -1267,90 +554,13 @@ def match_doc(d1: Any, d2: Any) -> bool:
 
 def date_diff_days(d1: Any, d2: Any) -> Optional[int]:
     try:
-        dd1, dd2 = _parsed_timestamp_or_nat(d1), _parsed_timestamp_or_nat(d2)
+        dd1 = pd.to_datetime(d1, errors="coerce")
+        dd2 = pd.to_datetime(d2, errors="coerce")
         if pd.isna(dd1) or pd.isna(dd2):
             return None
-        return abs(int((dd1 - dd2).days))
+        return abs((dd1 - dd2).days)
     except Exception:
         return None
-
-
-def _row_contains_statement_footer(row: pd.Series) -> bool:
-    """سطر تذييل / اعتماد من PDF (مثل تطوير الموقع) لا يُعامل كحركة."""
-    for v in row.tolist():
-        if pd.isna(v):
-            continue
-        s = str(v).strip()
-        if not s:
-            continue
-        if any(m in s for m in _PDF_FOOTER_MARKERS):
-            return True
-        if "تطوير الموقع" in s or ("تطوير" in s and "موقع" in s):
-            return True
-        if "محمد علي" in s and "السوداني" in s:
-            return True
-    return False
-
-
-def _correct_movement_if_debit_equals_balance(
-    row: pd.Series,
-    df: pd.DataFrame,
-    debit_col: Optional[str],
-    credit_col: Optional[str],
-    balance_col: Optional[str],
-    date_col: Optional[str],
-    narrative: str,
-    debit: Optional[float],
-    credit: Optional[float],
-) -> Tuple[Optional[float], Optional[float]]:
-    """
-    جداول PDF أحياناً تضع قيمة الرصيد في عمود المدين أو تنسخ الرصيد. إذا مدين ≈ الرصيد والدائن ~0
-    نبحث في نفس السطر عن مبلغ أصغر من الرصيد يصلح أن يكون حركة السطر.
-    """
-    if not balance_col or balance_col not in df.columns or not debit_col or debit_col not in df.columns:
-        return debit, credit
-    if debit is None:
-        return debit, credit
-    bal = safe(row[balance_col])
-    if bal is None or abs(float(debit) - float(bal)) > 0.02:
-        return debit, credit
-    cre = credit
-    if cre is not None and float(cre) > 0.01:
-        return debit, credit
-
-    alts: List[float] = []
-    for c in df.columns:
-        if c == balance_col:
-            continue
-        n = str(c).lower()
-        if date_col and c == date_col:
-            continue
-        if "تاريخ" in n or "date" in n:
-            continue
-        if _column_name_excludes_from_amount(c):
-            continue
-        v = safe(row[c])
-        if v is None or v <= 0:
-            continue
-        if not _is_plausible_currency_amount(v):
-            continue
-        if abs(float(v) - float(bal)) < 0.02:
-            continue
-        if float(v) < float(bal) - 0.01:
-            alts.append(float(v))
-
-    if alts:
-        replacement = max(alts)
-        if replacement + 0.02 < float(debit):
-            return round(replacement, 2), credit
-
-    nums = [v for v in _parse_currency_numbers_from_narrative(narrative) if v and v < float(bal) - 0.01]
-    if len(nums) == 1:
-        replacement = nums[0]
-        if replacement + 0.02 < float(debit):
-            return round(float(replacement), 2), credit
-
-    return debit, credit
 
 
 def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
@@ -1359,78 +569,51 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
         return []
 
     df.columns = df.columns.astype(str).str.strip()
-    df = _promote_ledger_header_row(df)
-    df.columns = df.columns.astype(str).str.strip()
     debit_col, credit_col, date_col = detect_columns(df)
-    doc_col, doc_fb = resolve_document_columns(df)
+    doc_col = detect_document_type_column(df)
+
+    if not debit_col and not credit_col:
+        numeric_cols: List[Tuple[str, float]] = []
+        for col in df.columns:
+            if _column_name_excludes_from_amount(col):
+                continue
+            nums = pd.to_numeric(df[col], errors="coerce").dropna()
+            frac = 0.3 if len(df) >= 12 else 0.15
+            need = max(1, int(len(df) * frac + 0.5))
+            if len(df) >= 4:
+                need = max(2, need)
+            if len(nums) < need:
+                continue
+            if _column_values_look_like_ids(df[col]):
+                continue
+            mean_val = float(nums.mean())
+            max_val = float(nums.max())
+            if mean_val < 10 and max_val < 10:
+                continue
+            if not _is_plausible_currency_amount(max_val):
+                continue
+            numeric_cols.append((col, mean_val))
+        numeric_cols.sort(key=lambda x: x[1], reverse=True)
+        if len(numeric_cols) >= 1:
+            debit_col = numeric_cols[0][0]
+        if len(numeric_cols) >= 2:
+            credit_col = numeric_cols[1][0]
 
     data: List[Dict[str, Any]] = []
     for _, row in df.iterrows():
         if row.isna().all():
             continue
 
-        narrative = _row_narrative_for_amounts(row, df, doc_col, doc_fb, debit_col, credit_col, date_col)
-
-        if _row_contains_statement_footer(row):
-            continue
-        nar_plain = _normalize_doc_text(narrative)
-        if "تطوير الموقع" in (narrative or "") or (
-            "محمد علي" in (narrative or "") and "السوداني" in (narrative or "")
-        ):
-            continue
-        if len(nar_plain) <= 200:
-            nn = [v for v in _parse_currency_numbers_from_narrative(narrative or "") if v and v > 30]
-            if len(nn) >= 3 and max(nn) >= min(nn) * 2.12 - 1e-9:
-                continue
-
         debit = safe(row[debit_col]) if debit_col and debit_col in df.columns else None
         credit = safe(row[credit_col]) if credit_col and credit_col in df.columns else None
-
-        balance_col = next((c for c in df.columns if _is_balance_column_name(c)), None)
-        debit, credit = _correct_movement_if_debit_equals_balance(
-            row, df, debit_col, credit_col, balance_col, date_col, narrative, debit, credit
-        )
-
-        decs = [
-            v
-            for v in _parse_currency_numbers_from_narrative(narrative)
-            if abs(v - int(v)) > 0.0001 and abs(v) >= 0.0001
-        ]
-        if debit is not None and credit is not None and debit > 0 and credit > 0:
-            if (
-                _looks_like_serial_voucher_amount(debit)
-                and _looks_like_serial_voucher_amount(credit)
-                and len(decs) >= 2
-            ):
-                debit, credit = round(decs[0], 2), round(decs[1], 2)
-            else:
-                debit = _replace_voucher_with_ledger_from_narrative(debit, narrative)
-                credit = _replace_voucher_with_ledger_from_narrative(credit, narrative)
-        else:
-            if debit is not None:
-                debit = _replace_voucher_with_ledger_from_narrative(debit, narrative)
-            if credit is not None:
-                credit = _replace_voucher_with_ledger_from_narrative(credit, narrative)
-
-        if debit and credit and debit > 0 and credit > 0:
-            side_hint = _side_hint_from_narrative(narrative)
-            if side_hint == "debit":
-                credit = None
-            elif side_hint == "credit":
-                debit = None
 
         if debit is None and credit is None:
             continue
 
         if debit and credit and debit > 0 and credit > 0:
-            date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col, doc_fb)
-            if not date_out:
-                date_out = _iso_date_from_narrative(narrative)
-            doc_out = _finalize_doc_for_row(doc_out, narrative)
+            date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col)
             amount = max(debit, credit)
             t = "credit" if credit >= debit else "debit"
-            if _is_likely_pdf_extraction_noise(float(amount), t, doc_out, narrative):
-                continue
             data.append(
                 {
                     "amount": float(amount),
@@ -1451,15 +634,7 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
         else:
             continue
 
-        if _skip_likely_pdf_line_index_row(amount, debit, credit, False):
-            continue
-
-        date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col, doc_fb)
-        if not date_out:
-            date_out = _iso_date_from_narrative(narrative)
-        doc_out = _finalize_doc_for_row(doc_out, narrative)
-        if _is_likely_pdf_extraction_noise(float(amount), t, doc_out, narrative):
-            continue
+        date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col)
         data.append(
             {
                 "amount": float(amount),
@@ -1470,16 +645,12 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
             }
         )
 
-    return _dedupe_extracted_rows(data)
+    return data
 
 
-def analyze(
-    d1: List[Dict[str, Any]],
-    d2: List[Dict[str, Any]],
-    *,
-    allow_same_direction: bool = True,
-) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+def analyze(d1: List[Dict[str, Any]], d2: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
     res: List[Dict[str, Any]] = []
+    used = [False] * len(d2)
     counts: Dict[str, int] = {}
 
     def remove_reversals(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -1536,14 +707,11 @@ def analyze(
             score += 30
             reasons.append("مبلغ قريب")
         else:
-            reasons.append("فرق مبلغ (غير مانع)")
+            return 0, ["فرق مبلغ كبير"]
 
         if (x1["type"] == "credit" and x2["type"] == "debit") or (x1["type"] == "debit" and x2["type"] == "credit"):
             score += 30
             reasons.append("اتجاه عكسي صحيح")
-        elif allow_same_direction:
-            score += 15
-            reasons.append("نفس الاتجاه بين الملفين")
         else:
             return 0, ["نفس الاتجاه"]
 
@@ -1555,72 +723,67 @@ def analyze(
             score += 20
             reasons.append("نوع مستند مطابق")
 
-        both_no_doc = not d1m and not d2m
-        dd1 = _parsed_timestamp_or_nat(x1.get("date"))
-        dd2 = _parsed_timestamp_or_nat(x2.get("date"))
-        has1, has2 = pd.notna(dd1), pd.notna(dd2)
-        if has1 and has2:
-            days = abs(int((dd1 - dd2).days))
-            if days == 0:
-                score += 20
-                reasons.append("نفس اليوم")
-            elif days <= 7:
-                score += 10
-                reasons.append("تاريخ قريب")
-            elif days <= 45:
-                reasons.append("فارق تاريخ ضمن المدى")
-            elif both_no_doc:
-                reasons.append("فارق تاريخ (بدون بيان مستند)")
-            else:
-                score -= 5
-                reasons.append("تاريخ بعيد جدا مع اختلاف بيان المستند")
-        elif has1 or has2:
-            score += 8
-            reasons.append("تاريخ من جهة واحدة فقط")
+        days = date_diff_days(x1["date"], x2["date"])
+        if days is None:
+            score -= 10
+            reasons.append("تاريخ غير واضح")
+        elif days == 0:
+            score += 20
+            reasons.append("نفس اليوم")
+        elif days <= 2:
+            score += 10
+            reasons.append("تاريخ قريب")
         else:
-            reasons.append("لا تاريخ في كلا السطرين")
+            score -= 10
+            reasons.append("تاريخ بعيد")
 
         return score, reasons
 
-    assignment = _assign_global_matches(d1, d2, match_score, MIN_ASSIGN_SCORE)
-    matched_js = {v[0] for v in assignment.values()}
-
-    for i, x1 in enumerate(d1):
+    for x1 in d1:
         if x1.get("type") == "error":
             res.append(x1)
             b = x1.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
             continue
-        if i not in assignment:
-            best_s = -1
-            best_r: List[str] = []
-            for x2 in d2:
-                if x2.get("type") == "error":
-                    continue
-                s, r = match_score(x1, x2)
-                if s > best_s:
-                    best_s, best_r = s, r
-            tail = f" | {' , '.join(best_r)}" if best_r else ""
-            res.append({**x1, "reason": f"لا يوجد مقابل ❌ | أفضل score={best_s}{tail}"})
+
+        best_i = -1
+        best_score = -1
+        best_reason: List[str] = []
+
+        for i, x2 in enumerate(d2):
+            if used[i]:
+                continue
+            if x2.get("type") == "error":
+                continue
+
+            score, reasons = match_score(x1, x2)
+            if score > best_score:
+                best_score = score
+                best_i = i
+                best_reason = reasons
+
+        if best_score >= 80 and best_i != -1:
+            used[best_i] = True
+        elif best_score >= 60 and best_i != -1:
+            res.append({**x1, "reason": f"تطابق ضعيف ⚠️ | score={best_score} | {' , '.join(best_reason)}"})
+            used[best_i] = True
+        else:
+            res.append({**x1, "reason": f"لا يوجد مقابل ❌ | score={best_score} | {' , '.join(best_reason)}"})
             b = x1.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
-            continue
-        _j, s, r = assignment[i]
-        if s >= STRONG_MATCH_SCORE:
-            continue
-        res.append({**x1, "reason": f"تطابق ضعيف ⚠️ | score={s} | {' , '.join(r)}"})
 
-    for j, x in enumerate(d2):
-        if j in matched_js:
-            continue
-        if x.get("type") == "error":
-            res.append(x)
+    # remaining from branch2
+    for i, x in enumerate(d2):
+        if not used[i]:
+            if x.get("type") == "error":
+                res.append(x)
+                b = x.get("branch") or "unknown"
+                counts[b] = counts.get(b, 0) + 1
+                continue
+
+            res.append({**x, "reason": "لا يوجد مقابل ❌ (من الفرع الآخر)"})
             b = x.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
-            continue
-        res.append({**x, "reason": "لا يوجد مقابل ❌ (من الفرع الآخر)"})
-        b = x.get("branch") or "unknown"
-        counts[b] = counts.get(b, 0) + 1
 
     return res, counts
 
