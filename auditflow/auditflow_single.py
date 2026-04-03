@@ -521,6 +521,17 @@ def _row_narrative_for_amounts(
     return _normalize_doc_text(" ".join(parts))
 
 
+def _side_hint_from_narrative(narrative: str) -> Optional[str]:
+    hay = _arabic_letters_for_match(_expand_text_for_doc_kind(narrative or ""))
+    has_debit = "مدين" in hay
+    has_credit = ("دائن" in hay) or ("داين" in hay)
+    if has_debit and not has_credit:
+        return "debit"
+    if has_credit and not has_debit:
+        return "credit"
+    return None
+
+
 def _extract_best_amount_from_text(s: str) -> Optional[float]:
     vals = _parse_currency_numbers_from_narrative(s or "")
     if not vals:
@@ -1309,6 +1320,13 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
                 debit = _replace_voucher_with_ledger_from_narrative(debit, narrative)
             if credit is not None:
                 credit = _replace_voucher_with_ledger_from_narrative(credit, narrative)
+
+        if debit and credit and debit > 0 and credit > 0:
+            side_hint = _side_hint_from_narrative(narrative)
+            if side_hint == "debit":
+                credit = None
+            elif side_hint == "credit":
+                debit = None
 
         if debit is None and credit is None:
             continue
