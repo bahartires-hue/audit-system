@@ -919,6 +919,71 @@ def _trim_pdf_table_df(df: pd.DataFrame) -> pd.DataFrame:
     return dfc
 
 
+def _find_ledger_header_row_index(grid_rows: List[List[Any]], max_scan: int = 25) -> Optional[int]:
+    """First grid row whose cells clearly label مدين and دائن (PDFs often prepend title rows)."""
+    for idx in range(min(max_scan, len(grid_rows))):
+        row = grid_rows[idx]
+        if not row:
+            continue
+        cell_texts: List[str] = []
+        for v in row:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                continue
+            t = str(v).strip().lower()
+            if t:
+                cell_texts.append(t)
+        if len(cell_texts) < 2:
+            continue
+        has_deb = any("مدين" in c and "دائن" not in c for c in cell_texts)
+        has_cred = any("دائن" in c and "مدين" not in c for c in cell_texts)
+        if has_deb and has_cred:
+            return idx
+    return None
+
+
+def _dataframe_from_pdf_grid(grid_rows: List[List[Any]]) -> Optional[pd.DataFrame]:
+    """Build a padded DataFrame from raw extract_tables rows; header row is detected, not assumed row 0."""
+    if not grid_rows:
+        return None
+    hi = _find_ledger_header_row_index(grid_rows)
+    if hi is None:
+        if len(grid_rows) < 2:
+            return None
+        header_cells = list(grid_rows[0])
+        data_rows = grid_rows[1:]
+    else:
+        header_cells = list(grid_rows[hi])
+        data_rows = grid_rows[hi + 1 :]
+    if not data_rows:
+        return None
+    max_w = max(len(r) for r in data_rows + [header_cells])
+    width = max_w
+    norm_data: List[List[Any]] = []
+    for r in data_rows:
+        rr = list(r) if r else []
+        if len(rr) < width:
+            rr = rr + [None] * (width - len(rr))
+        norm_data.append(rr[:width])
+    hdr = list(header_cells)
+    if len(hdr) < width:
+        hdr = hdr + [None] * (width - len(hdr))
+    hdr = hdr[:width]
+    col_names: List[str] = []
+    counts: Dict[str, int] = {}
+    for j in range(width):
+        h = hdr[j]
+        if h is None or (isinstance(h, float) and pd.isna(h)) or not str(h).strip():
+            base = f"_c{j}"
+        else:
+            base = unicodedata.normalize("NFKC", str(h).strip())
+        cnt = counts.get(base, 0)
+        nm = base if cnt == 0 else f"{base}.{cnt}"
+        counts[base] = cnt + 1
+        col_names.append(nm)
+    df = pd.DataFrame(norm_data, columns=col_names)
+    return df.dropna(how="all")
+
+
 def _estimate_extractable_rows(df: Optional[pd.DataFrame]) -> int:
     if df is None or df.empty:
         return 0
@@ -963,12 +1028,9 @@ def read_pdf(file_path: str) -> Optional[pd.DataFrame]:
             all_text = "\n".join(text_parts)
 
             if grid_rows:
-                df = pd.DataFrame(grid_rows).dropna(how="all")
-                if len(df) >= 2:
-                    df.columns = df.iloc[0]
-                    df = df[1:].dropna(how="all")
-                    if not df.empty:
-                        table_df = _trim_pdf_table_df(df.reset_index(drop=True))
+                df = _dataframe_from_pdf_grid(grid_rows)
+                if df is not None and not df.empty:
+                    table_df = _trim_pdf_table_df(df.reset_index(drop=True))
     except Exception:
         return None
 
