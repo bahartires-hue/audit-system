@@ -122,6 +122,21 @@ def _enrich_doc_field(doc_out: Optional[str], narrative: str) -> Optional[str]:
     return doc_out
 
 
+def _finalize_doc_for_row(doc_out: Optional[str], narrative: str) -> Optional[str]:
+    """إن بقي المستند نصاً طويلاً مشوّهاً نستنتج نوع الحركة من كلمات مبيعات/مشتريات داخل البيان."""
+    doc_out = _enrich_doc_field(doc_out, narrative)
+    if doc_out and len(str(doc_out)) > 52:
+        kind = infer_document_kind_from_narrative(narrative) or infer_document_kind_from_narrative(str(doc_out))
+        if kind:
+            return kind
+        h = _arabic_letters_for_match(_expand_text_for_doc_kind(f"{narrative or ''} {doc_out}"))
+        if "مشتريات" in h:
+            return "فاتورة مشتريات" if "هروتاف" in h else "مشتريات"
+        if "مبيعات" in h:
+            return "فاتورة مبيعات" if "هروتاف" in h else "مبيعات"
+    return doc_out
+
+
 def _dedupe_extracted_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     order: List[Tuple[Any, ...]] = []
     by_key: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
@@ -628,6 +643,11 @@ def _is_likely_pdf_extraction_noise(
     kind = infer_document_kind_from_narrative(narrative) or infer_document_kind_from_narrative(doc or "")
     if kind is not None:
         return False
+    hay_blob = _arabic_letters_for_match(blob)
+    if t == "debit" and amount == int(amount) and 1 <= abs(amount) <= 20:
+        if "يدوعس" in blob or "يدوعس" in hay_blob or "سعودي" in hay_blob:
+            if len(_normalize_doc_text(narrative)) <= 100:
+                return True
     exp = _expand_text_for_doc_kind(blob)
     if "ریال" in exp or "ريال" in exp or "ریال" in blob or "ريال" in blob:
         if t == "debit" and amount == int(amount) and 1 <= abs(amount) <= 24:
@@ -642,8 +662,8 @@ def _assign_global_matches(
     match_score_fn: Any,
     min_assign: int = 40,
 ) -> Dict[int, Tuple[int, int, List[str]]]:
-    """أفضل مطابقة عامة: نرتّب كل الأزواج حسب النقاط ثم نستهلك كل صف مرة واحدة."""
-    triples: List[Tuple[int, int, int, List[str]]] = []
+    """أفضل مطابقة عامة: نرتّب النقاط ثم نفضّل أقل فرق مبلغ عند التساوي."""
+    triples: List[Tuple[int, float, int, int, List[str]]] = []
     for i, x1 in enumerate(d1):
         if x1.get("type") == "error":
             continue
@@ -653,12 +673,13 @@ def _assign_global_matches(
             score, reasons = match_score_fn(x1, x2)
             if score < min_assign:
                 continue
-            triples.append((score, i, j, reasons))
-    triples.sort(key=lambda t: t[0], reverse=True)
+            ad = abs(float(x1["amount"]) - float(x2["amount"]))
+            triples.append((score, ad, i, j, reasons))
+    triples.sort(key=lambda t: (-t[0], t[1]))
     used_i: set[int] = set()
     used_j: set[int] = set()
     out: Dict[int, Tuple[int, int, List[str]]] = {}
-    for score, i, j, reasons in triples:
+    for score, _ad, i, j, reasons in triples:
         if i in used_i or j in used_j:
             continue
         used_i.add(i)
@@ -748,7 +769,8 @@ _PDF_FOOTER_MARKERS = (
     "alsudani",
 )
 
-MIN_ASSIGN_SCORE = 40
+# لا نعتمد أزواج «نفس الاتجاه + فقط 45 نقطة»؛ ترفع الحد تترك صف بحر بدون شريك زائف.
+MIN_ASSIGN_SCORE = 46
 STRONG_MATCH_SCORE = 60
 WEAK_MATCH_SCORE = 45
 
@@ -1115,7 +1137,7 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
 
         if debit and credit and debit > 0 and credit > 0:
             date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col, doc_fb)
-            doc_out = _enrich_doc_field(doc_out, narrative)
+            doc_out = _finalize_doc_for_row(doc_out, narrative)
             amount = max(debit, credit)
             t = "credit" if credit >= debit else "debit"
             if _is_likely_pdf_extraction_noise(float(amount), t, doc_out, narrative):
@@ -1144,7 +1166,7 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
             continue
 
         date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col, doc_fb)
-        doc_out = _enrich_doc_field(doc_out, narrative)
+        doc_out = _finalize_doc_for_row(doc_out, narrative)
         if _is_likely_pdf_extraction_noise(float(amount), t, doc_out, narrative):
             continue
         data.append(
