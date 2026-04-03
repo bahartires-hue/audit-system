@@ -1373,6 +1373,79 @@ def extract_row_date_doc(
     return date_out, doc_out
 
 
+def _row_contains_statement_footer(row: pd.Series) -> bool:
+    for v in row.tolist():
+        if pd.isna(v):
+            continue
+        s = str(v).strip()
+        if not s:
+            continue
+        if any(m in s for m in _PDF_FOOTER_MARKERS):
+            return True
+        if "تطوير الموقع" in s or ("تطوير" in s and "موقع" in s):
+            return True
+        if "محمد علي" in s and "السوداني" in s:
+            return True
+    return False
+
+
+def _correct_movement_if_debit_equals_balance(
+    row: pd.Series,
+    df: pd.DataFrame,
+    debit_col: Optional[str],
+    credit_col: Optional[str],
+    balance_col: Optional[str],
+    date_col: Optional[str],
+    narrative: str,
+    debit: Optional[float],
+    credit: Optional[float],
+) -> Tuple[Optional[float], Optional[float]]:
+    if not balance_col or balance_col not in df.columns or not debit_col or debit_col not in df.columns:
+        return debit, credit
+    if debit is None:
+        return debit, credit
+    bal = safe(row[balance_col])
+    if bal is None or abs(float(debit) - float(bal)) > 0.02:
+        return debit, credit
+    cre = credit
+    if cre is not None and float(cre) > 0.01:
+        return debit, credit
+
+    alts: List[float] = []
+    for c in df.columns:
+        if c == balance_col:
+            continue
+        n = str(c).lower()
+        if date_col and c == date_col:
+            continue
+        if "تاريخ" in n or "date" in n:
+            continue
+        if _column_name_excludes_from_amount(c):
+            continue
+        v = safe(row[c])
+        if v is None or v <= 0:
+            continue
+        if not _is_plausible_currency_amount(v):
+            continue
+        if abs(float(v) - float(bal)) < 0.02:
+            continue
+        if float(v) < float(bal) - 0.01:
+            alts.append(float(v))
+
+    if alts:
+        replacement = max(alts)
+        if replacement + 0.02 < float(debit):
+            return round(replacement, 2), credit
+
+    nums = [v for v in _parse_currency_numbers_from_narrative(narrative) if v and v < float(bal) - 0.01]
+    if len(nums) == 1:
+        replacement = nums[0]
+        if replacement + 0.02 < float(debit):
+            return round(float(replacement), 2), credit
+
+    return debit, credit
+
+
 def _skip_likely_pdf_line_index_row(
     amount: float, debit: Optional[float], credit: Optional[float], both_positive: bool
 ) -> bool:
@@ -1398,8 +1471,16 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
 
         narrative = _row_narrative_for_amounts(row, df, doc_col, doc_fb, debit_col, credit_col, date_col)
 
+        if _row_contains_statement_footer(row):
+            continue
+
         debit = safe(row[debit_col]) if debit_col and debit_col in df.columns else None
         credit = safe(row[credit_col]) if credit_col and credit_col in df.columns else None
+
+        balance_col = next((c for c in df.columns if _is_balance_column_name(c)), None)
+        debit, credit = _correct_movement_if_debit_equals_balance(
+            row, df, debit_col, credit_col, balance_col, date_col, narrative, debit, credit
+        )
 
         decs = [
             v
