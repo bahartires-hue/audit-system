@@ -532,6 +532,58 @@ def _side_hint_from_narrative(narrative: str) -> Optional[str]:
     return None
 
 
+def _is_likely_pdf_extraction_noise(
+    amount: float,
+    t: str,
+    doc: Optional[str],
+    narrative: str,
+) -> bool:
+    blob = f"{narrative} {doc or ''}"
+    if any(m in blob for m in _PDF_FOOTER_MARKERS):
+        return True
+    if "تطوير" in blob and "موقع" in blob:
+        return True
+    kind = infer_document_kind_from_narrative(narrative) or infer_document_kind_from_narrative(doc or "")
+    if kind is not None:
+        return False
+    exp = _expand_text_for_doc_kind(blob)
+    if "ریال" in exp or "ريال" in exp or "ریال" in blob or "ريال" in blob:
+        if t == "debit" and amount == int(amount) and 1 <= abs(amount) <= 24:
+            if len(_normalize_doc_text(narrative)) <= 140:
+                return True
+    return False
+
+
+def _assign_global_matches(
+    d1: List[Dict[str, Any]],
+    d2: List[Dict[str, Any]],
+    match_score_fn: Any,
+    min_assign: int = 40,
+) -> Dict[int, Tuple[int, int, List[str]]]:
+    triples: List[Tuple[int, int, int, List[str]]] = []
+    for i, x1 in enumerate(d1):
+        if x1.get("type") == "error":
+            continue
+        for j, x2 in enumerate(d2):
+            if x2.get("type") == "error":
+                continue
+            score, reasons = match_score_fn(x1, x2)
+            if score < min_assign:
+                continue
+            triples.append((score, i, j, reasons))
+    triples.sort(key=lambda t: t[0], reverse=True)
+    used_i: set[int] = set()
+    used_j: set[int] = set()
+    out: Dict[int, Tuple[int, int, List[str]]] = {}
+    for score, i, j, reasons in triples:
+        if i in used_i or j in used_j:
+            continue
+        used_i.add(i)
+        used_j.add(j)
+        out[i] = (j, score, reasons)
+    return out
+
+
 def _extract_best_amount_from_text(s: str) -> Optional[float]:
     vals = _parse_currency_numbers_from_narrative(s or "")
     if not vals:
@@ -925,6 +977,19 @@ _LETTERHEAD_MARKERS = (
     "اسم العميل",
 )
 
+_PDF_FOOTER_MARKERS = (
+    "تطوير الموقع",
+    "السوداني",
+    "محمد علي",
+    "Mohammed",
+    "Alsudani",
+    "alsudani",
+)
+
+MIN_ASSIGN_SCORE = 40
+STRONG_MATCH_SCORE = 60
+WEAK_MATCH_SCORE = 45
+
 
 def _skip_statement_letterhead_lines(lines: List[str]) -> List[str]:
     """Drop company letterhead / meta block before جدول الحركة (كما في كشوف الموردين)."""
@@ -964,6 +1029,8 @@ def _extract_pdf_rows_from_text(raw_text: str) -> List[Dict[str, Any]]:
     for raw_line in body_lines:
         line = _normalize_arabic_digits(raw_line).strip()
         if len(line) < 2:
+            continue
+        if any(m in raw_line for m in _PDF_FOOTER_MARKERS):
             continue
         if any(m in raw_line for m in _LETTERHEAD_MARKERS) and "مدين" not in raw_line:
             continue
@@ -1331,6 +1398,8 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
             doc_out = _enrich_doc_field(doc_out, narrative)
             amount = max(debit, credit)
             t = "credit" if credit >= debit else "debit"
+            if _is_likely_pdf_extraction_noise(float(amount), t, doc_out, narrative):
+                continue
             data.append(
                 {"amount": float(amount), "type": t, "branch": branch, "date": date_out, "doc": doc_out}
             )
@@ -1350,6 +1419,8 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
 
         date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col, doc_fb)
         doc_out = _enrich_doc_field(doc_out, narrative)
+        if _is_likely_pdf_extraction_noise(float(amount), t, doc_out, narrative):
+            continue
         data.append({"amount": float(amount), "type": t, "branch": branch, "date": date_out, "doc": doc_out})
 
     return _dedupe_extracted_rows(data)
@@ -1362,7 +1433,6 @@ def analyze(
     allow_same_direction: bool = True,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
     res: List[Dict[str, Any]] = []
-    used = [False] * len(d2)
     counts: Dict[str, int] = {}
 
     def is_sale_return_pair(doc1: Any, doc2: Any) -> bool:
@@ -1487,48 +1557,45 @@ def analyze(
 
         return score, reasons
 
-    for x1 in d1:
+    assignment = _assign_global_matches(d1, d2, match_score, MIN_ASSIGN_SCORE)
+    matched_js = {v[0] for v in assignment.values()}
+
+    for i, x1 in enumerate(d1):
         if x1.get("type") == "error":
             res.append(x1)
             b = x1.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
             continue
-
-        best_i = -1
-        best_score = -1
-        best_reason: List[str] = []
-
-        for i, x2 in enumerate(d2):
-            if used[i]:
-                continue
-            if x2.get("type") == "error":
-                continue
-            score, reasons = match_score(x1, x2)
-            if score > best_score:
-                best_score = score
-                best_i = i
-                best_reason = reasons
-
-        if best_score >= 60 and best_i != -1:
-            used[best_i] = True
-        elif best_score >= 45 and best_i != -1:
-            res.append({**x1, "reason": f"تطابق ضعيف ⚠️ | score={best_score} | {' , '.join(best_reason)}"})
-            used[best_i] = True
-        else:
-            res.append({**x1, "reason": f"لا يوجد مقابل ❌ | score={best_score} | {' , '.join(best_reason)}"})
+        if i not in assignment:
+            best_s = -1
+            best_r: List[str] = []
+            for x2 in d2:
+                if x2.get("type") == "error":
+                    continue
+                s, r = match_score(x1, x2)
+                if s > best_s:
+                    best_s, best_r = s, r
+            tail = f" | {' , '.join(best_r)}" if best_r else ""
+            res.append({**x1, "reason": f"لا يوجد مقابل ❌ | أفضل score={best_s}{tail}"})
             b = x1.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
+            continue
+        _j, s, r = assignment[i]
+        if s >= STRONG_MATCH_SCORE:
+            continue
+        res.append({**x1, "reason": f"تطابق ضعيف ⚠️ | score={s} | {' , '.join(r)}"})
 
-    for i, x in enumerate(d2):
-        if not used[i]:
-            if x.get("type") == "error":
-                res.append(x)
-                b = x.get("branch") or "unknown"
-                counts[b] = counts.get(b, 0) + 1
-                continue
-            res.append({**x, "reason": "لا يوجد مقابل ❌ (من الفرع الآخر)"})
+    for j, x in enumerate(d2):
+        if j in matched_js:
+            continue
+        if x.get("type") == "error":
+            res.append(x)
             b = x.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
+            continue
+        res.append({**x, "reason": "لا يوجد مقابل ❌ (من الفرع الآخر)"})
+        b = x.get("branch") or "unknown"
+        counts[b] = counts.get(b, 0) + 1
 
     return res, counts
 
