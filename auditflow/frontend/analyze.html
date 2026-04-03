@@ -72,9 +72,15 @@
           </section>
         </div>
 
-        <div class="mt-6 flex items-center justify-center gap-3 flex-wrap">
-          <button id="startBtn" class="px-6 py-3 bg-slate-900 text-white rounded-2xl font-extrabold hover:bg-slate-800" onclick="startAnalyze()">ابدأ التحليل</button>
-          <input id="title" class="w-72 max-w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none" placeholder="عنوان التقرير (اختياري)" />
+        <div class="mt-6 flex flex-col items-center gap-4">
+          <label class="flex items-center gap-2 text-sm font-extrabold text-slate-700 cursor-pointer select-none max-w-xl text-center">
+            <input id="strictMirror" type="checkbox" class="rounded border-slate-300 w-4 h-4" />
+            مطابقة صارمة: اشتراط مدين مقابل دائن بين الملفين (عطّلها إن كان التصدير يعرض نفس الجهة في الطرفين)
+          </label>
+          <div class="flex items-center justify-center gap-3 flex-wrap">
+            <button id="startBtn" class="px-6 py-3 bg-slate-900 text-white rounded-2xl font-extrabold hover:bg-slate-800" onclick="startAnalyze()">ابدأ التحليل</button>
+            <input id="title" class="w-72 max-w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none" placeholder="عنوان التقرير (اختياري)" />
+          </div>
         </div>
       </div>
     </main>
@@ -168,6 +174,7 @@
           fd.append("b1", b1);
           fd.append("b2", b2);
           if (title) fd.append("title", title);
+          if (document.getElementById("strictMirror")?.checked) fd.append("strict_mirror_types", "true");
 
           const data = await apiPostForm("/analyze", fd);
           showToast("تم التحليل ✔️", "#10b981");

@@ -37,6 +37,130 @@ def _normalize_doc_text(s: Any) -> str:
     return t
 
 
+def _arabic_letters_for_match(s: str) -> str:
+    t = unicodedata.normalize("NFKC", s or "")
+    for a, b in (
+        ("ى", "ي"),
+        ("ی", "ي"),
+        ("ئ", "ي"),
+        ("ة", "ه"),
+        ("ۀ", "ه"),
+        ("ٱ", "ا"),
+        ("أ", "ا"),
+        ("إ", "ا"),
+        ("آ", "ا"),
+    ):
+        t = t.replace(a, b)
+    return t.lower()
+
+
+_DOC_KIND_SPECS: List[Tuple[str, str]] = [
+    ("مردود مشتريات", "مردود مشتريات"),
+    ("مردود مبيعات", "مردود مبيعات"),
+    # كلمات شائعة بخطأ اتجاه/عكس حروف في مستخرج PDF
+    ("هروتاف", "فاتورة"),
+    ("تاعیبم", "مبيعات"),
+    ("تاعيبم", "مبيعات"),
+    ("تایرتشم", "مشتريات"),
+    ("تارتشم", "مشتريات"),
+    ("تايرتشم", "مشتريات"),
+    ("مشتريات", "مشتريات"),
+    ("مبیعات", "مبيعات"),
+    ("مبيعات", "مبيعات"),
+    ("فاتوره", "فاتورة"),
+    ("فاتورة مبيعات", "فاتورة مبيعات"),
+    ("فاتورة مشتريات", "فاتورة مشتريات"),
+    ("فاتورة", "فاتورة"),
+    ("سند قبض", "سند قبض"),
+    ("سند صرف", "سند صرف"),
+    ("قيد يومية", "قيد يومية"),
+    ("طلب شراء", "مشتريات"),
+    ("طلب بيع", "مبيعات"),
+]
+
+
+def _has_arabic(s: str) -> bool:
+    return any("\u0600" <= c <= "\u06ff" for c in (s or ""))
+
+
+def _expand_text_for_doc_kind(s: str) -> str:
+    t = _normalize_doc_text(s)
+    if not t:
+        return ""
+    parts = [t]
+    words = t.split()
+    rev = []
+    for w in words:
+        if _has_arabic(w) and len(w) >= 3:
+            rev.append(w[::-1])
+        else:
+            rev.append(w)
+    parts.append(" ".join(rev))
+    return " \n ".join(parts)
+
+
+def infer_document_kind_from_narrative(text: Optional[str]) -> Optional[str]:
+    if not text or not str(text).strip():
+        return None
+    hay_raw = _expand_text_for_doc_kind(str(text))
+    hay = _arabic_letters_for_match(hay_raw)
+    if "هروتاف" in hay and "تاعيبم" in hay:
+        return "فاتورة مبيعات"
+    if "هروتاف" in hay and "تايرتشم" in hay:
+        return "فاتورة مشتريات"
+    for needle, label in _DOC_KIND_SPECS:
+        n = _arabic_letters_for_match(needle)
+        if n in hay or needle in hay_raw:
+            return label
+    return None
+
+
+def _enrich_doc_field(doc_out: Optional[str], narrative: str) -> Optional[str]:
+    kind = infer_document_kind_from_narrative(narrative) or infer_document_kind_from_narrative(doc_out or "")
+    if kind:
+        return kind
+    return doc_out
+
+
+def _dedupe_extracted_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    order: List[Tuple[Any, ...]] = []
+    by_key: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
+
+    def score_doc(d: Any) -> int:
+        s = str(d or "")
+        if not s:
+            return 0
+        if s in (
+            "مبيعات",
+            "مشتريات",
+            "مردود مبيعات",
+            "مردود مشتريات",
+            "فاتورة",
+            "فاتورة مبيعات",
+            "فاتورة مشتريات",
+            "سند قبض",
+            "سند صرف",
+            "قيد يومية",
+        ) or s.startswith("فاتورة "):
+            return 100
+        return max(0, 80 - len(s))
+
+    for r in rows:
+        k = (
+            r.get("branch"),
+            round(float(r["amount"]), 2),
+            r.get("type"),
+            r.get("date") or "",
+        )
+        if k not in by_key:
+            by_key[k] = r
+            order.append(k)
+        elif score_doc(r.get("doc")) > score_doc(by_key[k].get("doc")):
+            by_key[k] = r
+
+    return [by_key[k] for k in order]
+
+
 def _parse_currency_numbers_from_narrative(narrative: str) -> List[float]:
     s = _normalize_arabic_digits(narrative or "")
     tokens = re.findall(r"[-+]?\d[\d,٬٫\.]*", s)
@@ -769,6 +893,8 @@ doc_map: Dict[str, str] = {
     "قيد افتتاحي": "قيد افتتاحي",
     "مبيعات": "مشتريات",
     "مشتريات": "مبيعات",
+    "فاتورة مبيعات": "فاتورة مشتريات",
+    "فاتورة مشتريات": "فاتورة مبيعات",
 }
 
 
@@ -902,6 +1028,7 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
 
         if debit and credit and debit > 0 and credit > 0:
             date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col, doc_fb)
+            doc_out = _enrich_doc_field(doc_out, narrative)
             amount = max(debit, credit)
             t = "credit" if credit >= debit else "debit"
             data.append(
@@ -928,6 +1055,7 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
             continue
 
         date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col, doc_fb)
+        doc_out = _enrich_doc_field(doc_out, narrative)
         data.append(
             {
                 "amount": float(amount),
@@ -938,10 +1066,15 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
             }
         )
 
-    return data
+    return _dedupe_extracted_rows(data)
 
 
-def analyze(d1: List[Dict[str, Any]], d2: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+def analyze(
+    d1: List[Dict[str, Any]],
+    d2: List[Dict[str, Any]],
+    *,
+    allow_same_direction: bool = True,
+) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
     res: List[Dict[str, Any]] = []
     used = [False] * len(d2)
     counts: Dict[str, int] = {}
@@ -1005,6 +1138,9 @@ def analyze(d1: List[Dict[str, Any]], d2: List[Dict[str, Any]]) -> Tuple[List[Di
         if (x1["type"] == "credit" and x2["type"] == "debit") or (x1["type"] == "debit" and x2["type"] == "credit"):
             score += 30
             reasons.append("اتجاه عكسي صحيح")
+        elif allow_same_direction:
+            score += 15
+            reasons.append("نفس الاتجاه بين الملفين")
         else:
             return 0, ["نفس الاتجاه"]
 
