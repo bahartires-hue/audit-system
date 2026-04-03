@@ -2504,6 +2504,7 @@ INDEX_HTML = r"""<!doctype html>
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/static/tailwind.css" />
+    <link rel="stylesheet" href="/static/dark.css" />
     <style>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
     </style>
@@ -2607,6 +2608,7 @@ ANALYZE_HTML = r"""<!doctype html>
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/static/tailwind.css" />
+    <link rel="stylesheet" href="/static/dark.css" />
     <style>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
     </style>
@@ -2764,6 +2766,7 @@ REPORTS_HTML = r"""<!doctype html>
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/static/tailwind.css" />
+    <link rel="stylesheet" href="/static/dark.css" />
     <style>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
     </style>
@@ -2820,6 +2823,7 @@ REPORT_HTML = r"""<!doctype html>
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/static/tailwind.css" />
+    <link rel="stylesheet" href="/static/dark.css" />
     <style>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
     </style>
@@ -2937,6 +2941,7 @@ SETTINGS_HTML = r"""<!doctype html>
     <title>الإعدادات - AuditFlow</title>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/static/tailwind.css" />
+    <link rel="stylesheet" href="/static/dark.css" />
     <style>body { font-family: "IBM Plex Sans Arabic", system-ui, sans-serif; }</style>
   </head>
   <body class="bg-slate-50 text-slate-900">
@@ -2994,6 +2999,7 @@ LOGIN_HTML = r"""<!doctype html>
     <title>تسجيل الدخول - AuditFlow</title>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/static/tailwind.css" />
+    <link rel="stylesheet" href="/static/dark.css" />
     <style>body { font-family: "IBM Plex Sans Arabic", system-ui, sans-serif; }</style>
   </head>
   <body class="bg-slate-50 text-slate-900 min-h-screen">
@@ -3088,6 +3094,7 @@ def ui_js():
 
 
 TAILWIND_CSS_PATH = Path(__file__).resolve().parent / "frontend" / "tailwind.css"
+DARK_CSS_PATH = Path(__file__).resolve().parent / "frontend" / "dark.css"
 
 
 @app.get("/static/tailwind.css")
@@ -3099,6 +3106,13 @@ def ui_tailwind_css():
             status_code=503,
         )
     return FileResponse(TAILWIND_CSS_PATH, media_type="text/css; charset=utf-8")
+
+
+@app.get("/static/dark.css")
+def ui_dark_css():
+    if not DARK_CSS_PATH.is_file():
+        return Response(content=b"/* missing dark.css */\n", media_type="text/css; charset=utf-8", status_code=503)
+    return FileResponse(DARK_CSS_PATH, media_type="text/css; charset=utf-8")
 
 
 @app.get("/auth/me")

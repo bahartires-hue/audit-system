@@ -3,41 +3,52 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
     <title>تقرير - AuditFlow</title>
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/static/tailwind.css" />
+    <link rel="stylesheet" href="/static/dark.css" />
     <style>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
     </style>
   </head>
-  <body class="bg-slate-50 text-slate-900">
-    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold"></div>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold shadow-lg"></div>
 
-    <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
-      <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 text-lg">AuditFlow</div>
-        <nav class="flex gap-3">
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/">لوحة التحكم</a>
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/analyze">تحليل</a>
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/reports">التقارير</a>
+    <header class="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-700 z-40">
+      <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="font-extrabold text-slate-900 dark:text-white text-lg">AuditFlow</div>
+        <nav class="flex flex-wrap items-center gap-2 md:gap-3">
+          <a href="/" data-nav="home">لوحة التحكم</a>
+          <a href="/analyze" data-nav="analyze">تحليل</a>
+          <a href="/reports" data-nav="reports">التقارير</a>
+          <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
         </nav>
       </div>
     </header>
 
     <main class="max-w-6xl mx-auto px-4 py-8">
-      <div class="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 shadow-sm">
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 md:p-8 shadow-sm">
         <div class="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 id="reportTitle" class="text-2xl font-extrabold">تقرير</h1>
-            <div id="reportBranches" class="text-slate-600 font-extrabold mt-2"></div>
+            <h1 id="reportTitle" class="text-2xl font-extrabold text-slate-900 dark:text-slate-50">تقرير</h1>
+            <div id="reportBranches" class="text-slate-600 dark:text-slate-400 font-extrabold mt-2"></div>
           </div>
           <div class="flex gap-2">
             <button
               id="downloadBtn"
-              class="px-4 py-2 rounded-2xl bg-emerald-500 text-white font-extrabold hover:bg-emerald-600"
+              class="px-4 py-2 rounded-2xl bg-emerald-500 dark:bg-emerald-600 text-white font-extrabold hover:bg-emerald-600 dark:hover:bg-emerald-500"
               onclick="downloadCSV(qs('id'))"
             >
               تحميل CSV
@@ -46,37 +57,37 @@
         </div>
 
         <div class="grid md:grid-cols-4 gap-4 mt-6">
-          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-            <div class="text-slate-500 font-extrabold text-sm">الإجمالي</div>
+          <div class="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
+            <div class="text-slate-500 dark:text-slate-400 font-extrabold text-sm">الإجمالي</div>
             <div id="statTotal" class="text-3xl font-extrabold mt-2">0</div>
           </div>
-          <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
-            <div class="text-emerald-700 font-extrabold text-sm">متطابق</div>
-            <div id="statMatched" class="text-3xl font-extrabold mt-2 text-emerald-800">0</div>
+          <div class="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4">
+            <div class="text-emerald-700 dark:text-emerald-400 font-extrabold text-sm">متطابق</div>
+            <div id="statMatched" class="text-3xl font-extrabold mt-2 text-emerald-800 dark:text-emerald-300">0</div>
           </div>
-          <div class="bg-rose-50 border border-rose-200 rounded-2xl p-4">
-            <div class="text-rose-700 font-extrabold text-sm">أخطاء</div>
-            <div id="statErrors" class="text-3xl font-extrabold mt-2 text-rose-800">0</div>
+          <div class="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl p-4">
+            <div class="text-rose-700 dark:text-rose-400 font-extrabold text-sm">أخطاء</div>
+            <div id="statErrors" class="text-3xl font-extrabold mt-2 text-rose-800 dark:text-rose-300">0</div>
           </div>
-          <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-            <div class="text-amber-700 font-extrabold text-sm">تحذيرات</div>
-            <div id="statWarnings" class="text-3xl font-extrabold mt-2 text-amber-800">0</div>
+          <div class="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl p-4">
+            <div class="text-amber-700 dark:text-amber-400 font-extrabold text-sm">تحذيرات</div>
+            <div id="statWarnings" class="text-3xl font-extrabold mt-2 text-amber-800 dark:text-amber-300">0</div>
           </div>
         </div>
 
-        <div class="mt-6 bg-slate-50 border border-slate-200 rounded-2xl p-4">
+        <div class="mt-6 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
           <div class="flex items-center justify-between gap-3 flex-wrap">
             <h2 class="font-extrabold">فلترة الأخطاء</h2>
             <div class="flex gap-2 flex-wrap">
-              <input id="filterDoc" placeholder="نوع المستند" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none" />
-              <input id="filterAmount" placeholder="المبلغ" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none w-32" />
-              <input id="filterType" placeholder="نوع الخطأ (❌ أو ⚠️)" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none w-44" />
-              <button class="px-4 py-2 rounded-xl bg-slate-900 text-white font-extrabold text-sm" onclick="applyTableFilters(window.__MISMATCHES__ || [])">تطبيق</button>
+              <input id="filterDoc" placeholder="نوع المستند" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-sm outline-none text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+              <input id="filterAmount" placeholder="المبلغ" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-sm outline-none w-32 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+              <input id="filterType" placeholder="نوع الخطأ (❌ أو ⚠️)" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-sm outline-none w-44 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+              <button class="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-extrabold text-sm hover:bg-slate-800 dark:hover:bg-slate-200" onclick="applyTableFilters(window.__MISMATCHES__ || [])">تطبيق</button>
             </div>
           </div>
         </div>
 
-        <div id="mismatchTableHost" class="mt-4 overflow-auto rounded-2xl border border-slate-200"></div>
+        <div id="mismatchTableHost" class="mt-4 overflow-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950"></div>
       </div>
     </main>
 

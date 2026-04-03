@@ -3,35 +3,46 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
     <title>التقارير - AuditFlow</title>
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/static/tailwind.css" />
+    <link rel="stylesheet" href="/static/dark.css" />
     <style>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
     </style>
   </head>
-  <body class="bg-slate-50 text-slate-900">
-    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold"></div>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold shadow-lg"></div>
 
-    <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
-      <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 text-lg">AuditFlow</div>
-        <nav class="flex gap-3">
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/">لوحة التحكم</a>
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/analyze">تحليل</a>
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-slate-900 text-white" href="/reports">التقارير</a>
+    <header class="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-700 z-40">
+      <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="font-extrabold text-slate-900 dark:text-white text-lg">AuditFlow</div>
+        <nav class="flex flex-wrap items-center gap-2 md:gap-3">
+          <a href="/" data-nav="home">لوحة التحكم</a>
+          <a href="/analyze" data-nav="analyze">تحليل</a>
+          <a href="/reports" data-nav="reports">التقارير</a>
+          <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
         </nav>
       </div>
     </header>
 
     <main class="max-w-6xl mx-auto px-4 py-8">
-      <div class="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 shadow-sm">
-        <div class="flex items-center justify-between gap-3">
-          <h1 class="text-2xl font-extrabold">التقارير</h1>
-          <a href="/analyze" class="px-4 py-2 rounded-2xl bg-slate-900 text-white font-extrabold hover:bg-slate-800">تحليل جديد</a>
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 md:p-8 shadow-sm">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <h1 class="text-2xl font-extrabold text-slate-900 dark:text-slate-50">التقارير</h1>
+          <a href="/analyze" class="px-4 py-2 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-extrabold hover:bg-slate-800 dark:hover:bg-slate-200">تحليل جديد</a>
         </div>
 
         <div id="reportsHost" class="mt-6 grid gap-4 md:grid-cols-2"></div>

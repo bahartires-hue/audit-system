@@ -1,3 +1,10 @@
+try {
+  const t = localStorage.getItem("auditflow-theme");
+  const dark =
+    t === "dark" || (t !== "light" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.classList.toggle("dark", dark);
+} catch (e) {}
+
 function qs(name) {
   return new URLSearchParams(window.location.search).get(name);
 }
@@ -33,35 +40,38 @@ function setLoading(btn, loading, text) {
   if (!btn) return;
   if (loading) {
     btn.disabled = true;
-    btn.dataset.oldText = btn.innerText;
-    btn.innerHTML = text || "جارٍ التحليل ...";
+    if (btn.dataset.oldText === undefined) btn.dataset.oldText = (btn.textContent || "").trim();
+    const msg = text || "جارٍ التحليل ...";
+    btn.innerHTML = `<span class="inline-flex items-center justify-center gap-2"><svg class="h-4 w-4 animate-spin shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>${msg}</span></span>`;
   } else {
     btn.disabled = false;
-    btn.innerText = btn.dataset.oldText || (text || "ابدأ التحليل");
+    btn.textContent = btn.dataset.oldText !== undefined ? btn.dataset.oldText : text || "ابدأ التحليل";
+    delete btn.dataset.oldText;
   }
 }
 
 function renderReportRow(item) {
   const li = document.createElement("div");
-  li.className = "bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-2";
+  li.className =
+    "bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-4 flex flex-col gap-2 shadow-sm";
   li.innerHTML = `
     <div class="flex items-start justify-between gap-4">
       <div class="min-w-0">
-        <div class="font-extrabold text-slate-900 truncate">
+        <div class="font-extrabold text-slate-900 dark:text-slate-50 truncate">
           ${item.title ? item.title : "تقرير بدون عنوان"}
         </div>
-        <div class="text-sm text-slate-600 mt-1">
+        <div class="text-sm text-slate-600 dark:text-slate-400 mt-1">
           ${item.branch1_name} مقابل ${item.branch2_name}
         </div>
       </div>
-      <a class="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-sm font-extrabold" href="/report?id=${item.id}">عرض</a>
+      <a class="px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold shrink-0" href="/report?id=${item.id}">عرض</a>
     </div>
     <div class="flex gap-3 flex-wrap">
-      <div class="text-sm text-slate-700"><span class="font-extrabold">متطابق:</span> ${item.stats.matched_ops}</div>
-      <div class="text-sm text-slate-700"><span class="font-extrabold">أخطاء:</span> ${item.stats.errors_count}</div>
-      <div class="text-sm text-slate-700"><span class="font-extrabold">تحذيرات:</span> ${item.stats.warnings_count}</div>
+      <div class="text-sm text-slate-700 dark:text-slate-300"><span class="font-extrabold">متطابق:</span> ${item.stats.matched_ops}</div>
+      <div class="text-sm text-slate-700 dark:text-slate-300"><span class="font-extrabold">أخطاء:</span> ${item.stats.errors_count}</div>
+      <div class="text-sm text-slate-700 dark:text-slate-300"><span class="font-extrabold">تحذيرات:</span> ${item.stats.warnings_count}</div>
     </div>
-    <button class="self-end px-3 py-1.5 rounded-lg border border-rose-200 text-rose-600 text-sm font-extrabold hover:bg-rose-50" onclick="deleteReport('${item.id}')">حذف</button>
+    <button class="self-end px-3 py-1.5 rounded-lg border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-sm font-extrabold hover:bg-rose-50 dark:hover:bg-rose-950/50" onclick="deleteReport('${item.id}')">حذف</button>
   `;
   return li;
 }
@@ -81,13 +91,13 @@ async function loadReports() {
   const host = document.getElementById("reportsHost");
   if (!host) return;
   host.innerHTML = `
-    <div class="text-slate-600 text-center py-10">جارٍ تحميل التقارير ...</div>
+    <div class="text-slate-600 dark:text-slate-400 text-center py-10">جارٍ تحميل التقارير ...</div>
   `;
   const data = await apiGet("/reports");
   const items = data.items || [];
   host.innerHTML = "";
   if (!items.length) {
-    host.innerHTML = `<div class="text-slate-600 text-center py-10">لا توجد تقارير بعد.</div>`;
+    host.innerHTML = `<div class="text-slate-600 dark:text-slate-400 text-center py-10">لا توجد تقارير بعد.</div>`;
     return;
   }
   for (const item of items) {
@@ -100,19 +110,24 @@ function renderMismatchTable(entries, host) {
     .map((e) => {
       const reason = e.reason || "";
       const severity = e.type === "error" || reason.includes("❌") ? "error" : reason.includes("⚠️") ? "warning" : "mismatch";
-      const sevColor = severity === "error" ? "bg-rose-50 text-rose-700 border-rose-200" : severity === "warning" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-slate-50 text-slate-700 border-slate-200";
+      const sevColor =
+        severity === "error"
+          ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
+          : severity === "warning"
+            ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+            : "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600";
       const sevText = severity === "error" ? "خطأ" : severity === "warning" ? "تحذير" : "مخالفة";
       return `
-        <tr class="border-b border-slate-200">
-          <td class="px-3 py-3 text-sm text-slate-800">${e.branch || "-"}</td>
-          <td class="px-3 py-3 text-sm text-slate-800">${e.amount ?? "-"}</td>
-          <td class="px-3 py-3 text-sm text-slate-800">${e.type || "-"}</td>
-          <td class="px-3 py-3 text-sm text-slate-800">${e.date || "-"}</td>
-          <td class="px-3 py-3 text-sm text-slate-800">${e.doc || "-"}</td>
+        <tr class="border-b border-slate-200 dark:border-slate-700">
+          <td class="px-3 py-3 text-sm text-slate-800 dark:text-slate-200">${e.branch || "-"}</td>
+          <td class="px-3 py-3 text-sm text-slate-800 dark:text-slate-200">${e.amount ?? "-"}</td>
+          <td class="px-3 py-3 text-sm text-slate-800 dark:text-slate-200">${e.type || "-"}</td>
+          <td class="px-3 py-3 text-sm text-slate-800 dark:text-slate-200">${e.date || "-"}</td>
+          <td class="px-3 py-3 text-sm text-slate-800 dark:text-slate-200">${e.doc || "-"}</td>
           <td class="px-3 py-3 text-sm">
             <span class="inline-flex items-center px-2 py-1 rounded-full border ${sevColor} text-xs font-extrabold">${sevText}</span>
           </td>
-          <td class="px-3 py-3 text-sm text-slate-700">${reason || "-"}</td>
+          <td class="px-3 py-3 text-sm text-slate-700 dark:text-slate-300">${reason || "-"}</td>
         </tr>
       `;
     })
@@ -120,19 +135,19 @@ function renderMismatchTable(entries, host) {
 
   host.innerHTML = `
     <table class="w-full text-right table-fixed">
-      <thead class="bg-slate-50">
+      <thead class="bg-slate-50 dark:bg-slate-800/80">
         <tr>
-          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold w-[120px]">الفرع</th>
-          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold w-[110px]">المبلغ</th>
-          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold w-[90px]">نوع</th>
-          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold w-[110px]">التاريخ</th>
-          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold">المستند</th>
-          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold w-[110px]">الحالة</th>
-          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold">السبب</th>
+          <th class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300 font-extrabold w-[120px]">الفرع</th>
+          <th class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300 font-extrabold w-[110px]">المبلغ</th>
+          <th class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300 font-extrabold w-[90px]">نوع</th>
+          <th class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300 font-extrabold w-[110px]">التاريخ</th>
+          <th class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300 font-extrabold">المستند</th>
+          <th class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300 font-extrabold w-[110px]">الحالة</th>
+          <th class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300 font-extrabold">السبب</th>
         </tr>
       </thead>
       <tbody>
-        ${rows || `<tr><td colspan="7" class="px-3 py-6 text-center text-slate-600">لا توجد بيانات</td></tr>`}
+        ${rows || `<tr><td colspan="7" class="px-3 py-6 text-center text-slate-600 dark:text-slate-400">لا توجد بيانات</td></tr>`}
       </tbody>
     </table>
   `;
@@ -204,6 +219,8 @@ async function startAnalyze() {
     fd.append("b1", b1);
     fd.append("b2", b2);
     if (title) fd.append("title", title);
+    const strictEl = document.getElementById("strictMirror");
+    if (strictEl && strictEl.checked) fd.append("strict_mirror_types", "true");
 
     const data = await apiPostForm("/analyze", fd);
     const id = data.reportId;
@@ -219,6 +236,46 @@ async function startAnalyze() {
 function initAnalyzePage() {
   document.getElementById("startBtn")?.addEventListener("click", () => startAnalyze());
 }
+
+function updateThemeToggleUi() {
+  const btn = document.getElementById("themeToggle");
+  if (!btn) return;
+  const isDark = document.documentElement.classList.contains("dark");
+  btn.textContent = isDark ? "☀️ نهار" : "🌙 ليل";
+  btn.title = isDark ? "التبديل إلى الوضع النهاري" : "التبديل إلى الوضع الليلي";
+  btn.setAttribute("aria-label", isDark ? "التبديل إلى الوضع النهاري" : "التبديل إلى الوضع الليلي");
+}
+
+function initNavAndTheme() {
+  const path = window.location.pathname || "";
+  let key = "home";
+  if (path.startsWith("/analyze")) key = "analyze";
+  else if (path.startsWith("/reports")) key = "reports";
+  else if (path.startsWith("/report")) key = "reports";
+
+  document.querySelectorAll("[data-nav]").forEach((el) => {
+    el.classList.add("nav-link");
+    const k = el.getAttribute("data-nav");
+    const active = k === key;
+    el.classList.toggle("nav-link--active", active);
+    el.classList.toggle("nav-link--idle", !active);
+  });
+
+  const themeBtn = document.getElementById("themeToggle");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
+      const nextDark = !document.documentElement.classList.contains("dark");
+      document.documentElement.classList.toggle("dark", nextDark);
+      try {
+        localStorage.setItem("auditflow-theme", nextDark ? "dark" : "light");
+      } catch (e) {}
+      updateThemeToggleUi();
+    });
+  }
+  updateThemeToggleUi();
+}
+
+document.addEventListener("DOMContentLoaded", initNavAndTheme);
 
 // deleteReport is global for inline onclick usage
 window.deleteReport = deleteReport;

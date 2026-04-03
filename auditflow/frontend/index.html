@@ -3,45 +3,56 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
     <title>AuditFlow</title>
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/static/tailwind.css" />
+    <link rel="stylesheet" href="/static/dark.css" />
     <style>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
     </style>
   </head>
-  <body class="bg-slate-50 text-slate-900">
-    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold"></div>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold shadow-lg"></div>
 
-    <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
-      <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 text-lg">AuditFlow</div>
-        <nav class="flex gap-3">
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-slate-900 text-white" href="/">لوحة التحكم</a>
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/analyze">تحليل</a>
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/reports">التقارير</a>
+    <header class="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-700 z-40">
+      <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="font-extrabold text-slate-900 dark:text-white text-lg">AuditFlow</div>
+        <nav class="flex flex-wrap items-center gap-2 md:gap-3">
+          <a href="/" data-nav="home">لوحة التحكم</a>
+          <a href="/analyze" data-nav="analyze">تحليل</a>
+          <a href="/reports" data-nav="reports">التقارير</a>
+          <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
         </nav>
       </div>
     </header>
 
     <main class="max-w-6xl mx-auto px-4 py-8">
       <h1 class="text-3xl font-extrabold text-center">نظام المطابقة المالية</h1>
-      <p class="text-center text-slate-600 mt-2">ارفع ملفي Excel / PDF وقارن العمليات تلقائياً.</p>
+      <p class="text-center text-slate-600 dark:text-slate-400 mt-2">ارفع ملفي Excel / PDF وقارن العمليات تلقائياً.</p>
 
       <div class="grid md:grid-cols-3 gap-4 mt-8">
-        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <div class="text-slate-500 font-extrabold text-sm">آخر التقارير</div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm">
+          <div class="text-slate-500 dark:text-slate-400 font-extrabold text-sm">آخر التقارير</div>
           <div id="dashTotalReports" class="text-3xl font-extrabold mt-2">0</div>
         </div>
-        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <div class="text-slate-500 font-extrabold text-sm">إجمالي الأخطاء (آخر تقرير)</div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm">
+          <div class="text-slate-500 dark:text-slate-400 font-extrabold text-sm">إجمالي الأخطاء (آخر تقرير)</div>
           <div id="dashErrors" class="text-3xl font-extrabold mt-2">0</div>
         </div>
-        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <div class="text-slate-500 font-extrabold text-sm">إجمالي التحذيرات (آخر تقرير)</div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm">
+          <div class="text-slate-500 dark:text-slate-400 font-extrabold text-sm">إجمالي التحذيرات (آخر تقرير)</div>
           <div id="dashWarnings" class="text-3xl font-extrabold mt-2">0</div>
         </div>
       </div>
@@ -49,7 +60,7 @@
       <section class="mt-8">
         <div class="flex items-center justify-between gap-3">
           <h2 class="text-xl font-extrabold">آخر التقارير</h2>
-          <a class="text-sm font-extrabold text-slate-900 hover:underline" href="/reports">عرض الكل</a>
+          <a class="text-sm font-extrabold text-slate-900 dark:text-slate-200 hover:underline" href="/reports">عرض الكل</a>
         </div>
         <div id="dashReportsHost" class="mt-4 grid gap-3 md:grid-cols-2"></div>
       </section>
@@ -71,18 +82,19 @@
           host.innerHTML = "";
           (items.slice(0, 6) || []).forEach((item) => {
             const card = document.createElement("div");
-            card.className = "bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col gap-3";
+            card.className =
+              "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm flex flex-col gap-3";
             card.innerHTML = `
               <div class="flex items-start justify-between gap-4">
                 <div class="min-w-0">
-                  <div class="font-extrabold truncate">${item.title ? item.title : "تقرير بدون عنوان"}</div>
-                  <div class="text-sm text-slate-600 mt-1">${item.branch1_name} مقابل ${item.branch2_name}</div>
+                  <div class="font-extrabold truncate text-slate-900 dark:text-slate-50">${item.title ? item.title : "تقرير بدون عنوان"}</div>
+                  <div class="text-sm text-slate-600 dark:text-slate-400 mt-1">${item.branch1_name} مقابل ${item.branch2_name}</div>
                 </div>
-                <a class="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-sm font-extrabold" href="/report?id=${item.id}">عرض</a>
+                <a class="px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold shrink-0" href="/report?id=${item.id}">عرض</a>
               </div>
               <div class="flex gap-3 flex-wrap text-sm">
-                <div class="font-extrabold text-slate-800">أخطاء: <span class="text-rose-600">${item.stats.errors_count}</span></div>
-                <div class="font-extrabold text-slate-800">تحذيرات: <span class="text-amber-600">${item.stats.warnings_count}</span></div>
+                <div class="font-extrabold text-slate-800 dark:text-slate-200">أخطاء: <span class="text-rose-600 dark:text-rose-400">${item.stats.errors_count}</span></div>
+                <div class="font-extrabold text-slate-800 dark:text-slate-200">تحذيرات: <span class="text-amber-600 dark:text-amber-400">${item.stats.warnings_count}</span></div>
               </div>
             `;
             host.appendChild(card);

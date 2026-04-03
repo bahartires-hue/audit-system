@@ -3,41 +3,52 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
     <title>تحليل - AuditFlow</title>
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/static/tailwind.css" />
+    <link rel="stylesheet" href="/static/dark.css" />
     <style>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
     </style>
   </head>
-  <body class="bg-slate-50 text-slate-900">
-    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold"></div>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold shadow-lg"></div>
 
-    <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
-      <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 text-lg">AuditFlow</div>
-        <nav class="flex gap-3">
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/">لوحة التحكم</a>
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-slate-900 text-white" href="/analyze">تحليل</a>
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/reports">التقارير</a>
+    <header class="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-700 z-40">
+      <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="font-extrabold text-slate-900 dark:text-white text-lg">AuditFlow</div>
+        <nav class="flex flex-wrap items-center gap-2 md:gap-3">
+          <a href="/" data-nav="home">لوحة التحكم</a>
+          <a href="/analyze" data-nav="analyze">تحليل</a>
+          <a href="/reports" data-nav="reports">التقارير</a>
+          <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
         </nav>
       </div>
     </header>
 
     <main class="max-w-6xl mx-auto px-4 py-8">
-      <div class="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 shadow-sm">
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 md:p-8 shadow-sm">
         <h1 class="text-2xl md:text-3xl font-extrabold text-center">تحليل المطابقة المالية</h1>
-        <p class="text-center text-slate-600 mt-2">ارفع ملفي الفرع الأول والثاني (Excel/PDF) ثم شغّل التحليل.</p>
+        <p class="text-center text-slate-600 dark:text-slate-400 mt-2">ارفع ملفي الفرع الأول والثاني (Excel/PDF) ثم شغّل التحليل.</p>
 
         <div class="grid lg:grid-cols-2 gap-4 mt-6">
-          <section class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-            <div class="font-extrabold text-slate-900 mb-3">الفرع الأول</div>
+          <section class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
+            <div class="font-extrabold text-slate-900 dark:text-slate-50 mb-3">الفرع الأول</div>
 
-            <label class="block text-sm font-extrabold text-slate-700 mb-1">اسم الفرع</label>
-            <input id="b1" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10" value="الفرع الأول" />
+            <label class="block text-sm font-extrabold text-slate-700 dark:text-slate-300 mb-1">اسم الفرع</label>
+            <input id="b1" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20 text-slate-900 dark:text-slate-100" value="الفرع الأول" />
 
             <div class="flex gap-2 justify-center mt-3 mb-3">
               <button type="button" id="b1_excel" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs active:bg-emerald-50 active:border-emerald-200 active:text-emerald-700" onclick="setType(1,'excel')">Excel</button>
@@ -45,18 +56,18 @@
             </div>
 
             <input type="file" id="file1" class="hidden" />
-            <div id="dz1" class="dropzone border-2 border-dashed border-slate-300 rounded-2xl bg-white h-28 flex items-center justify-center flex-col gap-1 cursor-pointer hover:border-slate-400" draggable="false">
-              <div class="text-sm font-extrabold text-slate-900">اسحب وأفلت</div>
-              <div class="text-xs text-slate-500">أو اضغط للاختيار</div>
+            <div id="dz1" class="dropzone border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl bg-white dark:bg-slate-950 h-28 flex items-center justify-center flex-col gap-1 cursor-pointer hover:border-slate-400 dark:hover:border-slate-500" draggable="false">
+              <div class="text-sm font-extrabold text-slate-900 dark:text-slate-100">اسحب وأفلت</div>
+              <div class="text-xs text-slate-500 dark:text-slate-400">أو اضغط للاختيار</div>
             </div>
-            <div id="fileName1" class="text-xs text-slate-500 mt-2 min-h-4"></div>
+            <div id="fileName1" class="text-xs text-slate-500 dark:text-slate-400 mt-2 min-h-4"></div>
           </section>
 
-          <section class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-            <div class="font-extrabold text-slate-900 mb-3">الفرع الثاني</div>
+          <section class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
+            <div class="font-extrabold text-slate-900 dark:text-slate-50 mb-3">الفرع الثاني</div>
 
-            <label class="block text-sm font-extrabold text-slate-700 mb-1">اسم الفرع</label>
-            <input id="b2" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10" value="الفرع الثاني" />
+            <label class="block text-sm font-extrabold text-slate-700 dark:text-slate-300 mb-1">اسم الفرع</label>
+            <input id="b2" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20 text-slate-900 dark:text-slate-100" value="الفرع الثاني" />
 
             <div class="flex gap-2 justify-center mt-3 mb-3">
               <button type="button" id="b2_excel" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs" onclick="setType(2,'excel')">Excel</button>
@@ -64,22 +75,22 @@
             </div>
 
             <input type="file" id="file2" class="hidden" />
-            <div id="dz2" class="dropzone border-2 border-dashed border-slate-300 rounded-2xl bg-white h-28 flex items-center justify-center flex-col gap-1 cursor-pointer hover:border-slate-400" draggable="false">
-              <div class="text-sm font-extrabold text-slate-900">اسحب وأفلت</div>
-              <div class="text-xs text-slate-500">أو اضغط للاختيار</div>
+            <div id="dz2" class="dropzone border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl bg-white dark:bg-slate-950 h-28 flex items-center justify-center flex-col gap-1 cursor-pointer hover:border-slate-400 dark:hover:border-slate-500" draggable="false">
+              <div class="text-sm font-extrabold text-slate-900 dark:text-slate-100">اسحب وأفلت</div>
+              <div class="text-xs text-slate-500 dark:text-slate-400">أو اضغط للاختيار</div>
             </div>
-            <div id="fileName2" class="text-xs text-slate-500 mt-2 min-h-4"></div>
+            <div id="fileName2" class="text-xs text-slate-500 dark:text-slate-400 mt-2 min-h-4"></div>
           </section>
         </div>
 
         <div class="mt-6 flex flex-col items-center gap-4">
-          <label class="flex items-center gap-2 text-sm font-extrabold text-slate-700 cursor-pointer select-none max-w-xl text-center">
-            <input id="strictMirror" type="checkbox" class="rounded border-slate-300 w-4 h-4" />
+          <label class="flex items-center gap-2 text-sm font-extrabold text-slate-700 dark:text-slate-300 cursor-pointer select-none max-w-xl text-center">
+            <input id="strictMirror" type="checkbox" class="rounded border-slate-300 dark:border-slate-600 dark:bg-slate-900 w-4 h-4" />
             مطابقة صارمة: اشتراط مدين مقابل دائن بين الملفين (عطّلها إن كان التصدير يعرض نفس الجهة في الطرفين)
           </label>
           <div class="flex items-center justify-center gap-3 flex-wrap">
-            <button id="startBtn" class="px-6 py-3 bg-slate-900 text-white rounded-2xl font-extrabold hover:bg-slate-800" onclick="startAnalyze()">ابدأ التحليل</button>
-            <input id="title" class="w-72 max-w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none" placeholder="عنوان التقرير (اختياري)" />
+            <button id="startBtn" type="button" style="min-width:10rem" class="px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-extrabold hover:bg-slate-800 dark:hover:bg-slate-200 disabled:opacity-70 disabled:cursor-not-allowed" onclick="startAnalyze()">ابدأ التحليل</button>
+            <input id="title" class="w-72 max-w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="عنوان التقرير (اختياري)" />
           </div>
         </div>
       </div>
@@ -99,10 +110,14 @@
         const b2e = document.getElementById("b2_excel");
         const b2p = document.getElementById("b2_pdf");
 
-        if (b1e) b1e.className = "px-3 py-1.5 rounded-full border border-slate-200 font-extrabold text-xs" + (type1 === "excel" ? " bg-emerald-50 border-emerald-200 text-emerald-700" : " text-slate-600");
-        if (b1p) b1p.className = "px-3 py-1.5 rounded-full border border-slate-200 font-extrabold text-xs" + (type1 === "pdf" ? " bg-blue-50 border-blue-200 text-blue-700" : " text-slate-600");
-        if (b2e) b2e.className = "px-3 py-1.5 rounded-full border border-slate-200 font-extrabold text-xs" + (type2 === "excel" ? " bg-emerald-50 border-emerald-200 text-emerald-700" : " text-slate-600");
-        if (b2p) b2p.className = "px-3 py-1.5 rounded-full border border-slate-200 font-extrabold text-xs" + (type2 === "pdf" ? " bg-blue-50 border-blue-200 text-blue-700" : " text-slate-600");
+        const idle = " text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-600";
+        const xlsxOn = " bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/50 dark:border-emerald-700 dark:text-emerald-300";
+        const pdfOn = " bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/50 dark:border-blue-700 dark:text-blue-300";
+        const base = "px-3 py-1.5 rounded-full border font-extrabold text-xs";
+        if (b1e) b1e.className = base + (type1 === "excel" ? xlsxOn : idle);
+        if (b1p) b1p.className = base + (type1 === "pdf" ? pdfOn : idle);
+        if (b2e) b2e.className = base + (type2 === "excel" ? xlsxOn : idle);
+        if (b2p) b2p.className = base + (type2 === "pdf" ? pdfOn : idle);
       }
 
       function validate(file, expected) {
@@ -120,11 +135,14 @@
         if (!dz || !inp) return;
 
         dz.addEventListener("click", () => inp.click());
-        dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.classList.add("border-slate-500"); });
-        dz.addEventListener("dragleave", () => dz.classList.remove("border-slate-500"));
+        dz.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          dz.classList.add("border-slate-500", "dark:border-slate-400");
+        });
+        dz.addEventListener("dragleave", () => dz.classList.remove("border-slate-500", "dark:border-slate-400"));
         dz.addEventListener("drop", (e) => {
           e.preventDefault();
-          dz.classList.remove("border-slate-500");
+          dz.classList.remove("border-slate-500", "dark:border-slate-400");
           const file = e.dataTransfer?.files?.[0];
           if (!file || !validate(file, expectedGetter())) {
             showToast("نوع الملف غير صحيح", "#ef4444");
