@@ -95,7 +95,9 @@ def analyze_api(
     try:
         d1 = process(saved1, original1, b1)
         d2 = process(saved2, original2, b2)
-        mismatch_entries, counts = analyze_pairs(d1, d2)
+        mismatch_entries, counts = analyze_pairs(
+            d1, d2, allow_same_direction=not strict_mirror_types
+        )
     except HTTPException:
         raise
     except Exception as e:
