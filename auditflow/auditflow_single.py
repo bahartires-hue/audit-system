@@ -1400,13 +1400,62 @@ def match_doc(d1: Any, d2: Any) -> bool:
     return SequenceMatcher(None, d1, d2).ratio() > 0.7
 
 
+def _parsed_timestamp_or_nat(val: Any) -> Any:
+    """Parse Excel/PDF date cells and Arabic digits; prefer day-first (common in GCC)."""
+    if val is None:
+        return pd.NaT
+    if isinstance(val, str):
+        t = val.strip()
+        if not t or t.lower() in ("nat", "none") or t in ("-", "—", "–"):
+            return pd.NaT
+    if not isinstance(val, str) and hasattr(val, "strftime"):
+        try:
+            v = pd.to_datetime(val, errors="coerce")
+            if pd.notna(v):
+                return v
+        except Exception:
+            pass
+    s = _normalize_arabic_digits(str(val).strip())
+    if not s or s in ("-", "—", "–"):
+        return pd.NaT
+    for dayfirst in (True, False):
+        v = pd.to_datetime(s, errors="coerce", dayfirst=dayfirst)
+        if pd.notna(v):
+            return v
+    return pd.NaT
+
+
+def _parse_datetime_cell_to_iso(val: Any) -> Optional[str]:
+    ts = _parsed_timestamp_or_nat(val)
+    if pd.isna(ts):
+        return None
+    return ts.strftime("%Y-%m-%d")
+
+
+def _iso_date_from_narrative(narrative: str) -> Optional[str]:
+    if not narrative:
+        return None
+    line = _normalize_arabic_digits(str(narrative))
+    date_pat = re.compile(
+        r"(\d{4}\s*[/\-\.]\s*\d{1,2}\s*[/\-\.]\s*\d{1,2}|\d{1,2}\s*[/\-\.]\s*\d{1,2}\s*[/\-\.]\s*\d{2,4})"
+    )
+    m = date_pat.search(line)
+    if not m:
+        return None
+    tok = m.group(1).strip()
+    for dayfirst in (True, False):
+        d = pd.to_datetime(tok, errors="coerce", dayfirst=dayfirst)
+        if pd.notna(d):
+            return d.strftime("%Y-%m-%d")
+    return None
+
+
 def date_diff_days(d1: Any, d2: Any) -> Optional[int]:
     try:
-        dd1 = pd.to_datetime(d1, errors="coerce")
-        dd2 = pd.to_datetime(d2, errors="coerce")
+        dd1, dd2 = _parsed_timestamp_or_nat(d1), _parsed_timestamp_or_nat(d2)
         if pd.isna(dd1) or pd.isna(dd2):
             return None
-        return abs((dd1 - dd2).days)
+        return abs(int((dd1 - dd2).days))
     except Exception:
         return None
 
@@ -1420,15 +1469,7 @@ def extract_row_date_doc(
 ) -> Tuple[Optional[str], Optional[str]]:
     date_out: Optional[str] = None
     if date_col and date_col in df.columns:
-        try:
-            val = row[date_col]
-            if pd.isna(val):
-                date_out = None
-            else:
-                d = pd.to_datetime(val, errors="coerce", dayfirst=False)
-                date_out = None if pd.isna(d) else d.strftime("%Y-%m-%d")
-        except Exception:
-            date_out = str(row[date_col])
+        date_out = _parse_datetime_cell_to_iso(row.get(date_col))
 
     doc_out: Optional[str] = None
     for col in (doc_col, doc_fallback_col):
@@ -1599,6 +1640,8 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
 
         if debit and credit and debit > 0 and credit > 0:
             date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col, doc_fb)
+            if not date_out:
+                date_out = _iso_date_from_narrative(narrative)
             doc_out = _finalize_doc_for_row(doc_out, narrative)
             amount = max(debit, credit)
             t = "credit" if credit >= debit else "debit"
@@ -1622,6 +1665,8 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
             continue
 
         date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col, doc_fb)
+        if not date_out:
+            date_out = _iso_date_from_narrative(narrative)
         doc_out = _finalize_doc_for_row(doc_out, narrative)
         if _is_likely_pdf_extraction_noise(float(amount), t, doc_out, narrative):
             continue
@@ -1741,23 +1786,29 @@ def analyze(
             reasons.append("نوع مستند مطابق")
 
         both_no_doc = not d1m and not d2m
-        days = date_diff_days(x1["date"], x2["date"])
-        if days is None:
-            score -= 5
-            reasons.append("تاريخ غير واضح")
-        elif days == 0:
-            score += 20
-            reasons.append("نفس اليوم")
-        elif days <= 7:
-            score += 10
-            reasons.append("تاريخ قريب")
-        elif days <= 45:
-            reasons.append("فارق تاريخ ضمن المدى")
-        elif both_no_doc:
-            reasons.append("فارق تاريخ (بدون بيان مستند)")
+        dd1 = _parsed_timestamp_or_nat(x1.get("date"))
+        dd2 = _parsed_timestamp_or_nat(x2.get("date"))
+        has1, has2 = pd.notna(dd1), pd.notna(dd2)
+        if has1 and has2:
+            days = abs(int((dd1 - dd2).days))
+            if days == 0:
+                score += 20
+                reasons.append("نفس اليوم")
+            elif days <= 7:
+                score += 10
+                reasons.append("تاريخ قريب")
+            elif days <= 45:
+                reasons.append("فارق تاريخ ضمن المدى")
+            elif both_no_doc:
+                reasons.append("فارق تاريخ (بدون بيان مستند)")
+            else:
+                score -= 5
+                reasons.append("تاريخ بعيد جدا مع اختلاف بيان المستند")
+        elif has1 or has2:
+            score += 8
+            reasons.append("تاريخ من جهة واحدة فقط")
         else:
-            score -= 5
-            reasons.append("تاريخ بعيد جدا مع اختلاف بيان المستند")
+            reasons.append("لا تاريخ في كلا السطرين")
 
         return score, reasons
 
