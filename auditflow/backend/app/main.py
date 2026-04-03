@@ -104,9 +104,11 @@ def analyze_api(
     summary = compute_summary(d1, d2, mismatch_entries)
     entry_counts = _compute_entry_counts(mismatch_entries)
 
+    title_eff = (title or "").strip() or f"{b1.strip()} مقابل {b2.strip()}"
+
     created = AnalysisReport(
         id=report_id,
-        title=title,
+        title=title_eff,
         branch1_name=b1,
         branch2_name=b2,
         file1_original=original1,

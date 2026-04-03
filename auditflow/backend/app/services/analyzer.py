@@ -37,21 +37,57 @@ def _normalize_doc_text(s: Any) -> str:
     return t
 
 
-def _extract_best_amount_from_text(s: str) -> Optional[float]:
-    tokens = re.findall(r"[-+]?\d[\d,٬٫\.]*", _normalize_arabic_digits(s or ""))
+def _parse_currency_numbers_from_narrative(narrative: str) -> List[float]:
+    s = _normalize_arabic_digits(narrative or "")
+    tokens = re.findall(r"[-+]?\d[\d,٬٫\.]*", s)
     vals: List[float] = []
     for tok in tokens:
         v = _parse_number_token(tok)
         if v is None or not _is_plausible_currency_amount(v):
             continue
         vals.append(float(v))
-    if not vals:
-        return None
-
-    # Drop likely date pieces when mixed with real amounts.
     if len(vals) >= 2:
         vals = [v for v in vals if not (v == int(v) and (1 <= abs(v) <= 31 or 1900 <= abs(v) <= 2100))] or vals
+    return vals
 
+
+def _looks_like_serial_voucher_amount(x: float) -> bool:
+    if x is None or (isinstance(x, float) and pd.isna(x)):
+        return False
+    xf = float(x)
+    if abs(xf - int(xf)) > 0.0001:
+        return False
+    ax = abs(xf)
+    if 1900 <= ax <= 2100:
+        return False
+    return 100 <= ax <= 49999
+
+
+def _replace_voucher_with_ledger_from_narrative(column_amount: float, narrative: str) -> float:
+    narrative = _normalize_doc_text(narrative)
+    if not narrative:
+        return column_amount
+    vals = _parse_currency_numbers_from_narrative(narrative)
+    if not vals:
+        return column_amount
+    decimals = [v for v in vals if abs(v - int(v)) > 0.0001 and abs(v) >= 0.0001]
+    for d in decimals:
+        if abs(d - column_amount) < 0.02:
+            return column_amount
+    if _looks_like_serial_voucher_amount(column_amount) and decimals:
+        return round(decimals[0], 2)
+    for v in vals:
+        if abs(v - column_amount) < 0.02:
+            return column_amount
+    if decimals:
+        return round(decimals[0], 2)
+    return column_amount
+
+
+def _extract_best_amount_from_text(s: str) -> Optional[float]:
+    vals = _parse_currency_numbers_from_narrative(s or "")
+    if not vals:
+        return None
     non_zero = [v for v in vals if abs(v) >= 0.0001]
     if not non_zero:
         return 0.0
@@ -310,6 +346,47 @@ def extract_row_date_doc(
         break
 
     return date_out, doc_out
+
+
+def _row_narrative_for_amounts(
+    row: pd.Series,
+    df: pd.DataFrame,
+    doc_col: Optional[str],
+    doc_fb: Optional[str],
+    debit_col: Optional[str],
+    credit_col: Optional[str],
+    date_col: Optional[str],
+) -> str:
+    seen: set[Any] = set()
+    parts: List[str] = []
+    priority: List[Any] = []
+    if doc_fb and doc_fb in df.columns:
+        priority.append(doc_fb)
+    if doc_col and doc_col in df.columns:
+        priority.append(doc_col)
+    for col in priority:
+        if col in seen:
+            continue
+        seen.add(col)
+        v = row.get(col)
+        if pd.notna(v):
+            t = str(v).strip()
+            if t:
+                parts.append(t)
+    for col in df.columns:
+        if col in (debit_col, credit_col, date_col) or col in seen:
+            continue
+        n = str(col).lower()
+        if "ضريبي" in n and "بيان" not in n:
+            continue
+        if "بيان" in n or "مستند" in n or "نوع" in n or "فاتورة" in n or "وصف" in n or "تفاصيل" in n:
+            seen.add(col)
+            v = row.get(col)
+            if pd.notna(v):
+                t = str(v).strip()
+                if t:
+                    parts.append(t)
+    return _normalize_doc_text(" ".join(parts))
 
 
 def read_excel(file_path: str) -> Optional[pd.DataFrame]:
@@ -700,8 +777,31 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
         if row.isna().all():
             continue
 
+        narrative = _row_narrative_for_amounts(row, df, doc_col, doc_fb, debit_col, credit_col, date_col)
+
         debit = safe(row[debit_col]) if debit_col and debit_col in df.columns else None
         credit = safe(row[credit_col]) if credit_col and credit_col in df.columns else None
+
+        decs = [
+            v
+            for v in _parse_currency_numbers_from_narrative(narrative)
+            if abs(v - int(v)) > 0.0001 and abs(v) >= 0.0001
+        ]
+        if debit is not None and credit is not None and debit > 0 and credit > 0:
+            if (
+                _looks_like_serial_voucher_amount(debit)
+                and _looks_like_serial_voucher_amount(credit)
+                and len(decs) >= 2
+            ):
+                debit, credit = round(decs[0], 2), round(decs[1], 2)
+            else:
+                debit = _replace_voucher_with_ledger_from_narrative(debit, narrative)
+                credit = _replace_voucher_with_ledger_from_narrative(credit, narrative)
+        else:
+            if debit is not None:
+                debit = _replace_voucher_with_ledger_from_narrative(debit, narrative)
+            if credit is not None:
+                credit = _replace_voucher_with_ledger_from_narrative(credit, narrative)
 
         if debit is None and credit is None:
             continue
