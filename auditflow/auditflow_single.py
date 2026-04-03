@@ -19,6 +19,8 @@ import hashlib
 import hmac
 import io
 import json
+import math
+import numbers
 import os
 import re
 import secrets
@@ -774,6 +776,23 @@ def _promote_ledger_header_row(df: pd.DataFrame) -> pd.DataFrame:
     return dfc
 
 
+def _series_to_datetimes_for_detection(series: pd.Series) -> pd.Series:
+    """
+    Excel غالباً يخزّن التاريخ كرقم تسلسلي؛ pd.to_datetime(45321) يعطي 1970 بشكل خاطئ.
+    إن غلبت القيم في المدى النموذجي للتسلسل، نحوّل عبر أصل Excel.
+    """
+    num = pd.to_numeric(series, errors="coerce")
+    valid_n = num.notna().sum()
+    if valid_n == 0:
+        return pd.to_datetime(series, errors="coerce")
+    in_serial_band = num.between(39500.0, 56500.0, inclusive="both")
+    if float(in_serial_band.sum()) >= max(2.0, valid_n * 0.45):
+        converted = pd.to_datetime(num, unit="D", origin="1899-12-30", errors="coerce")
+        if converted.notna().sum() >= max(1, int(len(series) * 0.35)):
+            return converted
+    return pd.to_datetime(series, errors="coerce")
+
+
 def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     df.columns = df.columns.astype(str).str.strip()
 
@@ -863,7 +882,7 @@ def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Opti
 
     if not date_col:
         for col in df.columns:
-            parsed = pd.to_datetime(df[col], errors="coerce")
+            parsed = _series_to_datetimes_for_detection(df[col])
             if parsed.notna().sum() > len(df) * 0.5:
                 date_col = col
                 break
@@ -1401,20 +1420,58 @@ def match_doc(d1: Any, d2: Any) -> bool:
 
 
 def _parsed_timestamp_or_nat(val: Any) -> Any:
-    """Parse Excel/PDF date cells and Arabic digits; prefer day-first (common in GCC)."""
+    """Parse Excel/PDF date cells and Arabic digits; prefer day-first (GCC). Handles Excel serials."""
     if val is None:
         return pd.NaT
+    if isinstance(val, bool):
+        return pd.NaT
+
     if isinstance(val, str):
         t = val.strip()
         if not t or t.lower() in ("nat", "none") or t in ("-", "—", "–"):
             return pd.NaT
-    if not isinstance(val, str) and hasattr(val, "strftime"):
+        s = _normalize_arabic_digits(t)
+        if not s or s in ("-", "—", "–"):
+            return pd.NaT
+        for dayfirst in (True, False):
+            v = pd.to_datetime(s, errors="coerce", dayfirst=dayfirst)
+            if pd.notna(v):
+                return v
+        return pd.NaT
+
+    xf: Optional[float] = None
+    try:
+        if isinstance(val, numbers.Real):
+            xf = float(val)
+    except (TypeError, ValueError, OverflowError):
+        xf = None
+    if xf is not None:
+        if math.isnan(xf) or math.isinf(xf):
+            return pd.NaT
+        if 39500.0 <= xf <= 56500.0:
+            try:
+                return pd.to_datetime(xf, unit="D", origin="1899-12-30")
+            except Exception:
+                pass
+        ts_num = pd.to_datetime(val, errors="coerce")
+        if pd.notna(ts_num):
+            if ts_num.year <= 1971 and xf >= 10000.0:
+                try:
+                    ex = pd.to_datetime(xf, unit="D", origin="1899-12-30")
+                    if pd.notna(ex):
+                        return ex
+                except Exception:
+                    pass
+            return ts_num
+
+    if hasattr(val, "strftime") and not isinstance(val, str):
         try:
             v = pd.to_datetime(val, errors="coerce")
             if pd.notna(v):
                 return v
         except Exception:
             pass
+
     s = _normalize_arabic_digits(str(val).strip())
     if not s or s in ("-", "—", "–"):
         return pd.NaT
