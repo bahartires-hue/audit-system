@@ -13,6 +13,7 @@
       })();
     </script>
     <title>الإعدادات - AuditFlow</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/static/tailwind.css" />
     <link rel="stylesheet" href="/static/dark.css" />
@@ -23,19 +24,46 @@
     </style>
   </head>
   <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen">
-    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold shadow-lg"></div>
-    <header class="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-700 z-40">
-      <div class="max-w-4xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 dark:text-white text-lg">AuditFlow</div>
-        <div class="flex flex-wrap items-center gap-3">
-          <nav class="flex flex-wrap items-center gap-2 md:gap-3">
+    <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
+    <header class="sticky top-0 z-40 border-b border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/90 backdrop-blur">
+      <div class="max-w-6xl mx-auto px-4 py-3">
+        <div class="flex items-center justify-between gap-3">
+          <a href="/" class="app-brand" aria-label="AuditFlow الرئيسية">
+            <span class="app-brand__mark" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 16l5 5 11-11" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </span>
+            <span class="app-brand__text">AuditFlow</span>
+          </a>
+          <nav class="nav-desktop-only" aria-label="التنقل الرئيسي">
             <a href="/" data-nav="home">لوحة التحكم</a>
             <a href="/analyze" data-nav="analyze">تحليل</a>
             <a href="/reports" data-nav="reports">التقارير</a>
             <a href="/settings" data-nav="settings">الإعدادات</a>
-            <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
           </nav>
-          <div id="authArea"></div>
+          <div class="flex items-center gap-2 shrink-0">
+            <div id="authArea"></div>
+            <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
+            <button
+              type="button"
+              id="navMenuBtn"
+              class="nav-toggle-btn nav-burger-only"
+              aria-controls="mobileNavDrawer"
+              aria-expanded="false"
+              aria-label="فتح القائمة"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div id="mobileNavDrawer" class="mobile-nav-drawer" role="navigation" aria-label="قائمة الجوال">
+          <a href="/" data-nav="home">لوحة التحكم</a>
+          <a href="/analyze" data-nav="analyze">تحليل</a>
+          <a href="/reports" data-nav="reports">التقارير</a>
+          <a href="/settings" data-nav="settings">الإعدادات</a>
         </div>
       </div>
     </header>

@@ -13,6 +13,7 @@
       })();
     </script>
     <title>تحليل - AuditFlow</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
       rel="stylesheet"
@@ -24,20 +25,47 @@
     </style>
   </head>
   <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen">
-    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold shadow-lg"></div>
+    <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
 
-    <header class="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-700 z-40">
-      <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 dark:text-white text-lg">AuditFlow</div>
-        <div class="flex flex-wrap items-center gap-3">
-          <nav class="flex flex-wrap items-center gap-2 md:gap-3">
+    <header class="sticky top-0 z-40 border-b border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/90 backdrop-blur">
+      <div class="max-w-6xl mx-auto px-4 py-3">
+        <div class="flex items-center justify-between gap-3">
+          <a href="/" class="app-brand" aria-label="AuditFlow الرئيسية">
+            <span class="app-brand__mark" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 16l5 5 11-11" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </span>
+            <span class="app-brand__text">AuditFlow</span>
+          </a>
+          <nav class="nav-desktop-only" aria-label="التنقل الرئيسي">
             <a href="/" data-nav="home">لوحة التحكم</a>
             <a href="/analyze" data-nav="analyze">تحليل</a>
             <a href="/reports" data-nav="reports">التقارير</a>
             <a href="/settings" data-nav="settings">الإعدادات</a>
-            <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
           </nav>
-          <div id="authArea"></div>
+          <div class="flex items-center gap-2 shrink-0">
+            <div id="authArea"></div>
+            <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
+            <button
+              type="button"
+              id="navMenuBtn"
+              class="nav-toggle-btn nav-burger-only"
+              aria-controls="mobileNavDrawer"
+              aria-expanded="false"
+              aria-label="فتح القائمة"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div id="mobileNavDrawer" class="mobile-nav-drawer" role="navigation" aria-label="قائمة الجوال">
+          <a href="/" data-nav="home">لوحة التحكم</a>
+          <a href="/analyze" data-nav="analyze">تحليل</a>
+          <a href="/reports" data-nav="reports">التقارير</a>
+          <a href="/settings" data-nav="settings">الإعدادات</a>
         </div>
       </div>
     </header>
@@ -45,8 +73,10 @@
     <main class="max-w-6xl mx-auto px-4 py-8">
       <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 md:p-8 shadow-sm">
         <h1 class="text-2xl md:text-3xl font-extrabold text-center">تحليل المطابقة المالية</h1>
-        <p class="text-center text-slate-600 dark:text-slate-400 mt-2">ارفع ملفي الفرع الأول والثاني (Excel/PDF/CSV) ثم شغّل التحليل.</p>
-        <p class="text-center text-xs text-slate-500 dark:text-slate-500 mt-1">الحد الأقصى لحجم كل ملف يضبطه الخادم عبر <code class="text-slate-600 dark:text-slate-400">AUDITFLOW_MAX_UPLOAD_MB</code> (الافتراضي 15 ميجابايت).</p>
+        <p class="text-center text-slate-600 dark:text-slate-400 mt-2">ارفع ملفي الفرع الأول والثاني (Excel أو PDF أو CSV) ثم اضغط «ابدأ التحليل».</p>
+        <p class="text-center text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-xl mx-auto">
+          الحد المعتاد لحجم كل ملف حوالي <span class="font-extrabold text-slate-600 dark:text-slate-300">15 ميجابايت</span>؛ إن احتجت حداً أعلى يضبطه مسؤول النظام على الخادم.
+        </p>
 
         <div class="grid lg:grid-cols-2 gap-4 mt-6">
           <section class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
@@ -61,9 +91,15 @@
             </div>
 
             <input type="file" id="file1" class="hidden" />
-            <div id="dz1" class="dropzone border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl bg-white dark:bg-slate-950 h-28 flex items-center justify-center flex-col gap-1 cursor-pointer hover:border-slate-400 dark:hover:border-slate-500" draggable="false">
-              <div class="text-sm font-extrabold text-slate-900 dark:text-slate-100">اسحب وأفلت</div>
-              <div class="text-xs text-slate-500 dark:text-slate-400">أو اضغط للاختيار</div>
+            <div id="dz1" class="dropzone dropzone--rich border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl bg-white dark:bg-slate-950 min-h-upload flex items-center justify-center cursor-pointer transition-colors" draggable="false">
+              <div class="dropzone-visual py-2">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                  <path d="M12 16V4m0 0l4 4m-4-4L8 8" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4M8 18h8" stroke-linecap="round" />
+                </svg>
+                <div class="text-sm font-extrabold text-slate-900 dark:text-slate-100">اسحب الملف هنا</div>
+                <div class="text-xs text-slate-500 dark:text-slate-400">أو اضغط للاختيار من الجهاز</div>
+              </div>
             </div>
             <div id="fileName1" class="text-xs text-slate-500 dark:text-slate-400 mt-2 min-h-4"></div>
           </section>
@@ -80,22 +116,35 @@
             </div>
 
             <input type="file" id="file2" class="hidden" />
-            <div id="dz2" class="dropzone border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl bg-white dark:bg-slate-950 h-28 flex items-center justify-center flex-col gap-1 cursor-pointer hover:border-slate-400 dark:hover:border-slate-500" draggable="false">
-              <div class="text-sm font-extrabold text-slate-900 dark:text-slate-100">اسحب وأفلت</div>
-              <div class="text-xs text-slate-500 dark:text-slate-400">أو اضغط للاختيار</div>
+            <div id="dz2" class="dropzone dropzone--rich border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl bg-white dark:bg-slate-950 min-h-upload flex items-center justify-center cursor-pointer transition-colors" draggable="false">
+              <div class="dropzone-visual py-2">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                  <path d="M12 16V4m0 0l4 4m-4-4L8 8" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4M8 18h8" stroke-linecap="round" />
+                </svg>
+                <div class="text-sm font-extrabold text-slate-900 dark:text-slate-100">اسحب الملف هنا</div>
+                <div class="text-xs text-slate-500 dark:text-slate-400">أو اضغط للاختيار من الجهاز</div>
+              </div>
             </div>
             <div id="fileName2" class="text-xs text-slate-500 dark:text-slate-400 mt-2 min-h-4"></div>
           </section>
         </div>
 
-        <div class="mt-6 flex flex-col items-center gap-4">
-          <label class="flex items-center gap-2 text-sm font-extrabold text-slate-700 dark:text-slate-300 cursor-pointer select-none max-w-xl text-center">
-            <input id="strictMirror" type="checkbox" class="rounded border-slate-300 dark:border-slate-600 dark:bg-slate-900 w-4 h-4" />
-            مطابقة صارمة: اشتراط مدين مقابل دائن بين الملفين (عطّلها إن كان التصدير يعرض نفس الجهة في الطرفين)
+        <div class="mt-8 flex flex-col gap-5 max-w-xl mx-auto w-full">
+          <div>
+            <label for="title" class="block text-sm font-extrabold text-slate-700 dark:text-slate-300 mb-1.5">عنوان التقرير <span class="font-normal text-slate-500 dark:text-slate-400">(اختياري)</span></label>
+            <input
+              id="title"
+              class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-25 outline-none text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20"
+              placeholder="مثال: مطابقة يناير 2025"
+            />
+          </div>
+          <label class="flex items-start gap-3 text-sm font-extrabold text-slate-700 dark:text-slate-300 cursor-pointer select-none leading-relaxed">
+            <input id="strictMirror" type="checkbox" class="rounded border-slate-300 dark:border-slate-600 dark:bg-slate-900 w-4 h-4 mt-05 shrink-0" />
+            <span>مطابقة صارمة: اشتراط مدين مقابل دائن بين الملفين. عطّلها إن كان التصدير يعرض نفس الجهة في الطرفين.</span>
           </label>
-          <div class="flex items-center justify-center gap-3 flex-wrap">
-            <button id="startBtn" type="button" style="min-width:10rem" class="px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-extrabold hover:bg-slate-800 dark:hover:bg-slate-200 disabled:opacity-70 disabled:cursor-not-allowed" onclick="startAnalyze()">ابدأ التحليل</button>
-            <input id="title" class="w-72 max-w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="عنوان التقرير (اختياري)" />
+          <div class="flex justify-center pt-1">
+            <button id="startBtn" type="button" class="btn-primary-analyze" onclick="startAnalyze()">ابدأ التحليل</button>
           </div>
         </div>
       </div>

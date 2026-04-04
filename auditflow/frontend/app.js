@@ -559,6 +559,30 @@ function initNavAndTheme() {
     });
   }
   updateThemeToggleUi();
+
+  const navMenuBtn = document.getElementById("navMenuBtn");
+  const mobileDrawer = document.getElementById("mobileNavDrawer");
+  const closeMobileNav = () => {
+    if (!mobileDrawer || !navMenuBtn) return;
+    mobileDrawer.classList.remove("is-open");
+    navMenuBtn.setAttribute("aria-expanded", "false");
+  };
+  if (navMenuBtn && mobileDrawer) {
+    navMenuBtn.addEventListener("click", () => {
+      const open = mobileDrawer.classList.toggle("is-open");
+      navMenuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    mobileDrawer.querySelectorAll("a[data-nav]").forEach((a) => {
+      a.addEventListener("click", () => closeMobileNav());
+    });
+    window.addEventListener(
+      "resize",
+      () => {
+        if (window.matchMedia("(min-width: 768px)").matches) closeMobileNav();
+      },
+      { passive: true }
+    );
+  }
 }
 
 document.addEventListener("DOMContentLoaded", initNavAndTheme);
