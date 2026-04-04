@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import hmac
+import os
 import secrets
 import uuid
 from typing import Any, Dict, Optional
@@ -14,8 +15,18 @@ from .models import AuditLog, User, UserSession
 
 SESSION_COOKIE = "auditflow_session"
 CSRF_COOKIE = "auditflow_csrf"
-SESSION_DAYS = 14
+SESSION_DAYS = int(os.environ.get("AUDITFLOW_SESSION_DAYS", "14"))
 LOCK_MINUTES = 15
+COOKIE_PATH = "/"
+
+
+def cookie_secure() -> bool:
+    """على HTTPS في الإنتاج: ضع AUDITFLOW_COOKIE_SECURE=1"""
+    return os.environ.get("AUDITFLOW_COOKIE_SECURE", "").lower() in ("1", "true", "yes")
+
+
+def session_max_age_seconds() -> int:
+    return SESSION_DAYS * 24 * 60 * 60
 
 
 def hash_password(password: str) -> str:

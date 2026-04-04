@@ -1,16 +1,21 @@
+# Blueprint لـ Render.com — جذر المستودع: audit-system
+# يشغّل الـ backend (FastAPI) من auditflow/backend مع واجهة frontend المدمجة.
 services:
   - type: web
-    name: audit-system
-    env: python
+    name: auditflow
+    runtime: python
+    rootDir: auditflow/backend
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.9
-      - key: AUDITFLOW_DB
-        value: /var/data/auditflow.db
+        value: "3.11.9"
+      - key: AUDITFLOW_DATA_ROOT
+        value: /var/data
+      - key: AUDITFLOW_COOKIE_SECURE
+        value: "1"
     disk:
-      name: audit-system-data
+      name: auditflow-data
       mountPath: /var/data
       sizeGB: 1

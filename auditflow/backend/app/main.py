@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -15,7 +16,7 @@ from .models import AnalysisReport, init_db
 from .routers.auth_api import router as auth_router
 from .services.analyzer import analyze as analyze_pairs
 from .services.analyzer import compute_summary, process
-from .services.reports import mismatches_to_csv_bytes
+from .services.reports import mismatches_to_csv_bytes, mismatches_to_excel_bytes, mismatches_to_pdf_bytes
 from .services.storage import save_upload_file
 
 app = FastAPI(title="AuditFlow API")
@@ -30,7 +31,8 @@ app.add_middleware(
 )
 
 BASE_DIR = Path(__file__).resolve().parents[2]
-UPLOAD_DIR = BASE_DIR / "uploads"
+_data_root = (os.getenv("AUDITFLOW_DATA_ROOT") or "").strip()
+UPLOAD_DIR = (Path(_data_root) / "uploads") if _data_root else (BASE_DIR / "uploads")
 FRONTEND_DIR = BASE_DIR / "frontend"
 
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
@@ -263,7 +265,7 @@ def get_report(request: Request, id: str = Query(...)):
 
 
 @app.get("/download")
-def download_report(request: Request, id: str = Query(...)):
+def download_report(request: Request, id: str = Query(...), format: str = Query("csv")):
     db = _SessionLocal()
     try:
         user = require_user(db, request)
@@ -276,14 +278,39 @@ def download_report(request: Request, id: str = Query(...)):
             raise HTTPException(404, "Report not found")
 
         mismatches = (r.analysis_json or {}).get("mismatches", []) or []
-        csv_bytes = mismatches_to_csv_bytes(mismatches)
-        filename = f"report_{r.id}.csv"
+        fmt = (format or "csv").lower().strip()
 
-        return Response(
-            content=csv_bytes,
-            media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-        )
+        if fmt in ("excel", "xlsx"):
+            excel_bytes = mismatches_to_excel_bytes(mismatches)
+            filename = f"report_{r.id}.xlsx"
+            return Response(
+                content=excel_bytes,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+
+        if fmt == "pdf":
+            try:
+                pdf_bytes = mismatches_to_pdf_bytes(mismatches)
+            except RuntimeError as e:
+                raise HTTPException(500, str(e))
+            filename = f"report_{r.id}.pdf"
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+
+        if fmt == "csv":
+            csv_bytes = mismatches_to_csv_bytes(mismatches)
+            filename = f"report_{r.id}.csv"
+            return Response(
+                content=csv_bytes,
+                media_type="text/csv; charset=utf-8",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+
+        raise HTTPException(400, "format يجب أن يكون: excel أو pdf أو csv")
     finally:
         db.close()
 

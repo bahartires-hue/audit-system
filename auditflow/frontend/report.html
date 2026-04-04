@@ -49,13 +49,27 @@
             <h1 id="reportTitle" class="text-2xl font-extrabold text-slate-900 dark:text-slate-50">تقرير</h1>
             <div id="reportBranches" class="text-slate-600 dark:text-slate-400 font-extrabold mt-2"></div>
           </div>
-          <div class="flex gap-2">
+          <div class="flex gap-2 flex-wrap justify-end">
             <button
-              id="downloadBtn"
-              class="px-4 py-2 rounded-2xl bg-emerald-500 dark:bg-emerald-600 text-white font-extrabold hover:bg-emerald-600 dark:hover:bg-emerald-500"
-              onclick="downloadCSV(qs('id'))"
+              type="button"
+              class="px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-50 font-extrabold hover:bg-slate-50 dark:hover:bg-slate-800"
+              onclick="downloadReportFile(qs('id'), 'csv')"
             >
-              تحميل CSV
+              CSV
+            </button>
+            <button
+              type="button"
+              class="px-4 py-2 rounded-2xl bg-emerald-500 dark:bg-emerald-600 text-white font-extrabold hover:bg-emerald-600 dark:hover:bg-emerald-500"
+              onclick="downloadReportFile(qs('id'), 'excel')"
+            >
+              Excel
+            </button>
+            <button
+              type="button"
+              class="px-4 py-2 rounded-2xl bg-rose-500 dark:bg-rose-600 text-white font-extrabold hover:bg-rose-600 dark:hover:bg-rose-500"
+              onclick="downloadReportFile(qs('id'), 'pdf')"
+            >
+              PDF
             </button>
           </div>
         </div>

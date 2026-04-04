@@ -8,10 +8,11 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
 from ..auth_core import (
+    COOKIE_PATH,
     CSRF_COOKIE,
     LOCK_MINUTES,
     SESSION_COOKIE,
-    SESSION_DAYS,
+    cookie_secure,
     create_session,
     current_user_from_request,
     hash_password,
@@ -19,6 +20,7 @@ from ..auth_core import (
     log_event,
     require_csrf,
     require_user,
+    session_max_age_seconds,
     verify_password,
 )
 from ..db import SessionLocal
@@ -41,9 +43,11 @@ def auth_me(request: Request):
         res.set_cookie(
             key=CSRF_COOKIE,
             value=csrf,
+            path=COOKIE_PATH,
             httponly=False,
             samesite="lax",
-            max_age=SESSION_DAYS * 24 * 60 * 60,
+            secure=cookie_secure(),
+            max_age=session_max_age_seconds(),
         )
         return res
     finally:
@@ -77,11 +81,21 @@ async def auth_register(request: Request):
         res.set_cookie(
             key=SESSION_COOKIE,
             value=token,
+            path=COOKIE_PATH,
             httponly=True,
             samesite="lax",
-            max_age=SESSION_DAYS * 24 * 60 * 60,
+            secure=cookie_secure(),
+            max_age=session_max_age_seconds(),
         )
-        res.set_cookie(key=CSRF_COOKIE, value=csrf, httponly=False, samesite="lax", max_age=SESSION_DAYS * 24 * 60 * 60)
+        res.set_cookie(
+            key=CSRF_COOKIE,
+            value=csrf,
+            path=COOKIE_PATH,
+            httponly=False,
+            samesite="lax",
+            secure=cookie_secure(),
+            max_age=session_max_age_seconds(),
+        )
         return res
     finally:
         db.close()
@@ -122,11 +136,21 @@ async def auth_login(request: Request):
         res.set_cookie(
             key=SESSION_COOKIE,
             value=token,
+            path=COOKIE_PATH,
             httponly=True,
             samesite="lax",
-            max_age=SESSION_DAYS * 24 * 60 * 60,
+            secure=cookie_secure(),
+            max_age=session_max_age_seconds(),
         )
-        res.set_cookie(key=CSRF_COOKIE, value=csrf, httponly=False, samesite="lax", max_age=SESSION_DAYS * 24 * 60 * 60)
+        res.set_cookie(
+            key=CSRF_COOKIE,
+            value=csrf,
+            path=COOKIE_PATH,
+            httponly=False,
+            samesite="lax",
+            secure=cookie_secure(),
+            max_age=session_max_age_seconds(),
+        )
         return res
     finally:
         db.close()
@@ -147,8 +171,8 @@ def auth_logout(request: Request):
         if user:
             log_event(db, "auth.logout", user.id)
         res = Response(content='{"ok":true}', media_type="application/json")
-        res.delete_cookie(SESSION_COOKIE)
-        res.delete_cookie(CSRF_COOKIE)
+        res.delete_cookie(SESSION_COOKIE, path=COOKIE_PATH)
+        res.delete_cookie(CSRF_COOKIE, path=COOKIE_PATH)
         return res
     finally:
         db.close()

@@ -281,8 +281,54 @@ async function loadReportDetail() {
   renderMismatchTable(mismatches, document.getElementById("mismatchTableHost"));
 }
 
+const AUDITFLOW_REMEMBER_USER_KEY = "auditflow_remember_username";
+const AUDITFLOW_LAST_USERNAME_KEY = "auditflow_last_username";
+
+function parseDownloadFilename(contentDisposition, fallback) {
+  const cd = contentDisposition || "";
+  const utf = cd.match(/filename\*=UTF-8''([^;\s]+)/i);
+  if (utf) {
+    try {
+      return decodeURIComponent(utf[1].trim());
+    } catch (e) {
+      return utf[1].trim();
+    }
+  }
+  const m = cd.match(/filename\s*=\s*"?([^";\n]+)"?/i);
+  if (m) return m[1].trim();
+  return fallback;
+}
+
+async function downloadReportFile(id, format) {
+  if (!id) {
+    showToast("معرّف التقرير غير موجود", "#ef4444");
+    return;
+  }
+  const fmt = (format || "excel").toLowerCase().trim();
+  const url = `/download?id=${encodeURIComponent(id)}&format=${encodeURIComponent(fmt)}`;
+  syncCsrfFromCookie();
+  try {
+    const res = await fetch(url, { method: "GET", credentials: "include" });
+    if (!res.ok) throw new Error(await readErrorMessage(res));
+    const blob = await res.blob();
+    const ext = fmt === "pdf" ? "pdf" : fmt === "csv" ? "csv" : "xlsx";
+    const fallbackName = `report_${id}.${ext}`;
+    const filename = parseDownloadFilename(res.headers.get("Content-Disposition"), fallbackName);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    URL.revokeObjectURL(a.href);
+    a.remove();
+    showToast("تم التحميل ✔️", "#10b981");
+  } catch (e) {
+    showToast(e.message || "فشل التحميل", "#ef4444");
+  }
+}
+
 function downloadCSV(id) {
-  window.location.href = `/download?id=${encodeURIComponent(id)}`;
+  return downloadReportFile(id, "csv");
 }
 
 async function startAnalyze() {
@@ -349,6 +395,10 @@ async function initAuthUI() {
             <label class="block text-sm font-extrabold text-slate-700 dark:text-slate-300 mb-1">كلمة المرور</label>
             <input id="authPassword" type="password" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20" />
           </div>
+          <label class="flex items-center gap-2 cursor-pointer select-none">
+            <input id="authRememberUsername" type="checkbox" class="rounded border-slate-300 dark:border-slate-600" />
+            <span class="text-sm font-extrabold text-slate-700 dark:text-slate-300">تذكير اسم المستخدم فقط (لا نحفظ كلمة المرور)</span>
+          </label>
         </div>
         <div class="mt-4 flex items-center justify-end gap-2">
           <button type="button" id="authCancelBtn" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-extrabold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">إلغاء</button>
@@ -368,11 +418,21 @@ async function initAuthUI() {
     const close = document.getElementById("authCloseBtn");
     const u = document.getElementById("authUsername");
     const p = document.getElementById("authPassword");
+    const rememberCb = document.getElementById("authRememberUsername");
     if (!title || !submit || !cancel || !close || !u || !p) return;
 
     title.innerText = mode === "register" ? "إنشاء حساب جديد" : "تسجيل الدخول";
     submit.innerText = mode === "register" ? "تسجيل" : "دخول";
-    u.value = "";
+    let savedUser = "";
+    try {
+      savedUser = localStorage.getItem(AUDITFLOW_LAST_USERNAME_KEY) || "";
+    } catch (e) {}
+    let remember = false;
+    try {
+      remember = localStorage.getItem(AUDITFLOW_REMEMBER_USER_KEY) === "1";
+    } catch (e) {}
+    if (rememberCb) rememberCb.checked = remember;
+    u.value = remember && savedUser ? savedUser : "";
     p.value = "";
     modal.classList.remove("hidden");
     modal.classList.add("flex");
@@ -403,6 +463,15 @@ async function initAuthUI() {
           await apiPostJson("/auth/login", { username, password });
           showToast("تم تسجيل الدخول ✔️");
         }
+        try {
+          if (rememberCb && rememberCb.checked) {
+            localStorage.setItem(AUDITFLOW_REMEMBER_USER_KEY, "1");
+            localStorage.setItem(AUDITFLOW_LAST_USERNAME_KEY, username);
+          } else {
+            localStorage.removeItem(AUDITFLOW_REMEMBER_USER_KEY);
+            localStorage.removeItem(AUDITFLOW_LAST_USERNAME_KEY);
+          }
+        } catch (e) {}
         closeModal();
         window.location.reload();
       } catch (e) {
@@ -497,4 +566,8 @@ document.addEventListener("DOMContentLoaded", initNavAndTheme);
 // deleteReport is global for inline onclick usage
 window.deleteReport = deleteReport;
 window.initAuthUI = initAuthUI;
+window.qs = qs;
+window.downloadReportFile = downloadReportFile;
+window.downloadCSV = downloadCSV;
+window.downloadErrors = downloadReportFile;
 
