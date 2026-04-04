@@ -2342,8 +2342,8 @@ async function loadReportDetail() {
   if (b2ErrEl) b2ErrEl.innerText = String(b2Err);
   if (b1RateEl) b1RateEl.innerText = `${b1Rate}%`;
   if (b2RateEl) b2RateEl.innerText = `${b2Rate}%`;
-  if (b1Label) b1Label.innerText = data.branch1_name;
-  if (b2Label) b2Label.innerText = data.branch2_name;
+  if (b1Label) b1Label.innerText = data.branch1_name || "الفرع الأول";
+  if (b2Label) b2Label.innerText = data.branch2_name || "الفرع الثاني";
 
   window.__MISMATCHES__ = mismatches;
   renderMismatchTable(mismatches, document.getElementById("mismatchTableHost"));
@@ -2987,12 +2987,12 @@ REPORT_HTML = r"""<!doctype html>
 
         <div class="grid md:grid-cols-2 gap-4 mt-4">
           <div class="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl p-4">
-            <div class="text-rose-700 dark:text-rose-400 font-extrabold text-sm">أخطاء <span id="branch1Label">الفرع الأول</span></div>
+            <div class="text-rose-700 dark:text-rose-400 font-extrabold text-sm">أخطاء <span id="branch1Label"></span></div>
             <div id="branch1Errors" class="text-3xl font-extrabold mt-2 text-rose-800 dark:text-rose-300">0</div>
             <div class="text-sm text-rose-700 dark:text-rose-300 mt-1">نسبة الخطأ: <span id="branch1Rate" class="font-extrabold">0.0%</span></div>
           </div>
           <div class="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl p-4">
-            <div class="text-rose-700 dark:text-rose-400 font-extrabold text-sm">أخطاء <span id="branch2Label">الفرع الثاني</span></div>
+            <div class="text-rose-700 dark:text-rose-400 font-extrabold text-sm">أخطاء <span id="branch2Label"></span></div>
             <div id="branch2Errors" class="text-3xl font-extrabold mt-2 text-rose-800 dark:text-rose-300">0</div>
             <div class="text-sm text-rose-700 dark:text-rose-300 mt-1">نسبة الخطأ: <span id="branch2Rate" class="font-extrabold">0.0%</span></div>
           </div>

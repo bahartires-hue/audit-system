@@ -253,6 +253,29 @@ async function loadReportDetail() {
 
   const analysis = data.analysis_json || {};
   const mismatches = analysis.mismatches || [];
+  const counts = analysis.counts || {};
+  const statsJson = data.stats_json || {};
+  const b1Name = data.branch1_name || "";
+  const b2Name = data.branch2_name || "";
+  const b1Total = Number(statsJson.branch1_total || 0);
+  const b2Total = Number(statsJson.branch2_total || 0);
+  const b1Err = Number(counts[b1Name] || 0);
+  const b2Err = Number(counts[b2Name] || 0);
+  const b1Rate = b1Total > 0 ? ((b1Err / b1Total) * 100).toFixed(1) : "0.0";
+  const b2Rate = b2Total > 0 ? ((b2Err / b2Total) * 100).toFixed(1) : "0.0";
+
+  const b1ErrEl = document.getElementById("branch1Errors");
+  const b2ErrEl = document.getElementById("branch2Errors");
+  const b1RateEl = document.getElementById("branch1Rate");
+  const b2RateEl = document.getElementById("branch2Rate");
+  const b1Label = document.getElementById("branch1Label");
+  const b2Label = document.getElementById("branch2Label");
+  if (b1ErrEl) b1ErrEl.innerText = String(b1Err);
+  if (b2ErrEl) b2ErrEl.innerText = String(b2Err);
+  if (b1RateEl) b1RateEl.innerText = `${b1Rate}%`;
+  if (b2RateEl) b2RateEl.innerText = `${b2Rate}%`;
+  if (b1Label) b1Label.innerText = b1Name || "الفرع الأول";
+  if (b2Label) b2Label.innerText = b2Name || "الفرع الثاني";
 
   window.__MISMATCHES__ = mismatches;
   renderMismatchTable(mismatches, document.getElementById("mismatchTableHost"));

@@ -79,6 +79,27 @@
           </div>
         </div>
 
+        <div class="grid md:grid-cols-2 gap-4 mt-4">
+          <div class="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl p-4">
+            <div class="text-rose-700 dark:text-rose-400 font-extrabold text-sm">
+              أخطاء <span id="branch1Label"></span>
+            </div>
+            <div id="branch1Errors" class="text-3xl font-extrabold mt-2 text-rose-800 dark:text-rose-300">0</div>
+            <div class="text-sm text-rose-700 dark:text-rose-300 mt-1">
+              نسبة الخطأ: <span id="branch1Rate" class="font-extrabold">0.0%</span>
+            </div>
+          </div>
+          <div class="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl p-4">
+            <div class="text-rose-700 dark:text-rose-400 font-extrabold text-sm">
+              أخطاء <span id="branch2Label"></span>
+            </div>
+            <div id="branch2Errors" class="text-3xl font-extrabold mt-2 text-rose-800 dark:text-rose-300">0</div>
+            <div class="text-sm text-rose-700 dark:text-rose-300 mt-1">
+              نسبة الخطأ: <span id="branch2Rate" class="font-extrabold">0.0%</span>
+            </div>
+          </div>
+        </div>
+
         <div class="mt-6 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
           <div class="flex items-center justify-between gap-3 flex-wrap">
             <h2 class="font-extrabold">فلترة الأخطاء</h2>
