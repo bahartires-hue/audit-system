@@ -5,25 +5,77 @@ try {
   document.documentElement.classList.toggle("dark", dark);
 } catch (e) {}
 
+function syncCsrfFromCookie() {
+  const key = "auditflow_csrf=";
+  const i = document.cookie.indexOf(key);
+  if (i === -1) return;
+  let v = document.cookie.slice(i + key.length).split(";")[0] || "";
+  try {
+    v = decodeURIComponent(v);
+  } catch (e) {}
+  if (v) try { localStorage.setItem("csrf_token", v); } catch (e) {}
+}
+syncCsrfFromCookie();
+
+async function readErrorMessage(res) {
+  const raw = await res.text().catch(() => "");
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+  if (ct.includes("application/json") && raw) {
+    try {
+      const j = JSON.parse(raw);
+      const d = j.detail;
+      if (typeof d === "string") return d;
+      if (Array.isArray(d))
+        return d
+          .map((x) => (x && typeof x === "object" && x.msg ? String(x.msg) : JSON.stringify(x)))
+          .join("; ");
+    } catch (e) {}
+  }
+  return raw || `HTTP ${res.status}`;
+}
+
 function qs(name) {
   return new URLSearchParams(window.location.search).get(name);
 }
 
 async function apiGet(url) {
+  syncCsrfFromCookie();
   const res = await fetch(url, { headers: { Accept: "application/json" }, credentials: "include" });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `HTTP ${res.status}`);
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  const data = await res.json();
+  if (data && typeof data === "object" && data.csrf_token) {
+    try { localStorage.setItem("csrf_token", data.csrf_token); } catch (e) {}
   }
-  return res.json();
+  return data;
 }
 
 async function apiPostForm(url, formData) {
-  const res = await fetch(url, { method: "POST", body: formData, headers: { Accept: "application/json" }, credentials: "include" });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `HTTP ${res.status}`);
-  }
+  syncCsrfFromCookie();
+  const csrf = localStorage.getItem("csrf_token") || "";
+  const res = await fetch(url, {
+    method: "POST",
+    body: formData,
+    headers: { Accept: "application/json", "X-CSRF-Token": csrf },
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  return res.json();
+}
+
+async function apiPostJson(url, body) {
+  syncCsrfFromCookie();
+  const csrf = localStorage.getItem("csrf_token") || "";
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-CSRF-Token": csrf,
+    },
+    body: JSON.stringify(body || {}),
+  });
+  if (!res.ok) throw new Error(await readErrorMessage(res));
   return res.json();
 }
 
@@ -237,6 +289,135 @@ function initAnalyzePage() {
   document.getElementById("startBtn")?.addEventListener("click", () => startAnalyze());
 }
 
+async function initAuthUI() {
+  const host = document.getElementById("authArea");
+  if (!host) return;
+
+  function ensureAuthModal() {
+    let modal = document.getElementById("authModal");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.id = "authModal";
+    modal.className = "hidden fixed inset-0 z-[70] bg-black/50 items-center justify-center p-4";
+    modal.innerHTML = `
+      <div class="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h3 id="authModalTitle" class="text-xl font-extrabold text-slate-900 dark:text-slate-50"></h3>
+          <button type="button" id="authCloseBtn" class="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">✕</button>
+        </div>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-sm font-extrabold text-slate-700 dark:text-slate-300 mb-1">اسم المستخدم</label>
+            <input id="authUsername" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20" />
+          </div>
+          <div>
+            <label class="block text-sm font-extrabold text-slate-700 dark:text-slate-300 mb-1">كلمة المرور</label>
+            <input id="authPassword" type="password" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20" />
+          </div>
+        </div>
+        <div class="mt-4 flex items-center justify-end gap-2">
+          <button type="button" id="authCancelBtn" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-extrabold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">إلغاء</button>
+          <button type="button" id="authSubmitBtn" class="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold hover:bg-slate-800 dark:hover:bg-slate-200"></button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function openAuthModal(mode) {
+    const modal = ensureAuthModal();
+    const title = document.getElementById("authModalTitle");
+    const submit = document.getElementById("authSubmitBtn");
+    const cancel = document.getElementById("authCancelBtn");
+    const close = document.getElementById("authCloseBtn");
+    const u = document.getElementById("authUsername");
+    const p = document.getElementById("authPassword");
+    if (!title || !submit || !cancel || !close || !u || !p) return;
+
+    title.innerText = mode === "register" ? "إنشاء حساب جديد" : "تسجيل الدخول";
+    submit.innerText = mode === "register" ? "تسجيل" : "دخول";
+    u.value = "";
+    p.value = "";
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+    u.focus();
+
+    const closeModal = () => {
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    };
+
+    close.onclick = closeModal;
+    cancel.onclick = closeModal;
+    modal.onclick = (e) => {
+      if (e.target === modal) closeModal();
+    };
+    submit.onclick = async () => {
+      const username = (u.value || "").trim();
+      const password = (p.value || "").trim();
+      if (!username || !password) {
+        showToast("أدخل اسم المستخدم وكلمة المرور", "#ef4444");
+        return;
+      }
+      try {
+        if (mode === "register") {
+          await apiPostJson("/auth/register", { username, password });
+          showToast("تم إنشاء الحساب وتسجيل الدخول ✔️");
+        } else {
+          await apiPostJson("/auth/login", { username, password });
+          showToast("تم تسجيل الدخول ✔️");
+        }
+        closeModal();
+        window.location.reload();
+      } catch (e) {
+        showToast(e.message || "فشل العملية", "#ef4444");
+      }
+    };
+  }
+
+  async function render() {
+    try {
+      const me = await apiGet("/auth/me");
+      if (me?.csrf_token) localStorage.setItem("csrf_token", me.csrf_token);
+      const username = me?.username || "";
+      if (username) {
+        host.innerHTML = `
+          <div class="flex items-center gap-2 flex-wrap justify-center">
+            <span class="text-sm font-extrabold text-slate-700 dark:text-slate-300">مرحباً ${username}</span>
+            <button type="button" id="logoutBtn" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-extrabold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">خروج</button>
+          </div>
+        `;
+        document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+          await apiPostJson("/auth/logout", {});
+          showToast("تم تسجيل الخروج");
+          window.location.reload();
+        });
+        return;
+      }
+    } catch (_) {
+      // غير مسجّل
+    }
+
+    host.innerHTML = `
+      <div class="flex items-center gap-2 flex-wrap justify-center">
+        <button type="button" id="loginBtn" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-extrabold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">تسجيل دخول</button>
+        <button type="button" id="registerBtn" class="px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold hover:bg-slate-800 dark:hover:bg-slate-200">إنشاء حساب</button>
+      </div>
+    `;
+
+    document.getElementById("registerBtn")?.addEventListener("click", () => {
+      openAuthModal("register");
+    });
+
+    document.getElementById("loginBtn")?.addEventListener("click", () => {
+      openAuthModal("login");
+    });
+  }
+
+  await render();
+}
+
 function updateThemeToggleUi() {
   const btn = document.getElementById("themeToggle");
   if (!btn) return;
@@ -280,4 +461,5 @@ document.addEventListener("DOMContentLoaded", initNavAndTheme);
 
 // deleteReport is global for inline onclick usage
 window.deleteReport = deleteReport;
+window.initAuthUI = initAuthUI;
 
