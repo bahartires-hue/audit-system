@@ -33,13 +33,15 @@ app.add_middleware(
 
 @app.middleware("http")
 async def ui_cache_headers(request: Request, call_next):
-    """يقلّل احتجاز المتصفح لملفات الواجهة القديمة بعد النشر."""
+    """يمنع احتجاز نسخ قديمة من الواجهة."""
     response = await call_next(request)
     path = request.url.path
     if path.startswith("/static/"):
-        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        response.headers["Cache-Control"] = "no-store, max-age=0, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
     elif path in ("/", "/analyze", "/settings", "/login", "/reports") or path.startswith("/report"):
-        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        response.headers["Cache-Control"] = "no-store, max-age=0, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
     return response
 
 
