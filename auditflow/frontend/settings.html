@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
+    <title>الإعدادات - AuditFlow</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/tailwind.css" />
+    <link rel="stylesheet" href="/static/dark.css" />
+    <style>
+      body {
+        font-family: "IBM Plex Sans Arabic", system-ui, sans-serif;
+      }
+    </style>
+  </head>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold shadow-lg"></div>
+    <header class="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-700 z-40">
+      <div class="max-w-4xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="font-extrabold text-slate-900 dark:text-white text-lg">AuditFlow</div>
+        <div class="flex flex-wrap items-center gap-3">
+          <nav class="flex flex-wrap items-center gap-2 md:gap-3">
+            <a href="/" data-nav="home">لوحة التحكم</a>
+            <a href="/analyze" data-nav="analyze">تحليل</a>
+            <a href="/reports" data-nav="reports">التقارير</a>
+            <a href="/settings" data-nav="settings">الإعدادات</a>
+            <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
+          </nav>
+          <div id="authArea"></div>
+        </div>
+      </div>
+    </header>
+    <main class="max-w-4xl mx-auto px-4 py-8">
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 shadow-sm">
+        <h1 class="text-2xl font-extrabold text-slate-900 dark:text-slate-50">إعدادات الحساب</h1>
+        <p class="text-slate-600 dark:text-slate-400 mt-2">تغيير كلمة المرور.</p>
+        <div class="mt-6 grid gap-3">
+          <input
+            id="oldPass"
+            type="password"
+            placeholder="كلمة المرور الحالية"
+            class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+          />
+          <input
+            id="newPass"
+            type="password"
+            placeholder="كلمة المرور الجديدة (8 أحرف على الأقل)"
+            class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+          />
+          <button
+            id="changePassBtn"
+            class="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-extrabold w-fit hover:bg-slate-800 dark:hover:bg-slate-200"
+          >
+            تغيير كلمة المرور
+          </button>
+        </div>
+      </div>
+    </main>
+    <footer class="max-w-4xl mx-auto px-4 pb-8 text-center text-slate-500 dark:text-slate-400 text-sm font-extrabold">
+      تطوير الموقع: محمد علي السوداني
+    </footer>
+    <script src="/static/app.js"></script>
+    <script>
+      initAuthUI();
+      document.getElementById("changePassBtn").addEventListener("click", async () => {
+        const old_password = document.getElementById("oldPass").value || "";
+        const new_password = document.getElementById("newPass").value || "";
+        try {
+          await apiPostJson("/auth/change-password", { old_password, new_password });
+          showToast("تم تغيير كلمة المرور ✔️");
+          document.getElementById("oldPass").value = "";
+          document.getElementById("newPass").value = "";
+        } catch (e) {
+          showToast(e.message || "فشل تغيير كلمة المرور", "#ef4444");
+        }
+      });
+    </script>
+  </body>
+</html>

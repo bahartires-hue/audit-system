@@ -2,15 +2,46 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import Column, DateTime, Integer, String, JSON
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String
 
 from .db import Base
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True)
+    username = Column(String, unique=True, nullable=False, index=True)
+    password_hash = Column(String, nullable=False)
+    failed_attempts = Column(Integer, nullable=False, default=0)
+    locked_until = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    token = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
+    action = Column(String, nullable=False)
+    meta_json = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
 
 class AnalysisReport(Base):
     __tablename__ = "analysis_reports"
 
-    id = Column(String, primary_key=True)  # uuid4 hex
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     title = Column(String, nullable=True)
 
     branch1_name = Column(String, nullable=False)
@@ -24,20 +55,19 @@ class AnalysisReport(Base):
     status = Column(String, default="completed", nullable=False)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
-    # summary stats (fast query)
     total_ops = Column(Integer, nullable=False, default=0)
     matched_ops = Column(Integer, nullable=False, default=0)
     mismatch_ops = Column(Integer, nullable=False, default=0)
     errors_count = Column(Integer, nullable=False, default=0)
     warnings_count = Column(Integer, nullable=False, default=0)
 
-    # full analysis data (JSON)
     stats_json = Column(JSON, nullable=False, default=dict)
     analysis_json = Column(JSON, nullable=False, default=dict)
 
 
-def init_db():
+def init_db() -> None:
     from .db import engine
+    from .migrate import run_migrations
 
     Base.metadata.create_all(bind=engine)
-
+    run_migrations()

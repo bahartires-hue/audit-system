@@ -6,17 +6,17 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from .db import SessionLocal as _SessionLocal  # type: ignore
+from .auth_core import require_csrf, require_user
+from .db import SessionLocal as _SessionLocal
 from .models import AnalysisReport, init_db
+from .routers.auth_api import router as auth_router
 from .services.analyzer import analyze as analyze_pairs
 from .services.analyzer import compute_summary, process
 from .services.reports import mismatches_to_csv_bytes
 from .services.storage import save_upload_file
-
-# NOTE: relative imports simplified below
 
 app = FastAPI(title="AuditFlow API")
 
@@ -29,12 +29,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-BASE_DIR = Path(__file__).resolve().parents[2]  # auditflow/backend
+BASE_DIR = Path(__file__).resolve().parents[2]
 UPLOAD_DIR = BASE_DIR / "uploads"
 FRONTEND_DIR = BASE_DIR / "frontend"
 
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+app.include_router(auth_router)
 
 init_db()
 
@@ -43,19 +43,47 @@ def _wants_html(request: Request) -> bool:
     accept = request.headers.get("accept", "").lower()
     if "application/json" in accept:
         return False
-    # Browsers usually send text/html, but some clients may send */*.
     return ("text/html" in accept) or (accept == "" or "*/*" in accept)
 
 
+def _require_login_page(request: Request, html_path: Path) -> FileResponse | RedirectResponse:
+    db = _SessionLocal()
+    try:
+        require_user(db, request)
+        return FileResponse(str(html_path))
+    except HTTPException:
+        return RedirectResponse(url="/login", status_code=302)
+    finally:
+        db.close()
+
+
 @app.get("/", response_class=HTMLResponse)
-def ui_home():
-    return FileResponse(str(FRONTEND_DIR / "index.html"))
+def ui_home(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "index.html")
 
 
 @app.get("/analyze", response_class=HTMLResponse)
 def ui_analyze(request: Request):
-    # GET /analyze is the UI route (POST /analyze is the API)
-    return FileResponse(str(FRONTEND_DIR / "analyze.html"))
+    return _require_login_page(request, FRONTEND_DIR / "analyze.html")
+
+
+@app.get("/settings", response_class=HTMLResponse)
+def ui_settings(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "settings.html")
+
+
+@app.get("/login", response_class=HTMLResponse)
+def ui_login(request: Request):
+    from .auth_core import current_user_from_request
+
+    db = _SessionLocal()
+    try:
+        u = current_user_from_request(db, request)
+        if u:
+            return RedirectResponse(url="/", status_code=302)
+        return FileResponse(str(FRONTEND_DIR / "login.html"))
+    finally:
+        db.close()
 
 
 def _classify_reason(entry: Dict[str, Any]) -> str:
@@ -79,6 +107,7 @@ def _compute_entry_counts(entries: List[Dict[str, Any]]) -> Dict[str, int]:
 
 @app.post("/analyze")
 def analyze_api(
+    request: Request,
     file1: UploadFile = File(...),
     file2: UploadFile = File(...),
     b1: str = Form(...),
@@ -86,7 +115,14 @@ def analyze_api(
     title: Optional[str] = Form(None),
     strict_mirror_types: bool = Form(False),
 ):
-    # store uploads
+    db = _SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        user_id = user.id
+    finally:
+        db.close()
+
     report_id = uuid.uuid4().hex
     try:
         saved1, original1 = save_upload_file(file1, UPLOAD_DIR / report_id / "file1")
@@ -94,7 +130,6 @@ def analyze_api(
     except ValueError as e:
         raise HTTPException(400, str(e))
 
-    # analyze locally
     try:
         d1 = process(saved1, original1, b1)
         d2 = process(saved2, original2, b2)
@@ -109,11 +144,11 @@ def analyze_api(
 
     summary = compute_summary(d1, d2, mismatch_entries)
     entry_counts = _compute_entry_counts(mismatch_entries)
-
     title_eff = (title or "").strip() or f"{b1.strip()} مقابل {b2.strip()}"
 
     created = AnalysisReport(
         id=report_id,
+        user_id=user_id,
         title=title_eff,
         branch1_name=b1,
         branch2_name=b2,
@@ -152,12 +187,17 @@ def analyze_api(
 @app.get("/reports")
 def list_reports(request: Request):
     if _wants_html(request):
-        return FileResponse(str(FRONTEND_DIR / "reports.html"))
+        return _require_login_page(request, FRONTEND_DIR / "reports.html")
 
     db = _SessionLocal()
     try:
+        user = require_user(db, request)
         rows: List[AnalysisReport] = (
-            db.query(AnalysisReport).order_by(AnalysisReport.created_at.desc()).limit(200).all()
+            db.query(AnalysisReport)
+            .filter(AnalysisReport.user_id == user.id)
+            .order_by(AnalysisReport.created_at.desc())
+            .limit(200)
+            .all()
         )
         items = []
         for r in rows:
@@ -186,12 +226,16 @@ def list_reports(request: Request):
 @app.get("/report")
 def get_report(request: Request, id: str = Query(...)):
     if _wants_html(request):
-        # report.html uses JS to fetch JSON via the same endpoint
-        return FileResponse(str(FRONTEND_DIR / "report.html"))
+        return _require_login_page(request, FRONTEND_DIR / "report.html")
 
     db = _SessionLocal()
     try:
-        r: AnalysisReport | None = db.query(AnalysisReport).filter(AnalysisReport.id == id).first()
+        user = require_user(db, request)
+        r: AnalysisReport | None = (
+            db.query(AnalysisReport)
+            .filter(AnalysisReport.id == id, AnalysisReport.user_id == user.id)
+            .first()
+        )
         if not r:
             raise HTTPException(404, "Report not found")
 
@@ -219,10 +263,15 @@ def get_report(request: Request, id: str = Query(...)):
 
 
 @app.get("/download")
-def download_report(id: str = Query(...)):
+def download_report(request: Request, id: str = Query(...)):
     db = _SessionLocal()
     try:
-        r: AnalysisReport | None = db.query(AnalysisReport).filter(AnalysisReport.id == id).first()
+        user = require_user(db, request)
+        r: AnalysisReport | None = (
+            db.query(AnalysisReport)
+            .filter(AnalysisReport.id == id, AnalysisReport.user_id == user.id)
+            .first()
+        )
         if not r:
             raise HTTPException(404, "Report not found")
 
@@ -240,10 +289,16 @@ def download_report(id: str = Query(...)):
 
 
 @app.delete("/reports")
-def delete_reports(id: str = Query(...)):
+def delete_reports(request: Request, id: str = Query(...)):
     db = _SessionLocal()
     try:
-        r: AnalysisReport | None = db.query(AnalysisReport).filter(AnalysisReport.id == id).first()
+        require_csrf(request)
+        user = require_user(db, request)
+        r: AnalysisReport | None = (
+            db.query(AnalysisReport)
+            .filter(AnalysisReport.id == id, AnalysisReport.user_id == user.id)
+            .first()
+        )
         if not r:
             raise HTTPException(404, "Report not found")
 
@@ -252,4 +307,3 @@ def delete_reports(id: str = Query(...)):
         return {"deleted": True}
     finally:
         db.close()
-

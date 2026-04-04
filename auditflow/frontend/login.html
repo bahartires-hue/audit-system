@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
+    <title>تسجيل الدخول - AuditFlow</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/tailwind.css" />
+    <link rel="stylesheet" href="/static/dark.css" />
+    <style>
+      body {
+        font-family: "IBM Plex Sans Arabic", system-ui, sans-serif;
+      }
+    </style>
+  </head>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold shadow-lg"></div>
+    <div class="max-w-xl mx-auto px-4 pt-8 flex justify-end">
+      <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
+    </div>
+    <main class="max-w-xl mx-auto px-4 py-8">
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-8 shadow-sm text-center">
+        <h1 class="text-3xl font-extrabold text-slate-900 dark:text-slate-50">AuditFlow</h1>
+        <p class="text-slate-600 dark:text-slate-400 mt-3">يجب تسجيل الدخول أو إنشاء حساب أولًا للوصول إلى التحليل والتقارير والتنزيل.</p>
+        <div id="authArea" class="mt-6 flex justify-center"></div>
+      </div>
+    </main>
+    <footer class="max-w-xl mx-auto px-4 pb-8 text-center text-slate-500 dark:text-slate-400 text-sm font-extrabold">
+      تطوير الموقع: محمد علي السوداني
+    </footer>
+    <script src="/static/app.js"></script>
+    <script>
+      initAuthUI();
+    </script>
+  </body>
+</html>
