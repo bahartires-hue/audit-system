@@ -12,14 +12,15 @@
         } catch (e) {}
       })();
     </script>
-    <title>AuditFlow</title>
-    <link rel="icon" href="/static/favicon.svg?v=4" type="image/svg+xml" />
+    <title>AuditFlow | نظام التدقيق</title>
+    <meta name="description" content="مطابقة مالية بين الفروع: رفع ملفات Excel وPDF وCSV، تقارير أخطاء وتحذيرات، وتصدير النتائج." />
+    <link rel="icon" href="/static/favicon.svg?v=5" type="image/svg+xml" />
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/tailwind.css?v=4" />
-    <link rel="stylesheet" href="/static/dark.css?v=4" />
+    <link rel="stylesheet" href="/static/tailwind.css?v=5" />
+    <link rel="stylesheet" href="/static/dark.css?v=5" />
     <style>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
     </style>
@@ -72,7 +73,8 @@
 
     <main class="max-w-6xl mx-auto px-4 py-8">
       <div class="hero-gradient relative mb-8">
-        <div class="relative z-[1] text-center">
+        <div class="relative z-1 text-center">
+          <p class="text-sm font-extrabold text-emerald-700 dark:text-emerald-400 mb-2 tracking-wide">نظام التدقيق</p>
           <h1 class="text-3xl md-text-4xl font-extrabold text-slate-900 dark:text-slate-50 tracking-tight">نظام المطابقة المالية</h1>
           <p class="text-slate-600 dark:text-slate-300 mt-3 max-w-2xl mx-auto leading-relaxed">
             ارفع ملفي Excel أو PDF أو CSV للفرعين، واكتشف التطابق والاختلاف تلقائياً في تقرير واضح.
@@ -109,7 +111,11 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=4"></script>
+    <footer class="max-w-6xl mx-auto px-4 pb-10 pt-4 text-center text-slate-500 dark:text-slate-400 text-sm font-extrabold border-t border-slate-200 dark:border-slate-800 mt-8">
+      تطوير الموقع: محمد علي السوداني
+    </footer>
+
+    <script src="/static/app.js?v=5"></script>
     <script>
       (async function () {
         await initAuthUI();
@@ -130,7 +136,7 @@
                 <div class="text-4xl mb-3" aria-hidden="true">📊</div>
                 <p class="font-extrabold text-slate-800 dark:text-slate-200 text-lg">لا توجد تقارير بعد</p>
                 <p class="text-slate-600 dark:text-slate-400 mt-2 text-sm max-w-md mx-auto">أنشئ أول تقرير مطابقة برفع ملفي الفرعين — يستغرق عادةً دقائق قليلة.</p>
-                <a href="/analyze" class="inline-flex mt-5 px-5 py-2.5 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-extrabold text-sm hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors">اذهب إلى التحليل</a>
+                <a href="/analyze" class="inline-flex mt-5 px-5 py-25 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-extrabold text-sm hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors">اذهب إلى التحليل</a>
               </div>`;
           } else {
             (items.slice(0, 6) || []).forEach((item) => {

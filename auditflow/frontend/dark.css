@@ -508,6 +508,9 @@ html.dark {
 .tracking-tight {
   letter-spacing: -0.025em;
 }
+.tracking-wide {
+  letter-spacing: 0.06em;
+}
 .leading-relaxed {
   line-height: 1.625;
 }
