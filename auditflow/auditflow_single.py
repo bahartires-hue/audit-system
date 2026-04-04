@@ -17,6 +17,7 @@ import csv
 import datetime as dt
 import hashlib
 import hmac
+import importlib.util
 import io
 import json
 import math
@@ -55,6 +56,29 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = Path(os.getenv("AUDITFLOW_DB", str(BASE_DIR / "auditflow.db")))
 UPLOAD_DIR = BASE_DIR / "uploads"
 BACKUP_DIR = BASE_DIR / "backups"
+
+_legacy_analyzer_mod: Any = None
+
+
+def _use_legacy_analyzer() -> bool:
+    """التحليل القديم (مطابقة حرفية). عطّله بـ AUDITFLOW_LEGACY_ANALYZER=0."""
+    return os.environ.get("AUDITFLOW_LEGACY_ANALYZER", "1").lower() in ("1", "true", "yes")
+
+
+def _legacy_analyzer_module() -> Any:
+    global _legacy_analyzer_mod
+    if _legacy_analyzer_mod is not None:
+        return _legacy_analyzer_mod
+    leg = BASE_DIR / "backend" / "app" / "services" / "legacy_analyzer.py"
+    if not leg.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location("auditflow_legacy_analyzer", leg)
+    if spec is None or spec.loader is None:
+        return None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    _legacy_analyzer_mod = mod
+    return mod
 
 
 # =========================
@@ -1627,6 +1651,10 @@ def _skip_likely_pdf_line_index_row(
 
 
 def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
+    if _use_legacy_analyzer():
+        mod = _legacy_analyzer_module()
+        if mod is not None:
+            return mod.legacy_process(file_path, filename, branch)
     df = read_any(file_path, filename)
     if df is None or len(df) == 0:
         return []
@@ -1738,6 +1766,11 @@ def analyze(
     *,
     allow_same_direction: bool = True,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+    if _use_legacy_analyzer():
+        mod = _legacy_analyzer_module()
+        if mod is not None:
+            return mod.legacy_analyze(d1, d2)
+
     res: List[Dict[str, Any]] = []
     counts: Dict[str, int] = {}
 
@@ -2499,6 +2532,15 @@ INDEX_HTML = r"""<!doctype html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AuditFlow</title>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
       rel="stylesheet"
@@ -2509,36 +2551,39 @@ INDEX_HTML = r"""<!doctype html>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
     </style>
   </head>
-  <body class="bg-slate-50 text-slate-900">
-    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold"></div>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold shadow-lg"></div>
 
-    <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
-      <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 text-lg">AuditFlow | نظام التدقيق</div>
-        <nav class="flex gap-3">
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-slate-900 text-white" href="/">لوحة التحكم</a>
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/analyze">تحليل</a>
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/reports">التقارير</a>
-        </nav>
-        <div id="authArea"></div>
+    <header class="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-700 z-40">
+      <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="font-extrabold text-slate-900 dark:text-white text-lg">AuditFlow | نظام التدقيق</div>
+        <div class="flex flex-wrap items-center gap-3">
+          <nav class="flex flex-wrap items-center gap-2 md:gap-3">
+            <a href="/" data-nav="home">لوحة التحكم</a>
+            <a href="/analyze" data-nav="analyze">تحليل</a>
+            <a href="/reports" data-nav="reports">التقارير</a>
+            <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
+          </nav>
+          <div id="authArea"></div>
+        </div>
       </div>
     </header>
 
     <main class="max-w-6xl mx-auto px-4 py-8">
       <h1 class="text-3xl font-extrabold text-center">نظام المطابقة المالية</h1>
-      <p class="text-center text-slate-600 mt-2">ارفع ملفي Excel / PDF وقارن العمليات تلقائياً.</p>
+      <p class="text-center text-slate-600 dark:text-slate-400 mt-2">ارفع ملفي Excel / PDF وقارن العمليات تلقائياً.</p>
 
       <div class="grid md:grid-cols-3 gap-4 mt-8">
-        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <div class="text-slate-500 font-extrabold text-sm">آخر التقارير</div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm">
+          <div class="text-slate-500 dark:text-slate-400 font-extrabold text-sm">آخر التقارير</div>
           <div id="dashTotalReports" class="text-3xl font-extrabold mt-2">0</div>
         </div>
-        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <div class="text-slate-500 font-extrabold text-sm">إجمالي الأخطاء (آخر تقرير)</div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm">
+          <div class="text-slate-500 dark:text-slate-400 font-extrabold text-sm">إجمالي الأخطاء (آخر تقرير)</div>
           <div id="dashErrors" class="text-3xl font-extrabold mt-2">0</div>
         </div>
-        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <div class="text-slate-500 font-extrabold text-sm">إجمالي التحذيرات (آخر تقرير)</div>
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm">
+          <div class="text-slate-500 dark:text-slate-400 font-extrabold text-sm">إجمالي التحذيرات (آخر تقرير)</div>
           <div id="dashWarnings" class="text-3xl font-extrabold mt-2">0</div>
         </div>
       </div>
@@ -2546,7 +2591,7 @@ INDEX_HTML = r"""<!doctype html>
       <section class="mt-8">
         <div class="flex items-center justify-between gap-3">
           <h2 class="text-xl font-extrabold">آخر التقارير</h2>
-          <a class="text-sm font-extrabold text-slate-900 hover:underline" href="/reports">عرض الكل</a>
+          <a class="text-sm font-extrabold text-slate-900 dark:text-slate-200 hover:underline" href="/reports">عرض الكل</a>
         </div>
         <div id="dashReportsHost" class="mt-4 grid gap-3 md:grid-cols-2"></div>
       </section>
@@ -2572,18 +2617,19 @@ INDEX_HTML = r"""<!doctype html>
           host.innerHTML = "";
           (items.slice(0, 6) || []).forEach((item) => {
             const card = document.createElement("div");
-            card.className = "bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col gap-3";
+            card.className =
+              "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm flex flex-col gap-3";
             card.innerHTML = `
               <div class="flex items-start justify-between gap-4">
                 <div class="min-w-0">
-                  <div class="font-extrabold truncate">${item.title ? item.title : "تقرير بدون عنوان"}</div>
-                  <div class="text-sm text-slate-600 mt-1">${item.branch1_name} مقابل ${item.branch2_name}</div>
+                  <div class="font-extrabold truncate text-slate-900 dark:text-slate-50">${item.title ? item.title : "تقرير بدون عنوان"}</div>
+                  <div class="text-sm text-slate-600 dark:text-slate-400 mt-1">${item.branch1_name} مقابل ${item.branch2_name}</div>
                 </div>
-                <a class="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-sm font-extrabold" href="/report?id=${item.id}">عرض</a>
+                <a class="px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold shrink-0" href="/report?id=${item.id}">عرض</a>
               </div>
               <div class="flex gap-3 flex-wrap text-sm">
-                <div class="font-extrabold text-slate-800">أخطاء: <span class="text-rose-600">${item.stats.errors_count}</span></div>
-                <div class="font-extrabold text-slate-800">تحذيرات: <span class="text-amber-600">${item.stats.warnings_count}</span></div>
+                <div class="font-extrabold text-slate-800 dark:text-slate-200">أخطاء: <span class="text-rose-600 dark:text-rose-400">${item.stats.errors_count}</span></div>
+                <div class="font-extrabold text-slate-800 dark:text-slate-200">تحذيرات: <span class="text-amber-600 dark:text-amber-400">${item.stats.warnings_count}</span></div>
               </div>
             `;
             host.appendChild(card);
@@ -2602,6 +2648,15 @@ ANALYZE_HTML = r"""<!doctype html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
     <title>تحليل - AuditFlow</title>
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
@@ -2613,32 +2668,35 @@ ANALYZE_HTML = r"""<!doctype html>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
     </style>
   </head>
-  <body class="bg-slate-50 text-slate-900">
-    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold"></div>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold shadow-lg"></div>
 
-    <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
-      <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 text-lg">AuditFlow | نظام التدقيق</div>
-        <nav class="flex gap-3">
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/">لوحة التحكم</a>
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-slate-900 text-white" href="/analyze">تحليل</a>
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/reports">التقارير</a>
-        </nav>
-        <div id="authArea"></div>
+    <header class="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-700 z-40">
+      <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="font-extrabold text-slate-900 dark:text-white text-lg">AuditFlow | نظام التدقيق</div>
+        <div class="flex flex-wrap items-center gap-3">
+          <nav class="flex flex-wrap items-center gap-2 md:gap-3">
+            <a href="/" data-nav="home">لوحة التحكم</a>
+            <a href="/analyze" data-nav="analyze">تحليل</a>
+            <a href="/reports" data-nav="reports">التقارير</a>
+            <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
+          </nav>
+          <div id="authArea"></div>
+        </div>
       </div>
     </header>
 
     <main class="max-w-6xl mx-auto px-4 py-8">
-      <div class="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 shadow-sm">
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 md:p-8 shadow-sm">
         <h1 class="text-2xl md:text-3xl font-extrabold text-center">تحليل المطابقة المالية</h1>
-        <p class="text-center text-slate-600 mt-2">ارفع ملفي الفرع الأول والثاني (Excel/PDF) ثم شغّل التحليل.</p>
+        <p class="text-center text-slate-600 dark:text-slate-400 mt-2">ارفع ملفي الفرع الأول والثاني (Excel/PDF) ثم شغّل التحليل.</p>
 
         <div class="grid lg:grid-cols-2 gap-4 mt-6">
-          <section class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-            <div class="font-extrabold text-slate-900 mb-3">الفرع الأول</div>
+          <section class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
+            <div class="font-extrabold text-slate-900 dark:text-slate-50 mb-3">الفرع الأول</div>
 
-            <label class="block text-sm font-extrabold text-slate-700 mb-1">اسم الفرع</label>
-            <input id="b1" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="اكتب اسم الفرع الأول هنا" />
+            <label class="block text-sm font-extrabold text-slate-700 dark:text-slate-300 mb-1">اسم الفرع</label>
+            <input id="b1" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20 text-slate-900 dark:text-slate-100" placeholder="اكتب اسم الفرع الأول هنا" />
 
             <div class="flex gap-2 justify-center mt-3 mb-3">
               <button type="button" id="b1_excel" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs active:bg-emerald-50 active:border-emerald-200 active:text-emerald-700" onclick="setType(1,'excel')">Excel</button>
@@ -2646,18 +2704,18 @@ ANALYZE_HTML = r"""<!doctype html>
             </div>
 
             <input type="file" id="file1" class="hidden" />
-            <div id="dz1" class="dropzone border-2 border-dashed border-slate-300 rounded-2xl bg-white h-28 flex items-center justify-center flex-col gap-1 cursor-pointer hover:border-slate-400" draggable="false">
-              <div class="text-sm font-extrabold text-slate-900">اسحب وأفلت</div>
-              <div class="text-xs text-slate-500">أو اضغط للاختيار</div>
+            <div id="dz1" class="dropzone border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl bg-white dark:bg-slate-950 h-28 flex items-center justify-center flex-col gap-1 cursor-pointer hover:border-slate-400 dark:hover:border-slate-500" draggable="false">
+              <div class="text-sm font-extrabold text-slate-900 dark:text-slate-100">اسحب وأفلت</div>
+              <div class="text-xs text-slate-500 dark:text-slate-400">أو اضغط للاختيار</div>
             </div>
-            <div id="fileName1" class="text-xs text-slate-500 mt-2 min-h-4"></div>
+            <div id="fileName1" class="text-xs text-slate-500 dark:text-slate-400 mt-2 min-h-4"></div>
           </section>
 
-          <section class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-            <div class="font-extrabold text-slate-900 mb-3">الفرع الثاني</div>
+          <section class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
+            <div class="font-extrabold text-slate-900 dark:text-slate-50 mb-3">الفرع الثاني</div>
 
-            <label class="block text-sm font-extrabold text-slate-700 mb-1">اسم الفرع</label>
-            <input id="b2" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="اكتب اسم الفرع الثاني هنا" />
+            <label class="block text-sm font-extrabold text-slate-700 dark:text-slate-300 mb-1">اسم الفرع</label>
+            <input id="b2" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20 text-slate-900 dark:text-slate-100" placeholder="اكتب اسم الفرع الثاني هنا" />
 
             <div class="flex gap-2 justify-center mt-3 mb-3">
               <button type="button" id="b2_excel" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs" onclick="setType(2,'excel')">Excel</button>
@@ -2665,17 +2723,23 @@ ANALYZE_HTML = r"""<!doctype html>
             </div>
 
             <input type="file" id="file2" class="hidden" />
-            <div id="dz2" class="dropzone border-2 border-dashed border-slate-300 rounded-2xl bg-white h-28 flex items-center justify-center flex-col gap-1 cursor-pointer hover:border-slate-400" draggable="false">
-              <div class="text-sm font-extrabold text-slate-900">اسحب وأفلت</div>
-              <div class="text-xs text-slate-500">أو اضغط للاختيار</div>
+            <div id="dz2" class="dropzone border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl bg-white dark:bg-slate-950 h-28 flex items-center justify-center flex-col gap-1 cursor-pointer hover:border-slate-400 dark:hover:border-slate-500" draggable="false">
+              <div class="text-sm font-extrabold text-slate-900 dark:text-slate-100">اسحب وأفلت</div>
+              <div class="text-xs text-slate-500 dark:text-slate-400">أو اضغط للاختيار</div>
             </div>
-            <div id="fileName2" class="text-xs text-slate-500 mt-2 min-h-4"></div>
+            <div id="fileName2" class="text-xs text-slate-500 dark:text-slate-400 mt-2 min-h-4"></div>
           </section>
         </div>
 
-        <div class="mt-6 flex items-center justify-center gap-3 flex-wrap">
-          <button id="startBtn" class="px-6 py-3 bg-slate-900 text-white rounded-2xl font-extrabold hover:bg-slate-800" onclick="startAnalyze()">ابدأ التحليل</button>
-          <input id="title" class="w-72 max-w-full rounded-xl border border-slate-200 bg-white px-3 py-2 outline-none" placeholder="عنوان التقرير (اختياري)" />
+        <div class="mt-6 flex flex-col items-center gap-4">
+          <label class="flex items-center gap-2 text-sm font-extrabold text-slate-700 dark:text-slate-300 cursor-pointer select-none max-w-xl text-center">
+            <input id="strictMirror" type="checkbox" class="rounded border-slate-300 dark:border-slate-600 dark:bg-slate-900 w-4 h-4" />
+            مطابقة صارمة: اشتراط مدين مقابل دائن بين الملفين (عطّلها إن كان التصدير يعرض نفس الجهة في الطرفين)
+          </label>
+          <div class="flex items-center justify-center gap-3 flex-wrap">
+            <button id="startBtn" type="button" style="min-width:10rem" class="px-6 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-extrabold hover:bg-slate-800 dark:hover:bg-slate-200 disabled:opacity-70 disabled:cursor-not-allowed" onclick="startAnalyze()">ابدأ التحليل</button>
+            <input id="title" class="w-72 max-w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="عنوان التقرير (اختياري)" />
+          </div>
         </div>
       </div>
     </main>
@@ -2698,10 +2762,14 @@ ANALYZE_HTML = r"""<!doctype html>
         const b2e = document.getElementById("b2_excel");
         const b2p = document.getElementById("b2_pdf");
 
-        if (b1e) b1e.className = "px-3 py-1.5 rounded-full border border-slate-200 font-extrabold text-xs" + (type1 === "excel" ? " bg-emerald-50 border-emerald-200 text-emerald-700" : " text-slate-600");
-        if (b1p) b1p.className = "px-3 py-1.5 rounded-full border border-slate-200 font-extrabold text-xs" + (type1 === "pdf" ? " bg-blue-50 border-blue-200 text-blue-700" : " text-slate-600");
-        if (b2e) b2e.className = "px-3 py-1.5 rounded-full border border-slate-200 font-extrabold text-xs" + (type2 === "excel" ? " bg-emerald-50 border-emerald-200 text-emerald-700" : " text-slate-600");
-        if (b2p) b2p.className = "px-3 py-1.5 rounded-full border border-slate-200 font-extrabold text-xs" + (type2 === "pdf" ? " bg-blue-50 border-blue-200 text-blue-700" : " text-slate-600");
+        const idle = " text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-600";
+        const xlsxOn = " bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/50 dark:border-emerald-700 dark:text-emerald-300";
+        const pdfOn = " bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/50 dark:border-blue-700 dark:text-blue-300";
+        const base = "px-3 py-1.5 rounded-full border font-extrabold text-xs";
+        if (b1e) b1e.className = base + (type1 === "excel" ? xlsxOn : idle);
+        if (b1p) b1p.className = base + (type1 === "pdf" ? pdfOn : idle);
+        if (b2e) b2e.className = base + (type2 === "excel" ? xlsxOn : idle);
+        if (b2p) b2p.className = base + (type2 === "pdf" ? pdfOn : idle);
       }
 
       function validate(file, expected) {
@@ -2719,11 +2787,14 @@ ANALYZE_HTML = r"""<!doctype html>
         if (!dz || !inp) return;
 
         dz.addEventListener("click", () => inp.click());
-        dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.classList.add("border-slate-500"); });
-        dz.addEventListener("dragleave", () => dz.classList.remove("border-slate-500"));
+        dz.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          dz.classList.add("border-slate-500", "dark:border-slate-400");
+        });
+        dz.addEventListener("dragleave", () => dz.classList.remove("border-slate-500", "dark:border-slate-400"));
         dz.addEventListener("drop", (e) => {
           e.preventDefault();
-          dz.classList.remove("border-slate-500");
+          dz.classList.remove("border-slate-500", "dark:border-slate-400");
           const file = e.dataTransfer?.files?.[0];
           if (!file || !validate(file, expectedGetter())) {
             showToast("نوع الملف غير صحيح", "#ef4444");
@@ -2760,6 +2831,15 @@ REPORTS_HTML = r"""<!doctype html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
     <title>التقارير - AuditFlow</title>
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
@@ -2771,32 +2851,35 @@ REPORTS_HTML = r"""<!doctype html>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
     </style>
   </head>
-  <body class="bg-slate-50 text-slate-900">
-    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold"></div>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold shadow-lg"></div>
 
-    <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
-      <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 text-lg">AuditFlow | نظام التدقيق</div>
-        <nav class="flex gap-3">
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/">لوحة التحكم</a>
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/analyze">تحليل</a>
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-slate-900 text-white" href="/reports">التقارير</a>
-        </nav>
-        <div id="authArea"></div>
+    <header class="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-700 z-40">
+      <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="font-extrabold text-slate-900 dark:text-white text-lg">AuditFlow | نظام التدقيق</div>
+        <div class="flex flex-wrap items-center gap-3">
+          <nav class="flex flex-wrap items-center gap-2 md:gap-3">
+            <a href="/" data-nav="home">لوحة التحكم</a>
+            <a href="/analyze" data-nav="analyze">تحليل</a>
+            <a href="/reports" data-nav="reports">التقارير</a>
+            <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
+          </nav>
+          <div id="authArea"></div>
+        </div>
       </div>
     </header>
 
     <main class="max-w-6xl mx-auto px-4 py-8">
-      <div class="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 shadow-sm">
-        <div class="flex items-center justify-between gap-3">
-          <h1 class="text-2xl font-extrabold">التقارير</h1>
-          <a href="/analyze" class="px-4 py-2 rounded-2xl bg-slate-900 text-white font-extrabold hover:bg-slate-800">تحليل جديد</a>
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 md:p-8 shadow-sm">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <h1 class="text-2xl font-extrabold text-slate-900 dark:text-slate-50">التقارير</h1>
+          <a href="/analyze" class="px-4 py-2 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-extrabold hover:bg-slate-800 dark:hover:bg-slate-200">تحليل جديد</a>
         </div>
 
         <div id="reportsHost" class="mt-6 grid gap-4 md:grid-cols-2"></div>
       </div>
     </main>
-    <footer class="max-w-6xl mx-auto px-4 pb-8 text-center text-slate-500 text-sm font-extrabold">
+    <footer class="max-w-6xl mx-auto px-4 pb-8 text-center text-slate-500 dark:text-slate-400 text-sm font-extrabold">
       تطوير الموقع: محمد علي السوداني
     </footer>
 
@@ -2817,6 +2900,15 @@ REPORT_HTML = r"""<!doctype html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
     <title>تقرير - AuditFlow</title>
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
@@ -2828,39 +2920,42 @@ REPORT_HTML = r"""<!doctype html>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
     </style>
   </head>
-  <body class="bg-slate-50 text-slate-900">
-    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold"></div>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold shadow-lg"></div>
 
-    <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
-      <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 text-lg">AuditFlow | نظام التدقيق</div>
-        <nav class="flex gap-3">
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/">لوحة التحكم</a>
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/analyze">تحليل</a>
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/reports">التقارير</a>
-        </nav>
-        <div id="authArea"></div>
+    <header class="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-700 z-40">
+      <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="font-extrabold text-slate-900 dark:text-white text-lg">AuditFlow | نظام التدقيق</div>
+        <div class="flex flex-wrap items-center gap-3">
+          <nav class="flex flex-wrap items-center gap-2 md:gap-3">
+            <a href="/" data-nav="home">لوحة التحكم</a>
+            <a href="/analyze" data-nav="analyze">تحليل</a>
+            <a href="/reports" data-nav="reports">التقارير</a>
+            <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
+          </nav>
+          <div id="authArea"></div>
+        </div>
       </div>
     </header>
 
     <main class="max-w-6xl mx-auto px-4 py-8">
-      <div class="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 shadow-sm">
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 md:p-8 shadow-sm">
         <div class="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 id="reportTitle" class="text-2xl font-extrabold">تقرير</h1>
-            <div id="reportBranches" class="text-slate-600 font-extrabold mt-2"></div>
+            <h1 id="reportTitle" class="text-2xl font-extrabold text-slate-900 dark:text-slate-50">تقرير</h1>
+            <div id="reportBranches" class="text-slate-600 dark:text-slate-400 font-extrabold mt-2"></div>
           </div>
-          <div class="flex gap-2">
+          <div class="flex gap-2 flex-wrap">
             <button
               id="downloadExcelBtn"
-              class="px-4 py-2 rounded-2xl bg-emerald-500 text-white font-extrabold hover:bg-emerald-600"
+              class="px-4 py-2 rounded-2xl bg-emerald-500 dark:bg-emerald-600 text-white font-extrabold hover:bg-emerald-600 dark:hover:bg-emerald-500"
               onclick="downloadErrors(qs('id'),'excel')"
             >
               تنزيل الأخطاء Excel
             </button>
             <button
               id="downloadPdfBtn"
-              class="px-4 py-2 rounded-2xl bg-blue-500 text-white font-extrabold hover:bg-blue-600"
+              class="px-4 py-2 rounded-2xl bg-blue-500 dark:bg-blue-600 text-white font-extrabold hover:bg-blue-600 dark:hover:bg-blue-500"
               onclick="downloadErrors(qs('id'),'pdf')"
             >
               تنزيل الأخطاء PDF
@@ -2869,53 +2964,53 @@ REPORT_HTML = r"""<!doctype html>
         </div>
 
         <div class="grid md:grid-cols-4 gap-4 mt-6">
-          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-            <div class="text-slate-500 font-extrabold text-sm">الإجمالي</div>
+          <div class="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
+            <div class="text-slate-500 dark:text-slate-400 font-extrabold text-sm">الإجمالي</div>
             <div id="statTotal" class="text-3xl font-extrabold mt-2">0</div>
           </div>
-          <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
-            <div class="text-emerald-700 font-extrabold text-sm">متطابق</div>
-            <div id="statMatched" class="text-3xl font-extrabold mt-2 text-emerald-800">0</div>
+          <div class="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4">
+            <div class="text-emerald-700 dark:text-emerald-400 font-extrabold text-sm">متطابق</div>
+            <div id="statMatched" class="text-3xl font-extrabold mt-2 text-emerald-800 dark:text-emerald-300">0</div>
           </div>
-          <div class="bg-rose-50 border border-rose-200 rounded-2xl p-4">
-            <div class="text-rose-700 font-extrabold text-sm">أخطاء</div>
-            <div id="statErrors" class="text-3xl font-extrabold mt-2 text-rose-800">0</div>
+          <div class="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl p-4">
+            <div class="text-rose-700 dark:text-rose-400 font-extrabold text-sm">أخطاء</div>
+            <div id="statErrors" class="text-3xl font-extrabold mt-2 text-rose-800 dark:text-rose-300">0</div>
           </div>
-          <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-            <div class="text-amber-700 font-extrabold text-sm">تحذيرات</div>
-            <div id="statWarnings" class="text-3xl font-extrabold mt-2 text-amber-800">0</div>
+          <div class="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl p-4">
+            <div class="text-amber-700 dark:text-amber-400 font-extrabold text-sm">تحذيرات</div>
+            <div id="statWarnings" class="text-3xl font-extrabold mt-2 text-amber-800 dark:text-amber-300">0</div>
           </div>
         </div>
 
         <div class="grid md:grid-cols-2 gap-4 mt-4">
-          <div class="bg-rose-50 border border-rose-200 rounded-2xl p-4">
-            <div class="text-rose-700 font-extrabold text-sm">أخطاء <span id="branch1Label">الفرع الأول</span></div>
-            <div id="branch1Errors" class="text-3xl font-extrabold mt-2 text-rose-800">0</div>
-            <div class="text-sm text-rose-700 mt-1">نسبة الخطأ: <span id="branch1Rate" class="font-extrabold">0.0%</span></div>
+          <div class="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl p-4">
+            <div class="text-rose-700 dark:text-rose-400 font-extrabold text-sm">أخطاء <span id="branch1Label">الفرع الأول</span></div>
+            <div id="branch1Errors" class="text-3xl font-extrabold mt-2 text-rose-800 dark:text-rose-300">0</div>
+            <div class="text-sm text-rose-700 dark:text-rose-300 mt-1">نسبة الخطأ: <span id="branch1Rate" class="font-extrabold">0.0%</span></div>
           </div>
-          <div class="bg-rose-50 border border-rose-200 rounded-2xl p-4">
-            <div class="text-rose-700 font-extrabold text-sm">أخطاء <span id="branch2Label">الفرع الثاني</span></div>
-            <div id="branch2Errors" class="text-3xl font-extrabold mt-2 text-rose-800">0</div>
-            <div class="text-sm text-rose-700 mt-1">نسبة الخطأ: <span id="branch2Rate" class="font-extrabold">0.0%</span></div>
+          <div class="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl p-4">
+            <div class="text-rose-700 dark:text-rose-400 font-extrabold text-sm">أخطاء <span id="branch2Label">الفرع الثاني</span></div>
+            <div id="branch2Errors" class="text-3xl font-extrabold mt-2 text-rose-800 dark:text-rose-300">0</div>
+            <div class="text-sm text-rose-700 dark:text-rose-300 mt-1">نسبة الخطأ: <span id="branch2Rate" class="font-extrabold">0.0%</span></div>
           </div>
         </div>
 
-        <div class="mt-6 bg-slate-50 border border-slate-200 rounded-2xl p-4">
+        <div class="mt-6 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
           <div class="flex items-center justify-between gap-3 flex-wrap">
             <h2 class="font-extrabold">فلترة الأخطاء</h2>
             <div class="flex gap-2 flex-wrap">
-              <input id="filterDoc" placeholder="نوع المستند" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none" />
-              <input id="filterAmount" placeholder="المبلغ" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none w-32" />
-              <input id="filterType" placeholder="نوع الخطأ (❌ أو ⚠️)" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none w-44" />
-              <button class="px-4 py-2 rounded-xl bg-slate-900 text-white font-extrabold text-sm" onclick="applyTableFilters(window.__MISMATCHES__ || [])">تطبيق</button>
+              <input id="filterDoc" placeholder="نوع المستند" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-sm outline-none text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+              <input id="filterAmount" placeholder="المبلغ" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-sm outline-none w-32 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+              <input id="filterType" placeholder="نوع الخطأ (❌ أو ⚠️)" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-sm outline-none w-44 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+              <button class="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-extrabold text-sm hover:bg-slate-800 dark:hover:bg-slate-200" onclick="applyTableFilters(window.__MISMATCHES__ || [])">تطبيق</button>
             </div>
           </div>
         </div>
 
-        <div id="mismatchTableHost" class="mt-4 overflow-auto rounded-2xl border border-slate-200"></div>
+        <div id="mismatchTableHost" class="mt-4 overflow-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950"></div>
       </div>
     </main>
-    <footer class="max-w-6xl mx-auto px-4 pb-8 text-center text-slate-500 text-sm font-extrabold">
+    <footer class="max-w-6xl mx-auto px-4 pb-8 text-center text-slate-500 dark:text-slate-400 text-sm font-extrabold">
       تطوير الموقع: محمد علي السوداني
     </footer>
 
@@ -2938,39 +3033,51 @@ SETTINGS_HTML = r"""<!doctype html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
     <title>الإعدادات - AuditFlow</title>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/static/tailwind.css" />
     <link rel="stylesheet" href="/static/dark.css" />
     <style>body { font-family: "IBM Plex Sans Arabic", system-ui, sans-serif; }</style>
   </head>
-  <body class="bg-slate-50 text-slate-900">
-    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold"></div>
-    <header class="sticky top-0 bg-white/90 backdrop-blur border-b border-slate-200 z-40">
-      <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 text-lg">AuditFlow | نظام التدقيق</div>
-        <nav class="flex gap-3">
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-white border border-slate-200 hover:bg-slate-50" href="/">لوحة التحكم</a>
-          <a class="px-3 py-2 rounded-xl font-extrabold text-sm bg-slate-900 text-white" href="/settings">الإعدادات</a>
-        </nav>
-        <div id="authArea"></div>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold shadow-lg"></div>
+    <header class="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-700 z-40">
+      <div class="max-w-4xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="font-extrabold text-slate-900 dark:text-white text-lg">AuditFlow | نظام التدقيق</div>
+        <div class="flex flex-wrap items-center gap-3">
+          <nav class="flex flex-wrap items-center gap-2 md:gap-3">
+            <a href="/" data-nav="home">لوحة التحكم</a>
+            <a href="/settings" data-nav="settings">الإعدادات</a>
+            <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
+          </nav>
+          <div id="authArea"></div>
+        </div>
       </div>
     </header>
     <main class="max-w-4xl mx-auto px-4 py-8">
-      <div class="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-        <h1 class="text-2xl font-extrabold">إعدادات الحساب</h1>
-        <p class="text-slate-600 mt-2">يمكنك تغيير كلمة المرور وإنشاء نسخة احتياطية.</p>
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 shadow-sm">
+        <h1 class="text-2xl font-extrabold text-slate-900 dark:text-slate-50">إعدادات الحساب</h1>
+        <p class="text-slate-600 dark:text-slate-400 mt-2">يمكنك تغيير كلمة المرور وإنشاء نسخة احتياطية.</p>
         <div class="mt-6 grid gap-3">
-          <input id="oldPass" type="password" placeholder="كلمة المرور الحالية" class="rounded-xl border border-slate-200 px-3 py-2" />
-          <input id="newPass" type="password" placeholder="كلمة المرور الجديدة" class="rounded-xl border border-slate-200 px-3 py-2" />
-          <button id="changePassBtn" class="px-4 py-2 rounded-xl bg-slate-900 text-white font-extrabold w-fit">تغيير كلمة المرور</button>
+          <input id="oldPass" type="password" placeholder="كلمة المرور الحالية" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+          <input id="newPass" type="password" placeholder="كلمة المرور الجديدة" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+          <button id="changePassBtn" class="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-extrabold w-fit hover:bg-slate-800 dark:hover:bg-slate-200">تغيير كلمة المرور</button>
         </div>
         <div class="mt-8">
-          <button onclick="window.location.href='/backup'" class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-extrabold">تنزيل نسخة احتياطية</button>
+          <button onclick="window.location.href='/backup'" class="px-4 py-2 rounded-xl bg-emerald-600 dark:bg-emerald-500 text-white font-extrabold hover:bg-emerald-700 dark:hover:bg-emerald-400">تنزيل نسخة احتياطية</button>
         </div>
       </div>
     </main>
-    <footer class="max-w-4xl mx-auto px-4 pb-8 text-center text-slate-500 text-sm font-extrabold">تطوير الموقع: محمد علي السوداني</footer>
+    <footer class="max-w-4xl mx-auto px-4 pb-8 text-center text-slate-500 dark:text-slate-400 text-sm font-extrabold">تطوير الموقع: محمد علي السوداني</footer>
     <script src="/static/app.js"></script>
     <script>
       initAuthUI();
@@ -2996,22 +3103,34 @@ LOGIN_HTML = r"""<!doctype html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
     <title>تسجيل الدخول - AuditFlow</title>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/static/tailwind.css" />
     <link rel="stylesheet" href="/static/dark.css" />
     <style>body { font-family: "IBM Plex Sans Arabic", system-ui, sans-serif; }</style>
   </head>
-  <body class="bg-slate-50 text-slate-900 min-h-screen">
-    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold"></div>
-    <main class="max-w-xl mx-auto px-4 py-16">
-      <div class="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm text-center">
-        <h1 class="text-3xl font-extrabold">AuditFlow</h1>
-        <p class="text-slate-600 mt-3">يجب تسجيل الدخول أو إنشاء حساب أولًا للوصول إلى التحليل والتقارير والتنزيل.</p>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen">
+    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold shadow-lg"></div>
+    <div class="max-w-xl mx-auto px-4 pt-8 flex justify-end">
+      <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
+    </div>
+    <main class="max-w-xl mx-auto px-4 py-8">
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-8 shadow-sm text-center">
+        <h1 class="text-3xl font-extrabold text-slate-900 dark:text-slate-50">AuditFlow</h1>
+        <p class="text-slate-600 dark:text-slate-400 mt-3">يجب تسجيل الدخول أو إنشاء حساب أولًا للوصول إلى التحليل والتقارير والتنزيل.</p>
         <div id="authArea" class="mt-6 flex justify-center"></div>
       </div>
     </main>
-    <footer class="max-w-xl mx-auto px-4 pb-8 text-center text-slate-500 text-sm font-extrabold">تطوير الموقع: محمد علي السوداني</footer>
+    <footer class="max-w-xl mx-auto px-4 pb-8 text-center text-slate-500 dark:text-slate-400 text-sm font-extrabold">تطوير الموقع: محمد علي السوداني</footer>
     <script src="/static/app.js"></script>
     <script>initAuthUI();</script>
   </body>
@@ -3088,8 +3207,14 @@ def ui_login(request: Request):
         db.close()
 
 
+APP_JS_PATH = Path(__file__).resolve().parent / "frontend" / "app.js"
+
+
 @app.get("/static/app.js")
 def ui_js():
+    """يُفضَّل ملف frontend/app.js المحدَّث؛ وإلا نرجع النسخة المضمّنة للتشغيل بملف واحد فقط."""
+    if APP_JS_PATH.is_file():
+        return FileResponse(APP_JS_PATH, media_type="application/javascript; charset=utf-8")
     return Response(content=APP_JS.encode("utf-8"), media_type="application/javascript; charset=utf-8")
 
 

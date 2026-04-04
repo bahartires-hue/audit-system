@@ -252,6 +252,7 @@ function initNavAndTheme() {
   if (path.startsWith("/analyze")) key = "analyze";
   else if (path.startsWith("/reports")) key = "reports";
   else if (path.startsWith("/report")) key = "reports";
+  else if (path.startsWith("/settings")) key = "settings";
 
   document.querySelectorAll("[data-nav]").forEach((el) => {
     el.classList.add("nav-link");

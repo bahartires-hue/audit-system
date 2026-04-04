@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import numbers
+import os
 import re
 import unicodedata
 from difflib import SequenceMatcher
@@ -10,6 +11,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 import pdfplumber
+
+from .legacy_analyzer import legacy_analyze, legacy_process
+
+
+def _use_legacy_analyzer() -> bool:
+    """السلوك القديم للتحليل (مطابقة حرفية). عطّله بـ AUDITFLOW_LEGACY_ANALYZER=0."""
+    return os.environ.get("AUDITFLOW_LEGACY_ANALYZER", "1").lower() in ("1", "true", "yes")
 
 
 def _is_plausible_currency_amount(x: float) -> bool:
@@ -1354,6 +1362,8 @@ def _correct_movement_if_debit_equals_balance(
 
 
 def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
+    if _use_legacy_analyzer():
+        return legacy_process(file_path, filename, branch)
     df = read_any(file_path, filename)
     if df is None or len(df) == 0:
         return []
@@ -1479,6 +1489,9 @@ def analyze(
     *,
     allow_same_direction: bool = True,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+    if _use_legacy_analyzer():
+        return legacy_analyze(d1, d2)
+
     res: List[Dict[str, Any]] = []
     counts: Dict[str, int] = {}
 
