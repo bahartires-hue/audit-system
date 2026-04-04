@@ -88,8 +88,11 @@ def analyze_api(
 ):
     # store uploads
     report_id = uuid.uuid4().hex
-    saved1, original1 = save_upload_file(file1, UPLOAD_DIR / report_id / "file1")
-    saved2, original2 = save_upload_file(file2, UPLOAD_DIR / report_id / "file2")
+    try:
+        saved1, original1 = save_upload_file(file1, UPLOAD_DIR / report_id / "file1")
+        saved2, original2 = save_upload_file(file2, UPLOAD_DIR / report_id / "file2")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
     # analyze locally
     try:

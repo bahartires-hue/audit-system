@@ -180,7 +180,7 @@ def db_session() -> Session:
 SESSION_COOKIE = "auditflow_session"
 CSRF_COOKIE = "auditflow_csrf"
 SESSION_DAYS = 14
-MAX_UPLOAD_SIZE_MB = 15
+MAX_UPLOAD_SIZE_MB = int(os.environ.get("AUDITFLOW_MAX_UPLOAD_MB", "15"))
 LOCK_MINUTES = 15
 
 
@@ -288,6 +288,8 @@ def save_upload_file(upload: UploadFile, dest_dir: Path) -> Tuple[str, str]:
         raise HTTPException(400, "ملف PDF غير صالح")
     if lower.endswith(".xlsx") and not content.startswith(b"PK"):
         raise HTTPException(400, "ملف Excel (.xlsx) غير صالح")
+    if lower.endswith(".xlsm") and not content.startswith(b"PK"):
+        raise HTTPException(400, "ملف Excel (.xlsm) غير صالح")
     if lower.endswith(".xls") and not content.startswith(b"\xD0\xCF\x11\xE0"):
         raise HTTPException(400, "ملف Excel (.xls) غير صالح")
 
@@ -2689,7 +2691,8 @@ ANALYZE_HTML = r"""<!doctype html>
     <main class="max-w-6xl mx-auto px-4 py-8">
       <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 md:p-8 shadow-sm">
         <h1 class="text-2xl md:text-3xl font-extrabold text-center">تحليل المطابقة المالية</h1>
-        <p class="text-center text-slate-600 dark:text-slate-400 mt-2">ارفع ملفي الفرع الأول والثاني (Excel/PDF) ثم شغّل التحليل.</p>
+        <p class="text-center text-slate-600 dark:text-slate-400 mt-2">ارفع ملفي الفرع الأول والثاني (Excel/PDF/CSV) ثم شغّل التحليل.</p>
+        <p class="text-center text-xs text-slate-500 dark:text-slate-500 mt-1">الحد الأقصى لحجم كل ملف يضبطه الخادم عبر <code class="text-slate-600 dark:text-slate-400">AUDITFLOW_MAX_UPLOAD_MB</code> (الافتراضي 15 ميجابايت).</p>
 
         <div class="grid lg:grid-cols-2 gap-4 mt-6">
           <section class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
