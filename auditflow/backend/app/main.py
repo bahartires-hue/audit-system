@@ -30,6 +30,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def ui_cache_headers(request: Request, call_next):
+    """يقلّل احتجاز المتصفح لملفات الواجهة القديمة بعد النشر."""
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    elif path in ("/", "/analyze", "/settings", "/login", "/reports") or path.startswith("/report"):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
+
+
 BASE_DIR = Path(__file__).resolve().parents[2]
 _data_root = (os.getenv("AUDITFLOW_DATA_ROOT") or "").strip()
 UPLOAD_DIR = (Path(_data_root) / "uploads") if _data_root else (BASE_DIR / "uploads")
