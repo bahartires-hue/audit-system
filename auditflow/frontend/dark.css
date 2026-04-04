@@ -1,4 +1,4 @@
-/* AuditFlow: dark mode + nav/theme components (till you run npm run build:css). */
+/* OptimalMatch / التطابق الأمثل — dark mode + nav/theme (prebuilt tailwind supplement). */
 html.dark {
   color-scheme: dark;
 }
@@ -283,6 +283,26 @@ html.dark {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+.app-brand__wordmark {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
+  min-width: 0;
+}
+.app-brand__en {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #047857;
+}
+.dark .app-brand__en {
+  color: #6ee7b7;
+}
+
+.flex-wrap {
+  flex-wrap: wrap;
 }
 
 .nav-toggle-btn {

@@ -12,11 +12,11 @@
         } catch (e) {}
       })();
     </script>
-    <title>تسجيل الدخول | AuditFlow | نظام التدقيق</title>
-    <link rel="icon" href="/static/favicon.svg?v=5" type="image/svg+xml" />
+    <title>تسجيل الدخول | التطابق الأمثل | OptimalMatch</title>
+    <link rel="icon" href="/static/favicon.svg?v=6" type="image/svg+xml" />
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/static/tailwind.css?v=5" />
-    <link rel="stylesheet" href="/static/dark.css?v=5" />
+    <link rel="stylesheet" href="/static/tailwind.css?v=6" />
+    <link rel="stylesheet" href="/static/dark.css?v=6" />
     <style>
       body {
         font-family: "IBM Plex Sans Arabic", system-ui, sans-serif;
@@ -33,7 +33,10 @@
             <path d="M8 16l5 5 11-11" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </span>
-        <span class="text-xl font-extrabold tracking-tight">AuditFlow</span>
+        <span class="app-brand__wordmark">
+          <span class="text-xl font-extrabold tracking-tight text-white" style="background: none; -webkit-text-fill-color: #ecfdf5; color: #ecfdf5">التطابق الأمثل</span>
+          <span class="text-xs font-extrabold tracking-wide opacity-90" dir="ltr" style="color: #6ee7b7">OptimalMatch</span>
+        </span>
       </div>
       <h2>مطابقة مالية دقيقة بخطوات بسيطة</h2>
       <p class="mt-3">ارفع ملفي الفرعين، واحصل على تقرير يوضح التطابق والأخطاء والتحذيرات في مكان واحد.</p>
@@ -46,13 +49,16 @@
 
     <div class="flex flex-1 flex-col min-h-screen">
       <div class="login-top-bar login-top-bar-inner flex items-center gap-3 px-4 pt-4 pb-2">
-        <a href="/" class="app-brand login-hide-md" aria-label="AuditFlow">
+        <a href="/" class="app-brand login-hide-md" aria-label="التطابق الأمثل OptimalMatch">
           <span class="app-brand__mark" aria-hidden="true">
             <svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M8 16l5 5 11-11" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </span>
-          <span class="app-brand__text">AuditFlow</span>
+          <span class="app-brand__wordmark">
+            <span class="app-brand__text">التطابق الأمثل</span>
+            <span class="app-brand__en" dir="ltr">OptimalMatch</span>
+          </span>
         </a>
         <span class="flex-1 login-hide-md"></span>
         <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
@@ -70,6 +76,9 @@
               </svg>
             </span>
           </div>
+          <p class="text-center text-xs font-extrabold text-emerald-700 dark:text-emerald-400 mb-1" dir="rtl">
+            التطابق الأمثل <span class="opacity-60 mx-1">|</span> <span dir="ltr">OptimalMatch</span>
+          </p>
           <h1 class="text-2xl font-extrabold text-center text-slate-900 dark:text-slate-50">مرحباً بك</h1>
           <p class="text-center text-slate-600 dark:text-slate-400 mt-2 text-sm leading-relaxed">
             سجّل الدخول أو أنشئ حساباً للوصول إلى التحليل والتقارير والتنزيل.
@@ -83,7 +92,7 @@
       </footer>
     </div>
 
-    <script src="/static/app.js?v=5"></script>
+    <script src="/static/app.js?v=6"></script>
     <script>
       initAuthUI();
     </script>

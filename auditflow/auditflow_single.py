@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-AuditFlow (single-file version)
+التطابق الأمثل / OptimalMatch (single-file version)
 --------------------------------
 Backend + Frontend in ONE Python file.
 
@@ -2533,7 +2533,7 @@ INDEX_HTML = r"""<!doctype html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AuditFlow</title>
+    <title>التطابق الأمثل | OptimalMatch</title>
     <script>
       (function () {
         try {
@@ -2558,7 +2558,7 @@ INDEX_HTML = r"""<!doctype html>
 
     <header class="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-700 z-40">
       <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 dark:text-white text-lg">AuditFlow | نظام التدقيق</div>
+        <div class="font-extrabold text-slate-900 dark:text-white text-lg">التطابق الأمثل | OptimalMatch</div>
         <div class="flex flex-wrap items-center gap-3">
           <nav class="flex flex-wrap items-center gap-2 md:gap-3">
             <a href="/" data-nav="home">لوحة التحكم</a>
@@ -2659,7 +2659,7 @@ ANALYZE_HTML = r"""<!doctype html>
         } catch (e) {}
       })();
     </script>
-    <title>تحليل - AuditFlow</title>
+    <title>تحليل | التطابق الأمثل | OptimalMatch</title>
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
       rel="stylesheet"
@@ -2675,7 +2675,7 @@ ANALYZE_HTML = r"""<!doctype html>
 
     <header class="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-700 z-40">
       <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 dark:text-white text-lg">AuditFlow | نظام التدقيق</div>
+        <div class="font-extrabold text-slate-900 dark:text-white text-lg">التطابق الأمثل | OptimalMatch</div>
         <div class="flex flex-wrap items-center gap-3">
           <nav class="flex flex-wrap items-center gap-2 md:gap-3">
             <a href="/" data-nav="home">لوحة التحكم</a>
@@ -2843,7 +2843,7 @@ REPORTS_HTML = r"""<!doctype html>
         } catch (e) {}
       })();
     </script>
-    <title>التقارير - AuditFlow</title>
+    <title>التقارير | التطابق الأمثل | OptimalMatch</title>
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
       rel="stylesheet"
@@ -2859,7 +2859,7 @@ REPORTS_HTML = r"""<!doctype html>
 
     <header class="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-700 z-40">
       <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 dark:text-white text-lg">AuditFlow | نظام التدقيق</div>
+        <div class="font-extrabold text-slate-900 dark:text-white text-lg">التطابق الأمثل | OptimalMatch</div>
         <div class="flex flex-wrap items-center gap-3">
           <nav class="flex flex-wrap items-center gap-2 md:gap-3">
             <a href="/" data-nav="home">لوحة التحكم</a>
@@ -2912,7 +2912,7 @@ REPORT_HTML = r"""<!doctype html>
         } catch (e) {}
       })();
     </script>
-    <title>تقرير - AuditFlow</title>
+    <title>تقرير | التطابق الأمثل | OptimalMatch</title>
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
       rel="stylesheet"
@@ -2928,7 +2928,7 @@ REPORT_HTML = r"""<!doctype html>
 
     <header class="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-700 z-40">
       <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 dark:text-white text-lg">AuditFlow | نظام التدقيق</div>
+        <div class="font-extrabold text-slate-900 dark:text-white text-lg">التطابق الأمثل | OptimalMatch</div>
         <div class="flex flex-wrap items-center gap-3">
           <nav class="flex flex-wrap items-center gap-2 md:gap-3">
             <a href="/" data-nav="home">لوحة التحكم</a>
@@ -3045,7 +3045,7 @@ SETTINGS_HTML = r"""<!doctype html>
         } catch (e) {}
       })();
     </script>
-    <title>الإعدادات - AuditFlow</title>
+    <title>الإعدادات | التطابق الأمثل | OptimalMatch</title>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/static/tailwind.css" />
     <link rel="stylesheet" href="/static/dark.css" />
@@ -3055,7 +3055,7 @@ SETTINGS_HTML = r"""<!doctype html>
     <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold shadow-lg"></div>
     <header class="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-700 z-40">
       <div class="max-w-4xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 dark:text-white text-lg">AuditFlow | نظام التدقيق</div>
+        <div class="font-extrabold text-slate-900 dark:text-white text-lg">التطابق الأمثل | OptimalMatch</div>
         <div class="flex flex-wrap items-center gap-3">
           <nav class="flex flex-wrap items-center gap-2 md:gap-3">
             <a href="/" data-nav="home">لوحة التحكم</a>
@@ -3115,7 +3115,7 @@ LOGIN_HTML = r"""<!doctype html>
         } catch (e) {}
       })();
     </script>
-    <title>تسجيل الدخول - AuditFlow</title>
+    <title>تسجيل الدخول | التطابق الأمثل | OptimalMatch</title>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/static/tailwind.css" />
     <link rel="stylesheet" href="/static/dark.css" />
@@ -3128,7 +3128,8 @@ LOGIN_HTML = r"""<!doctype html>
     </div>
     <main class="max-w-xl mx-auto px-4 py-8">
       <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-8 shadow-sm text-center">
-        <h1 class="text-3xl font-extrabold text-slate-900 dark:text-slate-50">AuditFlow</h1>
+        <h1 class="text-3xl font-extrabold text-slate-900 dark:text-slate-50">التطابق الأمثل</h1>
+        <p class="text-sm font-extrabold text-emerald-600 dark:text-emerald-400 mt-2" dir="ltr">OptimalMatch</p>
         <p class="text-slate-600 dark:text-slate-400 mt-3">يجب تسجيل الدخول أو إنشاء حساب أولًا للوصول إلى التحليل والتقارير والتنزيل.</p>
         <div id="authArea" class="mt-6 flex justify-center"></div>
       </div>
@@ -3151,7 +3152,7 @@ def wants_html(request: Request) -> bool:
 # =========================
 # APP
 # =========================
-app = FastAPI(title="AuditFlow (single file)")
+app = FastAPI(title="OptimalMatch (single file) | التطابق الأمثل")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

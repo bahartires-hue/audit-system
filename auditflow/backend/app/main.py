@@ -19,7 +19,7 @@ from .services.analyzer import compute_summary, process
 from .services.reports import mismatches_to_csv_bytes, mismatches_to_excel_bytes, mismatches_to_pdf_bytes
 from .services.storage import save_upload_file
 
-app = FastAPI(title="AuditFlow API")
+app = FastAPI(title="OptimalMatch API | التطابق الأمثل")
 
 origins = ["*"]
 app.add_middleware(
