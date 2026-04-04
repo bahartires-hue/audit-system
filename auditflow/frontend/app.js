@@ -79,6 +79,18 @@ async function apiPostJson(url, body) {
   return res.json();
 }
 
+async function apiDelete(url) {
+  syncCsrfFromCookie();
+  const csrf = localStorage.getItem("csrf_token") || "";
+  const res = await fetch(url, {
+    method: "DELETE",
+    credentials: "include",
+    headers: { Accept: "application/json", "X-CSRF-Token": csrf },
+  });
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  return res.json();
+}
+
 function showToast(msg, color = "#10b981") {
   const t = document.getElementById("toast");
   if (!t) return;
@@ -130,13 +142,13 @@ function renderReportRow(item) {
 
 async function deleteReport(id) {
   if (!confirm("هل تريد حذف هذا التقرير؟")) return;
-  const res = await fetch(`/reports?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    showToast("فشل حذف التقرير", "#ef4444");
-    return;
+  try {
+    await apiDelete(`/reports?id=${encodeURIComponent(id)}`);
+    showToast("تم الحذف ✔️", "#10b981");
+    await loadReports();
+  } catch (e) {
+    showToast(e.message || "فشل حذف التقرير", "#ef4444");
   }
-  showToast("تم الحذف ✔️", "#10b981");
-  await loadReports();
 }
 
 async function loadReports() {
