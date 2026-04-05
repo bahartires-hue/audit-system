@@ -2244,46 +2244,116 @@ async function loadReports() {
   }
 }
 
-function renderMismatchTable(entries, host) {
-  const rows = entries
+const MISMATCH_PAGE_SIZE = 40;
+
+function goMismatchPage(delta) {
+  const host = document.getElementById("mismatchTableHost");
+  const entries = window.__MISMATCHES_FILTERED__ || [];
+  if (!host) return;
+  let p = Number(window.__MISMATCH_PAGE__ || 1);
+  p += delta;
+  renderMismatchTable(entries, host, { page: p });
+}
+
+function exportFilteredCsv() {
+  const rows = window.__MISMATCHES_FILTERED__ || [];
+  if (!rows.length) {
+    showToast("لا صفوف للتصدير", "#ef4444");
+    return;
+  }
+  const esc = (v) => {
+    const s = String(v ?? "");
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+  const lines = [["الفرع", "المبلغ", "نوع العملية", "التاريخ", "المستند", "السبب"].map(esc).join(",")];
+  for (const e of rows) {
+    lines.push([e.branch, e.amount, e.type, e.date, e.doc, e.reason].map(esc).join(","));
+  }
+  const blob = new Blob(["\ufeff" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `filtered_${qs("id") || "report"}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  URL.revokeObjectURL(a.href);
+  a.remove();
+  showToast("تم تصدير الصفوف المعروضة ✔️", "#10b981");
+}
+
+function renderMismatchTable(entries, host, opts) {
+  const pageSize = (opts && opts.pageSize) || MISMATCH_PAGE_SIZE;
+  let page = (opts && opts.page) || window.__MISMATCH_PAGE__ || 1;
+  const total = entries.length;
+  const pages = Math.max(1, Math.ceil(total / pageSize) || 1);
+  if (page < 1) page = 1;
+  if (page > pages) page = pages;
+  window.__MISMATCH_PAGE__ = page;
+  const start = (page - 1) * pageSize;
+  const slice = entries.slice(start, start + pageSize);
+
+  const rows = slice
     .map((e) => {
       const reason = e.reason || "";
       const severity = e.type === "error" || reason.includes("❌") ? "error" : reason.includes("⚠️") ? "warning" : "mismatch";
-      const sevColor = severity === "error" ? "bg-rose-50 text-rose-700 border-rose-200" : severity === "warning" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-slate-50 text-slate-700 border-slate-200";
+      const sevColor =
+        severity === "error"
+          ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
+          : severity === "warning"
+            ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+            : "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600";
       const sevText = severity === "error" ? "خطأ" : severity === "warning" ? "تحذير" : "مخالفة";
       return `
-        <tr class="border-b border-slate-200">
-          <td class="px-3 py-3 text-sm text-slate-800">${e.branch || "-"}</td>
-          <td class="px-3 py-3 text-sm text-slate-800">${e.amount ?? "-"}</td>
-          <td class="px-3 py-3 text-sm text-slate-800">${e.type || "-"}</td>
-          <td class="px-3 py-3 text-sm text-slate-800">${e.date || "-"}</td>
-          <td class="px-3 py-3 text-sm text-slate-800">${e.doc || "-"}</td>
+        <tr class="border-b border-slate-200 dark:border-slate-700">
+          <td class="px-3 py-3 text-sm text-slate-800 dark:text-slate-200">${e.branch || "-"}</td>
+          <td class="px-3 py-3 text-sm text-slate-800 dark:text-slate-200">${e.amount ?? "-"}</td>
+          <td class="px-3 py-3 text-sm text-slate-800 dark:text-slate-200">${e.type || "-"}</td>
+          <td class="px-3 py-3 text-sm text-slate-800 dark:text-slate-200">${e.date || "-"}</td>
+          <td class="px-3 py-3 text-sm text-slate-800 dark:text-slate-200">${e.doc || "-"}</td>
           <td class="px-3 py-3 text-sm">
             <span class="inline-flex items-center px-2 py-1 rounded-full border ${sevColor} text-xs font-extrabold">${sevText}</span>
           </td>
-          <td class="px-3 py-3 text-sm text-slate-700">${reason || "-"}</td>
+          <td class="px-3 py-3 text-sm text-slate-700 dark:text-slate-300">${reason || "-"}</td>
         </tr>
       `;
     })
     .join("");
 
+  const from = total ? start + 1 : 0;
+  const to = total ? start + slice.length : 0;
+  const pager =
+    total > pageSize
+      ? `<div class="flex flex-wrap items-center justify-between gap-2 mt-3 text-sm font-extrabold text-slate-600 dark:text-slate-400">
+          <span>عرض ${from}–${to} من ${total}</span>
+          <div class="flex gap-2">
+            <button type="button" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40" ${page <= 1 ? "disabled" : ""} onclick="goMismatchPage(-1)">السابق</button>
+            <button type="button" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40" ${page >= pages ? "disabled" : ""} onclick="goMismatchPage(1)">التالي</button>
+          </div>
+        </div>`
+      : total
+        ? `<div class="mt-3 text-sm font-extrabold text-slate-500 dark:text-slate-400">إجمالي ${total} صفاً</div>`
+        : "";
+
   host.innerHTML = `
+    <div class="overflow-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 print:border-0">
     <table class="w-full text-right table-fixed">
-      <thead class="bg-slate-50">
+      <thead class="bg-slate-50 dark:bg-slate-800/80">
         <tr>
-          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold w-[120px]">الفرع</th>
-          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold w-[110px]">المبلغ</th>
-          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold w-[90px]">نوع</th>
-          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold w-[110px]">التاريخ</th>
-          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold">المستند</th>
-          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold w-[110px]">الحالة</th>
-          <th class="px-3 py-2 text-xs text-slate-600 font-extrabold">السبب</th>
+          <th class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300 font-extrabold w-[120px]">الفرع</th>
+          <th class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300 font-extrabold w-[110px]">المبلغ</th>
+          <th class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300 font-extrabold w-[90px]">نوع</th>
+          <th class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300 font-extrabold w-[110px]">التاريخ</th>
+          <th class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300 font-extrabold">المستند</th>
+          <th class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300 font-extrabold w-[110px]">الحالة</th>
+          <th class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300 font-extrabold">السبب</th>
         </tr>
       </thead>
       <tbody>
-        ${rows || `<tr><td colspan="7" class="px-3 py-6 text-center text-slate-600">لا توجد بيانات</td></tr>`}
+        ${rows || `<tr><td colspan="7" class="px-3 py-6 text-center text-slate-600 dark:text-slate-400">لا توجد بيانات</td></tr>`}
       </tbody>
     </table>
+    </div>
+    ${pager}
   `;
 }
 
@@ -2301,7 +2371,9 @@ function applyTableFilters(entries) {
   if (fType) {
     filtered = filtered.filter((x) => (x.reason || "").includes(fType));
   }
-  renderMismatchTable(filtered, host);
+  window.__MISMATCHES_FILTERED__ = filtered;
+  window.__MISMATCH_PAGE__ = 1;
+  renderMismatchTable(filtered, host, { page: 1 });
 }
 
 async function loadReportDetail() {
@@ -2346,12 +2418,56 @@ async function loadReportDetail() {
   if (b2Label) b2Label.innerText = data.branch2_name || "الفرع الثاني";
 
   window.__MISMATCHES__ = mismatches;
-  renderMismatchTable(mismatches, document.getElementById("mismatchTableHost"));
+  window.__MISMATCHES_FILTERED__ = mismatches;
+  window.__MISMATCH_PAGE__ = 1;
+  renderMismatchTable(mismatches, document.getElementById("mismatchTableHost"), { page: 1 });
+}
+
+function parseDownloadFilename(contentDisposition, fallback) {
+  const cd = contentDisposition || "";
+  const utf = cd.match(/filename\\*=UTF-8''([^;\\s]+)/i);
+  if (utf) {
+    try {
+      return decodeURIComponent(utf[1].trim());
+    } catch (e) {
+      return utf[1].trim();
+    }
+  }
+  const m = cd.match(/filename\\s*=\\s*"?([^";\\n]+)"?/i);
+  if (m) return m[1].trim();
+  return fallback;
+}
+
+async function downloadReportFile(id, format) {
+  if (!id) {
+    showToast("معرّف التقرير غير موجود", "#ef4444");
+    return;
+  }
+  const fmt = (format || "excel").toLowerCase().trim();
+  const url = `/download?id=${encodeURIComponent(id)}&format=${encodeURIComponent(fmt)}`;
+  syncCsrfFromCookie();
+  try {
+    const res = await fetch(url, { method: "GET", credentials: "include" });
+    if (!res.ok) throw new Error(await readErrorMessage(res));
+    const blob = await res.blob();
+    const ext = fmt === "pdf" ? "pdf" : fmt === "csv" ? "csv" : "xlsx";
+    const fallbackName = `report_${id}.${ext}`;
+    const filename = parseDownloadFilename(res.headers.get("Content-Disposition"), fallbackName);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    URL.revokeObjectURL(a.href);
+    a.remove();
+    showToast("تم التحميل ✔️", "#10b981");
+  } catch (e) {
+    showToast(e.message || "فشل التحميل", "#ef4444");
+  }
 }
 
 function downloadErrors(id, format) {
-  const fmt = format || "excel";
-  window.location.href = `/download?id=${encodeURIComponent(id)}&format=${encodeURIComponent(fmt)}`;
+  return downloadReportFile(id, format || "excel");
 }
 
 async function startAnalyze() {
@@ -2524,8 +2640,71 @@ async function initAuthUI() {
   await render();
 }
 
+function initNavAndTheme() {
+  const path = window.location.pathname || "";
+  let key = "home";
+  if (path.startsWith("/analyze")) key = "analyze";
+  else if (path.startsWith("/reports")) key = "reports";
+  else if (path.startsWith("/report")) key = "reports";
+  else if (path.startsWith("/settings")) key = "settings";
+
+  document.querySelectorAll("[data-nav]").forEach((el) => {
+    el.classList.add("nav-link");
+    const k = el.getAttribute("data-nav");
+    const active = k === key;
+    el.classList.toggle("nav-link--active", active);
+    el.classList.toggle("nav-link--idle", !active);
+  });
+
+  const themeBtn = document.getElementById("themeToggle");
+  if (themeBtn) {
+    const updateThemeBtn = () => {
+      const isDark = document.documentElement.classList.contains("dark");
+      themeBtn.textContent = isDark ? "☀️ نهار" : "🌙 ليل";
+    };
+    themeBtn.addEventListener("click", () => {
+      const nextDark = !document.documentElement.classList.contains("dark");
+      document.documentElement.classList.toggle("dark", nextDark);
+      try {
+        localStorage.setItem("auditflow-theme", nextDark ? "dark" : "light");
+      } catch (e) {}
+      updateThemeBtn();
+    });
+    updateThemeBtn();
+  }
+
+  const navMenuBtn = document.getElementById("navMenuBtn");
+  const mobileDrawer = document.getElementById("mobileNavDrawer");
+  const closeMobileNav = () => {
+    if (!mobileDrawer || !navMenuBtn) return;
+    mobileDrawer.classList.remove("is-open");
+    navMenuBtn.setAttribute("aria-expanded", "false");
+  };
+  if (navMenuBtn && mobileDrawer) {
+    navMenuBtn.addEventListener("click", () => {
+      const open = mobileDrawer.classList.toggle("is-open");
+      navMenuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    mobileDrawer.querySelectorAll("a[data-nav]").forEach((a) => {
+      a.addEventListener("click", () => closeMobileNav());
+    });
+    window.addEventListener(
+      "resize",
+      () => {
+        if (window.matchMedia("(min-width: 768px)").matches) closeMobileNav();
+      },
+      { passive: true }
+    );
+  }
+}
+
+document.addEventListener("DOMContentLoaded", initNavAndTheme);
+
 window.deleteReport = deleteReport;
 window.initAuthUI = initAuthUI;
+window.downloadReportFile = downloadReportFile;
+window.goMismatchPage = goMismatchPage;
+window.exportFilteredCsv = exportFilteredCsv;
 """
 
 INDEX_HTML = r"""<!doctype html>
@@ -2913,111 +3092,149 @@ REPORT_HTML = r"""<!doctype html>
       })();
     </script>
     <title>تقرير | التطابق الأمثل | OptimalMatch</title>
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="/static/tailwind.css" />
-    <link rel="stylesheet" href="/static/dark.css" />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/tailwind.css?v=9" />
+    <link rel="stylesheet" href="/static/dark.css?v=9" />
     <style>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+      @media print {
+        .no-print, .erp-sidebar, .erp-topbar, #toast { display: none !important; }
+        .erp-main { padding: 0 !important; }
+        body { background: white !important; }
+      }
     </style>
   </head>
-  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen">
-    <div id="toast" class="hidden fixed bottom-5 left-5 z-50 text-white px-4 py-2 rounded-xl font-extrabold shadow-lg"></div>
+  <body class="erp-shell bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
+    <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
 
-    <header class="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-700 z-40">
-      <div class="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
-        <div class="font-extrabold text-slate-900 dark:text-white text-lg">التطابق الأمثل | OptimalMatch</div>
-        <div class="flex flex-wrap items-center gap-3">
-          <nav class="flex flex-wrap items-center gap-2 md:gap-3">
-            <a href="/" data-nav="home">لوحة التحكم</a>
-            <a href="/analyze" data-nav="analyze">تحليل</a>
-            <a href="/reports" data-nav="reports">التقارير</a>
-            <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
-          </nav>
+    <aside class="erp-sidebar" aria-label="القائمة الرئيسية">
+      <a href="/" class="erp-sidebar__brand app-brand flex-col items-center gap-1" aria-label="التطابق الأمثل OptimalMatch">
+        <span class="app-brand__mark" style="width: 2.35rem; height: 2.35rem">
+          <svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M8 16l5 5 11-11" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+      </a>
+      <nav class="erp-sidebar__nav" aria-label="تنقل">
+        <a href="/" class="erp-side-link nav-link" data-nav="home" title="لوحة التحكم">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+          </svg>
+        </a>
+        <a href="/analyze" class="erp-side-link nav-link" data-nav="analyze" title="تحليل">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+        </a>
+        <a href="/reports" class="erp-side-link nav-link" data-nav="reports" title="التقارير">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </a>
+        <a href="/settings" class="erp-side-link nav-link" data-nav="settings" title="الإعدادات">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 001.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-1.065 2.572c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 00-1.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </a>
+      </nav>
+    </aside>
+
+    <div class="erp-content min-h-0">
+      <header class="erp-topbar">
+        <button type="button" id="navMenuBtn" class="nav-toggle-btn nav-burger-only" aria-controls="mobileNavDrawer" aria-expanded="false" aria-label="فتح القائمة">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" />
+          </svg>
+        </button>
+        <div class="min-w-0 flex flex-col">
+          <span class="erp-topbar__title truncate">تقرير</span>
+          <span class="text-[0.65rem] font-extrabold text-slate-500 dark:text-slate-400 truncate">التطابق الأمثل <span class="opacity-50">|</span> <span dir="ltr">OptimalMatch</span> <span dir="ltr" class="opacity-60">· single</span></span>
+        </div>
+        <div class="erp-search hidden sm:block">
+          <input type="search" id="erpSearchInp" placeholder="بحث في الصفحة…" autocomplete="off" />
+        </div>
+        <div class="flex items-center gap-2 shrink-0 ms-auto">
           <div id="authArea"></div>
+          <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
         </div>
+      </header>
+      <div id="mobileNavDrawer" class="mobile-nav-drawer md:hidden" role="navigation" aria-label="قائمة الجوال">
+        <a href="/" data-nav="home">لوحة التحكم</a>
+        <a href="/analyze" data-nav="analyze">تحليل</a>
+        <a href="/reports" data-nav="reports">التقارير</a>
+        <a href="/settings" data-nav="settings">الإعدادات</a>
       </div>
-    </header>
 
-    <main class="max-w-6xl mx-auto px-4 py-8">
-      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 md:p-8 shadow-sm">
-        <div class="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 id="reportTitle" class="text-2xl font-extrabold text-slate-900 dark:text-slate-50">تقرير</h1>
-            <div id="reportBranches" class="text-slate-600 dark:text-slate-400 font-extrabold mt-2"></div>
-          </div>
-          <div class="flex gap-2 flex-wrap">
-            <button
-              id="downloadExcelBtn"
-              class="px-4 py-2 rounded-2xl bg-emerald-500 dark:bg-emerald-600 text-white font-extrabold hover:bg-emerald-600 dark:hover:bg-emerald-500"
-              onclick="downloadErrors(qs('id'),'excel')"
-            >
-              تنزيل الأخطاء Excel
-            </button>
-            <button
-              id="downloadPdfBtn"
-              class="px-4 py-2 rounded-2xl bg-blue-500 dark:bg-blue-600 text-white font-extrabold hover:bg-blue-600 dark:hover:bg-blue-500"
-              onclick="downloadErrors(qs('id'),'pdf')"
-            >
-              تنزيل الأخطاء PDF
-            </button>
-          </div>
-        </div>
-
-        <div class="grid md:grid-cols-4 gap-4 mt-6">
-          <div class="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
-            <div class="text-slate-500 dark:text-slate-400 font-extrabold text-sm">الإجمالي</div>
-            <div id="statTotal" class="text-3xl font-extrabold mt-2">0</div>
-          </div>
-          <div class="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4">
-            <div class="text-emerald-700 dark:text-emerald-400 font-extrabold text-sm">متطابق</div>
-            <div id="statMatched" class="text-3xl font-extrabold mt-2 text-emerald-800 dark:text-emerald-300">0</div>
-          </div>
-          <div class="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl p-4">
-            <div class="text-rose-700 dark:text-rose-400 font-extrabold text-sm">أخطاء</div>
-            <div id="statErrors" class="text-3xl font-extrabold mt-2 text-rose-800 dark:text-rose-300">0</div>
-          </div>
-          <div class="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl p-4">
-            <div class="text-amber-700 dark:text-amber-400 font-extrabold text-sm">تحذيرات</div>
-            <div id="statWarnings" class="text-3xl font-extrabold mt-2 text-amber-800 dark:text-amber-300">0</div>
-          </div>
-        </div>
-
-        <div class="grid md:grid-cols-2 gap-4 mt-4">
-          <div class="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl p-4">
-            <div class="text-rose-700 dark:text-rose-400 font-extrabold text-sm">أخطاء <span id="branch1Label"></span></div>
-            <div id="branch1Errors" class="text-3xl font-extrabold mt-2 text-rose-800 dark:text-rose-300">0</div>
-            <div class="text-sm text-rose-700 dark:text-rose-300 mt-1">نسبة الخطأ: <span id="branch1Rate" class="font-extrabold">0.0%</span></div>
-          </div>
-          <div class="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl p-4">
-            <div class="text-rose-700 dark:text-rose-400 font-extrabold text-sm">أخطاء <span id="branch2Label"></span></div>
-            <div id="branch2Errors" class="text-3xl font-extrabold mt-2 text-rose-800 dark:text-rose-300">0</div>
-            <div class="text-sm text-rose-700 dark:text-rose-300 mt-1">نسبة الخطأ: <span id="branch2Rate" class="font-extrabold">0.0%</span></div>
-          </div>
-        </div>
-
-        <div class="mt-6 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
-          <div class="flex items-center justify-between gap-3 flex-wrap">
-            <h2 class="font-extrabold">فلترة الأخطاء</h2>
-            <div class="flex gap-2 flex-wrap">
-              <input id="filterDoc" placeholder="نوع المستند" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-sm outline-none text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
-              <input id="filterAmount" placeholder="المبلغ" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-sm outline-none w-32 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
-              <input id="filterType" placeholder="نوع الخطأ (❌ أو ⚠️)" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-sm outline-none w-44 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
-              <button class="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-extrabold text-sm hover:bg-slate-800 dark:hover:bg-slate-200" onclick="applyTableFilters(window.__MISMATCHES__ || [])">تطبيق</button>
+      <main class="erp-main">
+        <div class="max-w-6xl mx-auto w-full px-4 py-6 md:px-6">
+          <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 md:p-8 shadow-sm">
+            <div class="flex items-start justify-between gap-4 flex-wrap no-print">
+              <div>
+                <h1 id="reportTitle" class="text-2xl font-extrabold text-slate-900 dark:text-slate-50">تقرير</h1>
+                <div id="reportBranches" class="text-slate-600 dark:text-slate-400 font-extrabold mt-2"></div>
+              </div>
+              <div class="flex gap-2 flex-wrap justify-end">
+                <button type="button" class="px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-50 font-extrabold hover:bg-slate-50 dark:hover:bg-slate-800" onclick="window.print()">طباعة</button>
+                <button type="button" class="px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-50 font-extrabold hover:bg-slate-50 dark:hover:bg-slate-800" onclick="downloadReportFile(qs('id'), 'csv')">CSV</button>
+                <button type="button" class="px-4 py-2 rounded-2xl bg-emerald-500 dark:bg-emerald-600 text-white font-extrabold hover:bg-emerald-600 dark:hover:bg-emerald-500" onclick="downloadReportFile(qs('id'), 'excel')">Excel</button>
+                <button type="button" class="px-4 py-2 rounded-2xl bg-rose-500 dark:bg-rose-600 text-white font-extrabold hover:bg-rose-600 dark:hover:bg-rose-500" onclick="downloadReportFile(qs('id'), 'pdf')">PDF</button>
+              </div>
             </div>
+
+            <div class="grid md:grid-cols-4 gap-4 mt-6">
+              <div class="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
+                <div class="text-slate-500 dark:text-slate-400 font-extrabold text-sm">الإجمالي</div>
+                <div id="statTotal" class="text-3xl font-extrabold mt-2">0</div>
+              </div>
+              <div class="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4">
+                <div class="text-emerald-700 dark:text-emerald-400 font-extrabold text-sm">متطابق</div>
+                <div id="statMatched" class="text-3xl font-extrabold mt-2 text-emerald-800 dark:text-emerald-300">0</div>
+              </div>
+              <div class="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl p-4">
+                <div class="text-rose-700 dark:text-rose-400 font-extrabold text-sm">أخطاء</div>
+                <div id="statErrors" class="text-3xl font-extrabold mt-2 text-rose-800 dark:text-rose-300">0</div>
+              </div>
+              <div class="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl p-4">
+                <div class="text-amber-700 dark:text-amber-400 font-extrabold text-sm">تحذيرات</div>
+                <div id="statWarnings" class="text-3xl font-extrabold mt-2 text-amber-800 dark:text-amber-300">0</div>
+              </div>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-4 mt-4">
+              <div class="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl p-4">
+                <div class="text-rose-700 dark:text-rose-400 font-extrabold text-sm">أخطاء <span id="branch1Label"></span></div>
+                <div id="branch1Errors" class="text-3xl font-extrabold mt-2 text-rose-800 dark:text-rose-300">0</div>
+                <div class="text-sm text-rose-700 dark:text-rose-300 mt-1">نسبة الخطأ: <span id="branch1Rate" class="font-extrabold">0.0%</span></div>
+              </div>
+              <div class="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl p-4">
+                <div class="text-rose-700 dark:text-rose-400 font-extrabold text-sm">أخطاء <span id="branch2Label"></span></div>
+                <div id="branch2Errors" class="text-3xl font-extrabold mt-2 text-rose-800 dark:text-rose-300">0</div>
+                <div class="text-sm text-rose-700 dark:text-rose-300 mt-1">نسبة الخطأ: <span id="branch2Rate" class="font-extrabold">0.0%</span></div>
+              </div>
+            </div>
+
+            <div class="mt-6 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 no-print">
+              <div class="flex items-center justify-between gap-3 flex-wrap">
+                <h2 class="font-extrabold">فلترة الأخطاء</h2>
+                <div class="flex gap-2 flex-wrap">
+                  <input id="filterDoc" placeholder="نوع المستند" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-sm outline-none text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+                  <input id="filterAmount" placeholder="المبلغ" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-sm outline-none w-32 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+                  <input id="filterType" placeholder="نوع الخطأ (❌ أو ⚠️)" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-sm outline-none w-44 text-slate-900 dark:text-slate-100 placeholder:text-slate-400" />
+                  <button type="button" class="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-extrabold text-sm hover:bg-slate-800 dark:hover:bg-slate-200" onclick="applyTableFilters(window.__MISMATCHES__ || [])">تطبيق</button>
+                  <button type="button" class="px-4 py-2 rounded-xl border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 font-extrabold text-sm hover:bg-emerald-50 dark:hover:bg-emerald-950/40" onclick="exportFilteredCsv()">تصدير CSV للمعروض</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="mismatchTableHost" class="mt-4"></div>
+            <p class="mt-6 text-center text-xs text-slate-500 dark:text-slate-400 font-extrabold">تطوير الموقع: محمد علي السوداني</p>
           </div>
         </div>
+      </main>
+    </div>
 
-        <div id="mismatchTableHost" class="mt-4 overflow-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950"></div>
-      </div>
-    </main>
-    <footer class="max-w-6xl mx-auto px-4 pb-8 text-center text-slate-500 dark:text-slate-400 text-sm font-extrabold">
-      تطوير الموقع: محمد علي السوداني
-    </footer>
-
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=9"></script>
     <script>
       window.addEventListener("DOMContentLoaded", () => {
         initAuthUI();
@@ -3602,7 +3819,7 @@ def download(request: Request, id: str = Query(...), format: str = Query("excel"
                 headers={"Content-Disposition": f'attachment; filename=\"{filename}\"'},
             )
 
-        raise HTTPException(400, "format يجب أن يكون: excel أو pdf")
+        raise HTTPException(400, "format يجب أن يكون: excel أو pdf أو csv")
     finally:
         db.close()
 
