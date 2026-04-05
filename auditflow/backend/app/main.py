@@ -5,14 +5,18 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
-from .auth_core import require_csrf, require_user
+from .auth_core import log_event, require_csrf, require_user
 from .db import SessionLocal as _SessionLocal
 from .models import AnalysisReport, init_db
+from .rate_limit import limiter
 from .routers.auth_api import router as auth_router
 from .services.analyzer import analyze as analyze_pairs
 from .services.analyzer import compute_summary, process
@@ -20,6 +24,8 @@ from .services.reports import mismatches_to_csv_bytes, mismatches_to_excel_bytes
 from .services.storage import save_upload_file
 
 app = FastAPI(title="OptimalMatch API | التطابق الأمثل")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 origins = ["*"]
 app.add_middleware(
@@ -29,6 +35,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(SlowAPIMiddleware)
 
 
 @app.middleware("http")
@@ -39,7 +46,7 @@ async def ui_cache_headers(request: Request, call_next):
     if path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-store, max-age=0, must-revalidate"
         response.headers["Pragma"] = "no-cache"
-    elif path in ("/", "/analyze", "/settings", "/login", "/reports") or path.startswith("/report"):
+    elif path in ("/", "/analyze", "/settings", "/login", "/reports", "/help") or path.startswith("/report"):
         response.headers["Cache-Control"] = "no-store, max-age=0, must-revalidate"
         response.headers["Pragma"] = "no-cache"
     return response
@@ -87,6 +94,11 @@ def ui_analyze(request: Request):
 @app.get("/settings", response_class=HTMLResponse)
 def ui_settings(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "settings.html")
+
+
+@app.get("/help", response_class=HTMLResponse)
+def ui_help(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "help.html")
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -195,6 +207,7 @@ def analyze_api(
     try:
         db.add(created)
         db.commit()
+        log_event(db, "report.created", user_id, {"report_id": report_id, "title": title_eff})
     finally:
         db.close()
 
@@ -202,22 +215,34 @@ def analyze_api(
 
 
 @app.get("/reports")
-def list_reports(request: Request):
+def list_reports(
+    request: Request,
+    archived: str = Query("0"),
+    q: str = Query(""),
+):
     if _wants_html(request):
         return _require_login_page(request, FRONTEND_DIR / "reports.html")
 
     db = _SessionLocal()
     try:
         user = require_user(db, request)
-        rows: List[AnalysisReport] = (
-            db.query(AnalysisReport)
-            .filter(AnalysisReport.user_id == user.id)
-            .order_by(AnalysisReport.created_at.desc())
-            .limit(200)
-            .all()
-        )
+        query = db.query(AnalysisReport).filter(AnalysisReport.user_id == user.id)
+        ar = (archived or "0").strip().lower()
+        if ar in ("0", "active", "false"):
+            query = query.filter((AnalysisReport.archived.is_(None)) | (AnalysisReport.archived == 0))
+        elif ar in ("1", "true", "archived"):
+            query = query.filter(AnalysisReport.archived == 1)
+        rows: List[AnalysisReport] = query.order_by(AnalysisReport.created_at.desc()).limit(500).all()
+        qn = (q or "").strip().lower()
         items = []
         for r in rows:
+            tags = r.tags_json if isinstance(r.tags_json, list) else []
+            tag_str = " ".join(str(t) for t in tags).lower()
+            title_l = (r.title or "").lower()
+            b1 = (r.branch1_name or "").lower()
+            b2 = (r.branch2_name or "").lower()
+            if qn and qn not in title_l and qn not in b1 and qn not in b2 and qn not in tag_str:
+                continue
             items.append(
                 {
                     "id": r.id,
@@ -226,6 +251,8 @@ def list_reports(request: Request):
                     "branch2_name": r.branch2_name,
                     "status": r.status,
                     "created_at": r.created_at,
+                    "tags": tags,
+                    "archived": bool(int(r.archived or 0)),
                     "stats": {
                         "total_ops": r.total_ops,
                         "matched_ops": r.matched_ops,
@@ -256,6 +283,7 @@ def get_report(request: Request, id: str = Query(...)):
         if not r:
             raise HTTPException(404, "Report not found")
 
+        tags = r.tags_json if isinstance(r.tags_json, list) else []
         return {
             "id": r.id,
             "title": r.title,
@@ -263,6 +291,9 @@ def get_report(request: Request, id: str = Query(...)):
             "branch2_name": r.branch2_name,
             "status": r.status,
             "created_at": r.created_at,
+            "tags": tags,
+            "notes": r.notes or "",
+            "archived": bool(int(r.archived or 0)),
             "stats": {
                 "total_ops": r.total_ops,
                 "matched_ops": r.matched_ops,
@@ -274,6 +305,54 @@ def get_report(request: Request, id: str = Query(...)):
             "file2_original": r.file2_original,
             "stats_json": r.stats_json,
             "analysis_json": r.analysis_json,
+        }
+    finally:
+        db.close()
+
+
+@app.patch("/report")
+async def patch_report(
+    request: Request,
+    report_id: str = Query(..., alias="id"),
+    body: Dict[str, Any] = Body(...),
+):
+    db = _SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        r: AnalysisReport | None = (
+            db.query(AnalysisReport)
+            .filter(AnalysisReport.id == report_id, AnalysisReport.user_id == user.id)
+            .first()
+        )
+        if not r:
+            raise HTTPException(404, "Report not found")
+
+        if "title" in body and body["title"] is not None:
+            r.title = str(body["title"]).strip() or r.title
+        if "notes" in body:
+            r.notes = str(body["notes"] or "") or None
+        if "archived" in body:
+            r.archived = 1 if bool(body["archived"]) else 0
+        if "tags" in body:
+            raw = body["tags"]
+            if isinstance(raw, str):
+                tags = [x.strip() for x in raw.split(",") if x.strip()]
+            elif isinstance(raw, list):
+                tags = [str(x).strip() for x in raw if str(x).strip()]
+            else:
+                raise HTTPException(400, "tags يجب أن تكون قائمة أو نصاً مفصولاً بفواصل")
+            r.tags_json = tags[:50]
+
+        db.commit()
+        log_event(db, "report.updated", user.id, {"report_id": report_id})
+        tags = r.tags_json if isinstance(r.tags_json, list) else []
+        return {
+            "id": r.id,
+            "title": r.title,
+            "tags": tags,
+            "notes": r.notes or "",
+            "archived": bool(int(r.archived or 0)),
         }
     finally:
         db.close()

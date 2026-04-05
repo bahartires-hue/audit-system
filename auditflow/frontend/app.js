@@ -91,6 +91,23 @@ async function apiDelete(url) {
   return res.json();
 }
 
+async function apiPatchJson(url, body) {
+  syncCsrfFromCookie();
+  const csrf = localStorage.getItem("csrf_token") || "";
+  const res = await fetch(url, {
+    method: "PATCH",
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-CSRF-Token": csrf,
+    },
+    body: JSON.stringify(body || {}),
+  });
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+  return res.json();
+}
+
 function showToast(msg, color = "#10b981") {
   const t = document.getElementById("toast");
   if (!t) return;
@@ -118,6 +135,11 @@ function renderReportRow(item) {
   const li = document.createElement("div");
   li.className =
     "bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-4 flex flex-col gap-2 shadow-sm";
+  const tags = Array.isArray(item.tags) ? item.tags : [];
+  const tagsHtml = tags.length
+    ? `<div class="flex flex-wrap gap-1 mt-2">${tags.map((t) => `<span class="text-[0.65rem] font-extrabold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">${String(t)}</span>`).join("")}</div>`
+    : "";
+  const arch = item.archived ? "إرجاع من الأرشيف" : "أرشفة";
   li.innerHTML = `
     <div class="flex items-start justify-between gap-4">
       <div class="min-w-0">
@@ -127,6 +149,7 @@ function renderReportRow(item) {
         <div class="text-sm text-slate-600 dark:text-slate-400 mt-1">
           ${item.branch1_name} مقابل ${item.branch2_name}
         </div>
+        ${tagsHtml}
       </div>
       <a class="px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold shrink-0" href="/report?id=${item.id}">عرض</a>
     </div>
@@ -135,8 +158,15 @@ function renderReportRow(item) {
       <div class="text-sm text-slate-700 dark:text-slate-300"><span class="font-extrabold">أخطاء:</span> ${item.stats.errors_count}</div>
       <div class="text-sm text-slate-700 dark:text-slate-300"><span class="font-extrabold">تحذيرات:</span> ${item.stats.warnings_count}</div>
     </div>
-    <button class="self-end px-3 py-1.5 rounded-lg border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-sm font-extrabold hover:bg-rose-50 dark:hover:bg-rose-950/50" onclick="deleteReport('${item.id}')">حذف</button>
+    <div class="flex flex-wrap gap-2 justify-end">
+      <button type="button" class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-sm font-extrabold hover:bg-slate-50 dark:hover:bg-slate-800" data-archive-toggle="${item.id}" data-archived="${item.archived ? "1" : "0"}">${arch}</button>
+      <button type="button" class="px-3 py-1.5 rounded-lg border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-sm font-extrabold hover:bg-rose-50 dark:hover:bg-rose-950/50" onclick="deleteReport('${item.id}')">حذف</button>
+    </div>
   `;
+  const arBtn = li.querySelector("[data-archive-toggle]");
+  if (arBtn) {
+    arBtn.addEventListener("click", () => toggleReportArchive(item.id, !item.archived));
+  }
   return li;
 }
 
@@ -151,17 +181,31 @@ async function deleteReport(id) {
   }
 }
 
+async function toggleReportArchive(id, archived) {
+  try {
+    await apiPatchJson(`/report?id=${encodeURIComponent(id)}`, { archived: !!archived });
+    showToast(archived ? "تمت الأرشفة" : "تمت إعادة التقرير للقائمة النشطة", "#10b981");
+    await loadReports();
+  } catch (e) {
+    showToast(e.message || "فشل التحديث", "#ef4444");
+  }
+}
+
 async function loadReports() {
   const host = document.getElementById("reportsHost");
   if (!host) return;
   host.innerHTML = `
     <div class="text-slate-600 dark:text-slate-400 text-center py-10">جارٍ تحميل التقارير ...</div>
   `;
-  const data = await apiGet("/reports");
+  const archivedSel = document.getElementById("reportsArchivedFilter");
+  const qInp = document.getElementById("reportsSearchInp");
+  const archived = archivedSel ? archivedSel.value : "0";
+  const q = qInp ? (qInp.value || "").trim() : "";
+  const data = await apiGet(`/reports?archived=${encodeURIComponent(archived)}&q=${encodeURIComponent(q)}`);
   const items = data.items || [];
   host.innerHTML = "";
   if (!items.length) {
-    host.innerHTML = `<div class="text-slate-600 dark:text-slate-400 text-center py-10">لا توجد تقارير بعد.</div>`;
+    host.innerHTML = `<div class="text-slate-600 dark:text-slate-400 text-center py-10">لا توجد تقارير مطابقة.</div>`;
     return;
   }
   for (const item of items) {
@@ -169,8 +213,69 @@ async function loadReports() {
   }
 }
 
-function renderMismatchTable(entries, host) {
-  const rows = entries
+function initReportsFilters() {
+  const archivedSel = document.getElementById("reportsArchivedFilter");
+  const qInp = document.getElementById("reportsSearchInp");
+  const btn = document.getElementById("reportsFilterBtn");
+  const run = () => loadReports().catch((e) => showToast(e.message || "فشل التحميل", "#ef4444"));
+  archivedSel?.addEventListener("change", run);
+  btn?.addEventListener("click", run);
+  qInp?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") run();
+  });
+}
+
+const MISMATCH_PAGE_SIZE = 40;
+
+function goMismatchPage(delta) {
+  const host = document.getElementById("mismatchTableHost");
+  const entries = window.__MISMATCHES_FILTERED__ || [];
+  if (!host) return;
+  let p = Number(window.__MISMATCH_PAGE__ || 1);
+  p += delta;
+  renderMismatchTable(entries, host, { page: p });
+}
+
+function exportFilteredCsv() {
+  const rows = window.__MISMATCHES_FILTERED__ || [];
+  if (!rows.length) {
+    showToast("لا صفوف للتصدير", "#ef4444");
+    return;
+  }
+  const esc = (v) => {
+    const s = String(v ?? "");
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+  const lines = [["الفرع", "المبلغ", "نوع العملية", "التاريخ", "المستند", "السبب"].map(esc).join(",")];
+  for (const e of rows) {
+    lines.push(
+      [e.branch, e.amount, e.type, e.date, e.doc, e.reason].map(esc).join(",")
+    );
+  }
+  const blob = new Blob(["\ufeff" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `filtered_${qs("id") || "report"}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  URL.revokeObjectURL(a.href);
+  a.remove();
+  showToast("تم تصدير الصفوف المعروضة ✔️", "#10b981");
+}
+
+function renderMismatchTable(entries, host, opts) {
+  const pageSize = (opts && opts.pageSize) || MISMATCH_PAGE_SIZE;
+  let page = (opts && opts.page) || window.__MISMATCH_PAGE__ || 1;
+  const total = entries.length;
+  const pages = Math.max(1, Math.ceil(total / pageSize) || 1);
+  if (page < 1) page = 1;
+  if (page > pages) page = pages;
+  window.__MISMATCH_PAGE__ = page;
+  const start = (page - 1) * pageSize;
+  const slice = entries.slice(start, start + pageSize);
+
+  const rows = slice
     .map((e) => {
       const reason = e.reason || "";
       const severity = e.type === "error" || reason.includes("❌") ? "error" : reason.includes("⚠️") ? "warning" : "mismatch";
@@ -197,7 +302,23 @@ function renderMismatchTable(entries, host) {
     })
     .join("");
 
+  const from = total ? start + 1 : 0;
+  const to = total ? start + slice.length : 0;
+  const pager =
+    total > pageSize
+      ? `<div class="flex flex-wrap items-center justify-between gap-2 mt-3 text-sm font-extrabold text-slate-600 dark:text-slate-400">
+          <span>عرض ${from}–${to} من ${total}</span>
+          <div class="flex gap-2">
+            <button type="button" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40" ${page <= 1 ? "disabled" : ""} onclick="goMismatchPage(-1)">السابق</button>
+            <button type="button" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40" ${page >= pages ? "disabled" : ""} onclick="goMismatchPage(1)">التالي</button>
+          </div>
+        </div>`
+      : total
+        ? `<div class="mt-3 text-sm font-extrabold text-slate-500 dark:text-slate-400">إجمالي ${total} صفاً</div>`
+        : "";
+
   host.innerHTML = `
+    <div class="overflow-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 print:border-0">
     <table class="w-full text-right table-fixed">
       <thead class="bg-slate-50 dark:bg-slate-800/80">
         <tr>
@@ -214,6 +335,8 @@ function renderMismatchTable(entries, host) {
         ${rows || `<tr><td colspan="7" class="px-3 py-6 text-center text-slate-600 dark:text-slate-400">لا توجد بيانات</td></tr>`}
       </tbody>
     </table>
+    </div>
+    ${pager}
   `;
 }
 
@@ -231,7 +354,9 @@ function applyTableFilters(entries) {
   if (fType) {
     filtered = filtered.filter((x) => (x.reason || "").includes(fType));
   }
-  renderMismatchTable(filtered, host);
+  window.__MISMATCHES_FILTERED__ = filtered;
+  window.__MISMATCH_PAGE__ = 1;
+  renderMismatchTable(filtered, host, { page: 1 });
 }
 
 async function loadReportDetail() {
@@ -278,7 +403,48 @@ async function loadReportDetail() {
   if (b2Label) b2Label.innerText = b2Name || "الفرع الثاني";
 
   window.__MISMATCHES__ = mismatches;
-  renderMismatchTable(mismatches, document.getElementById("mismatchTableHost"));
+  window.__MISMATCHES_FILTERED__ = mismatches;
+  window.__MISMATCH_PAGE__ = 1;
+  renderMismatchTable(mismatches, document.getElementById("mismatchTableHost"), { page: 1 });
+
+  const tagsInp = document.getElementById("reportTagsInp");
+  const notesTa = document.getElementById("reportNotesTa");
+  const saveMetaBtn = document.getElementById("saveReportMetaBtn");
+  if (tagsInp) tagsInp.value = (data.tags || []).join(", ");
+  if (notesTa) notesTa.value = data.notes || "";
+  if (saveMetaBtn) {
+    saveMetaBtn.onclick = async () => {
+      const tagsRaw = (tagsInp?.value || "").trim();
+      const tags = tagsRaw
+        ? tagsRaw
+            .split(/[,،]/)
+            .map((x) => x.trim())
+            .filter(Boolean)
+        : [];
+      try {
+        await apiPatchJson(`/report?id=${encodeURIComponent(reportId)}`, {
+          tags,
+          notes: (notesTa?.value || "").trim(),
+        });
+        showToast("تم حفظ الملاحظات والوسوم ✔️", "#10b981");
+      } catch (e) {
+        showToast(e.message || "فشل الحفظ", "#ef4444");
+      }
+    };
+  }
+  const archBtn = document.getElementById("reportArchiveBtn");
+  if (archBtn) {
+    archBtn.textContent = data.archived ? "إرجاع من الأرشيف" : "أرشفة التقرير";
+    archBtn.onclick = async () => {
+      try {
+        await apiPatchJson(`/report?id=${encodeURIComponent(reportId)}`, { archived: !data.archived });
+        showToast(!data.archived ? "تمت الأرشفة" : "أُعيد التقرير للقائمة النشطة", "#10b981");
+        window.location.reload();
+      } catch (e) {
+        showToast(e.message || "فشل التحديث", "#ef4444");
+      }
+    };
+  }
 }
 
 const AUDITFLOW_REMEMBER_USER_KEY = "auditflow_remember_username";
@@ -538,6 +704,7 @@ function initNavAndTheme() {
   else if (path.startsWith("/reports")) key = "reports";
   else if (path.startsWith("/report")) key = "reports";
   else if (path.startsWith("/settings")) key = "settings";
+  else if (path.startsWith("/help")) key = "help";
 
   document.querySelectorAll("[data-nav]").forEach((el) => {
     el.classList.add("nav-link");
@@ -589,9 +756,13 @@ document.addEventListener("DOMContentLoaded", initNavAndTheme);
 
 // deleteReport is global for inline onclick usage
 window.deleteReport = deleteReport;
+window.toggleReportArchive = toggleReportArchive;
 window.initAuthUI = initAuthUI;
+window.initReportsFilters = initReportsFilters;
 window.qs = qs;
 window.downloadReportFile = downloadReportFile;
 window.downloadCSV = downloadCSV;
 window.downloadErrors = downloadReportFile;
+window.goMismatchPage = goMismatchPage;
+window.exportFilteredCsv = exportFilteredCsv;
 

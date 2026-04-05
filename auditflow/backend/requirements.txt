@@ -6,3 +6,6 @@ pdfplumber
 openpyxl
 reportlab
 python-multipart
+slowapi
+arabic-reshaper
+python-bidi

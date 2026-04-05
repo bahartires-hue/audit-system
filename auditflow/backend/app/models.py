@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String, Text
 
 from .db import Base
 
@@ -35,6 +35,7 @@ class AuditLog(Base):
     action = Column(String, nullable=False)
     meta_json = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+    preferences_json = Column(JSON, nullable=False, default=lambda: {})
 
 
 class AnalysisReport(Base):
@@ -63,6 +64,10 @@ class AnalysisReport(Base):
 
     stats_json = Column(JSON, nullable=False, default=dict)
     analysis_json = Column(JSON, nullable=False, default=dict)
+
+    tags_json = Column(JSON, nullable=False, default=lambda: [])
+    notes = Column(Text, nullable=True)
+    archived = Column(Integer, nullable=False, default=0)
 
 
 def init_db() -> None:

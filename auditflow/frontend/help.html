@@ -12,16 +12,15 @@
         } catch (e) {}
       })();
     </script>
-    <title>التقارير | التطابق الأمثل | OptimalMatch</title>
+    <title>مساعدة | التطابق الأمثل | OptimalMatch</title>
     <link rel="icon" href="/static/favicon.svg?v=8" type="image/svg+xml" />
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/static/tailwind.css?v=8" />
     <link rel="stylesheet" href="/static/dark.css?v=8" />
     <style>
-      body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+      body {
+        font-family: "IBM Plex Sans Arabic", system-ui, sans-serif;
+      }
     </style>
   </head>
   <body class="erp-shell bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
@@ -73,11 +72,8 @@
           </svg>
         </button>
         <div class="min-w-0 flex flex-col">
-          <span class="erp-topbar__title truncate">التقارير</span>
+          <span class="erp-topbar__title truncate">مساعدة وسياسات الاستخدام</span>
           <span class="text-[0.65rem] font-extrabold text-slate-500 dark:text-slate-400 truncate">التطابق الأمثل <span class="opacity-50">|</span> <span dir="ltr">OptimalMatch</span></span>
-        </div>
-        <div class="erp-search hidden sm:block">
-          <input type="search" id="erpSearchInp" placeholder="تصفية البطاقات الظاهرة…" autocomplete="off" />
         </div>
         <div class="flex items-center gap-2 shrink-0 ms-auto">
           <div id="authArea"></div>
@@ -93,67 +89,44 @@
       </div>
 
       <main class="erp-main">
-        <div class="max-w-6xl mx-auto w-full px-4 py-6 md:px-6">
-      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 md:p-8 shadow-sm">
-        <div class="flex items-center justify-between gap-3 flex-wrap">
-          <h1 class="text-2xl font-extrabold text-slate-900 dark:text-slate-50">التقارير</h1>
-          <a href="/analyze" class="inline-flex items-center gap-2 px-4 py-2 rounded-2xl audit-cta-link font-extrabold shadow-sm transition-colors">
-            <span aria-hidden="true">＋</span> تحليل جديد
-          </a>
-        </div>
-
-        <div class="mt-4 flex flex-col sm:flex-row flex-wrap gap-3 items-stretch sm:items-center">
-          <label class="text-sm font-extrabold text-slate-600 dark:text-slate-300 shrink-0">العرض</label>
-          <select
-            id="reportsArchivedFilter"
-            class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-sm font-extrabold text-slate-900 dark:text-slate-100 min-w-[10rem]"
-          >
-            <option value="0">نشطة فقط</option>
-            <option value="1">أرشيف فقط</option>
-            <option value="all">الكل</option>
-          </select>
-          <input
-            id="reportsSearchInp"
-            type="search"
-            placeholder="بحث: عنوان، فرع، وسم…"
-            class="flex-1 min-w-[12rem] rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-sm outline-none text-slate-900 dark:text-slate-100"
-          />
-          <button
-            type="button"
-            id="reportsFilterBtn"
-            class="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold hover:bg-slate-800 dark:hover:bg-slate-200"
-          >
-            تطبيق
-          </button>
-        </div>
-
-        <div id="reportsHost" class="mt-6 grid gap-4 md:grid-cols-2"></div>
-      </div>
+        <div class="max-w-3xl mx-auto w-full px-4 py-6 md:px-6 space-y-5">
+          <div class="erp-card">
+            <h1 class="text-xl font-extrabold text-slate-900 dark:text-slate-50">كيف يعمل التحليل؟</h1>
+            <p class="text-sm text-slate-600 dark:text-slate-400 mt-2 leading-relaxed">
+              ارفع ملفين للفرعين (Excel أو PDF أو CSV)، عيّن أسماء الفروع، ثم اضغط «ابدأ التحليل». يُنشأ تقرير يوضح التطابقات والفروقات والتحذيرات. يمكنك تصدير النتائج بصيغ
+              CSV أو Excel أو PDF. خيار «مطابقة صارمة» يفرض تطابق نوع العملية (مدين/دائن) بين الملفين؛ عطّله إذا كان التصدير يعرض نفس الاتجاه في الطرفين.
+            </p>
+          </div>
+          <div class="erp-card">
+            <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">التقارير والأرشفة</h2>
+            <ul class="list-disc list-inside text-sm text-slate-600 dark:text-slate-400 mt-2 space-y-1">
+              <li>من صفحة «التقارير» يمكن تصفية النشطة أو الأرشيف أو الكل، والبحث بالعنوان أو الفرع أو الوسم.</li>
+              <li>داخل كل تقرير: وسوم وملاحظات داخلية، أرشفة بدل الحذف عند الحاجة، فلترة الجدول، ترقيم صفحات، وتصدير CSV للصفوف المفلترة فقط.</li>
+            </ul>
+          </div>
+          <div class="erp-card">
+            <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">PDF بالعربية</h2>
+            <p class="text-sm text-slate-600 dark:text-slate-400 mt-2 leading-relaxed">
+              على Windows يُستخدم عادة خط Arial من النظام. لبيئات أخرى يمكن ضبط مسار خط TrueType يدوياً عبر المتغير البيئي
+              <span dir="ltr" class="font-mono text-xs">AUDITFLOW_ARABIC_FONT</span>
+              (مسار ملف .ttf). تُستخدم حزم <span dir="ltr">arabic-reshaper</span> و <span dir="ltr">python-bidi</span> لتحسين اتجاه النص.
+            </p>
+          </div>
+          <div class="erp-card">
+            <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">الأمان وسجل النشاط</h2>
+            <p class="text-sm text-slate-600 dark:text-slate-400 mt-2 leading-relaxed">
+              تسجيل الدخول محمي بحد معدل طلبات (مثلاً عدد محاولات في الدقيقة). يمكنك مراجعة آخر الأحداث من «الإعدادات» ← سجل النشاط. يُنصح بتفعيل HTTPS في الإنتاج وضبط
+              <span dir="ltr" class="font-mono text-xs">AUDITFLOW_COOKIE_SECURE=1</span>
+              عند الاستضافة على HTTPS.
+            </p>
+          </div>
+          <p class="text-center text-xs text-slate-500 dark:text-slate-400 font-extrabold pb-6">تطوير الموقع: محمد علي السوداني</p>
         </div>
       </main>
     </div>
-
     <script src="/static/app.js?v=8"></script>
     <script>
       initAuthUI();
-      initReportsFilters();
-      loadReports().catch((e) => {
-        console.error(e);
-        showToast("فشل تحميل التقارير", "#ef4444");
-      });
-      (function () {
-        const inp = document.getElementById("erpSearchInp");
-        const host = document.getElementById("reportsHost");
-        if (!inp || !host) return;
-        inp.addEventListener("input", function () {
-          const q = (inp.value || "").toLowerCase().trim();
-          host.querySelectorAll(":scope > div").forEach((row) => {
-            const t = (row.innerText || "").toLowerCase();
-            row.style.display = !q || t.includes(q) ? "" : "none";
-          });
-        });
-      })();
     </script>
   </body>
 </html>
-

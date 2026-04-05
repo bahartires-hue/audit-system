@@ -24,7 +24,8 @@ from ..auth_core import (
     verify_password,
 )
 from ..db import SessionLocal
-from ..models import User, UserSession
+from ..models import AuditLog, User, UserSession
+from ..rate_limit import limiter
 
 router = APIRouter(tags=["auth"])
 
@@ -101,7 +102,56 @@ async def auth_register(request: Request):
         db.close()
 
 
+@router.get("/auth/activity")
+def auth_activity(request: Request, limit: int = 100):
+    lim = max(1, min(int(limit or 100), 500))
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = (
+            db.query(AuditLog)
+            .filter(AuditLog.user_id == user.id)
+            .order_by(AuditLog.created_at.desc())
+            .limit(lim)
+            .all()
+        )
+        return {
+            "items": [
+                {
+                    "id": x.id,
+                    "action": x.action,
+                    "meta": x.meta_json or {},
+                    "created_at": x.created_at.isoformat() + "Z" if x.created_at else None,
+                }
+                for x in rows
+            ]
+        }
+    finally:
+        db.close()
+
+
+@router.patch("/auth/preferences")
+async def auth_preferences(request: Request):
+    payload = await request.json()
+    patch = (payload or {}).get("preferences") or payload or {}
+    if not isinstance(patch, dict):
+        raise HTTPException(400, "preferences يجب أن يكون كائناً")
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        cur = user.preferences_json if isinstance(user.preferences_json, dict) else {}
+        merged = {**cur, **patch}
+        user.preferences_json = merged
+        db.commit()
+        log_event(db, "auth.preferences_update", user.id, {"keys": list(patch.keys())})
+        return {"preferences": merged}
+    finally:
+        db.close()
+
+
 @router.post("/auth/login")
+@limiter.limit("25/minute")
 async def auth_login(request: Request):
     payload = await request.json()
     username = str((payload or {}).get("username", "")).strip()

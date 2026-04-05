@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import csv
 import io
+import os
+import platform
+from pathlib import Path
 from typing import Any, Dict, List
 
 
@@ -84,6 +87,42 @@ def mismatches_to_excel_bytes(entries: List[Dict[str, Any]]) -> bytes:
     return out.getvalue()
 
 
+def _register_arabic_pdf_font() -> str:
+    """تسجيل خط يدعم العربية؛ يعيد اسماً مسجلاً في ReportLab."""
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    name = "OmArabic"
+    if name in pdfmetrics.getRegisteredFontNames():
+        return name
+
+    path = (os.environ.get("AUDITFLOW_ARABIC_FONT") or "").strip()
+    if not path or not Path(path).is_file():
+        if platform.system() == "Windows":
+            wind = os.environ.get("WINDIR", r"C:\Windows")
+            cand = Path(wind) / "Fonts" / "arial.ttf"
+            if cand.is_file():
+                path = str(cand)
+    if path and Path(path).is_file():
+        pdfmetrics.registerFont(TTFont(name, path))
+        return name
+    return "Helvetica"
+
+
+def _shape_pdf_cell(text: str, font_name: str) -> str:
+    s = str(text or "")
+    if font_name == "Helvetica":
+        return s
+    try:
+        import arabic_reshaper
+        from bidi.algorithm import get_display
+
+        reshaped = arabic_reshaper.reshape(s)
+        return get_display(reshaped)
+    except Exception:
+        return s
+
+
 def mismatches_to_pdf_bytes(entries: List[Dict[str, Any]]) -> bytes:
     try:
         from reportlab.lib import colors
@@ -91,6 +130,9 @@ def mismatches_to_pdf_bytes(entries: List[Dict[str, Any]]) -> bytes:
         from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
     except ImportError as e:
         raise RuntimeError("تصدير PDF يحتاج: pip install reportlab") from e
+
+    font = _register_arabic_pdf_font()
+    header_font = "Helvetica-Bold" if font == "Helvetica" else font
 
     out = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -102,15 +144,16 @@ def mismatches_to_pdf_bytes(entries: List[Dict[str, Any]]) -> bytes:
         bottomMargin=24,
     )
 
-    data = [["الفرع", "المبلغ", "التاريخ", "المستند", "السبب"]]
+    headers = ["الفرع", "المبلغ", "التاريخ", "المستند", "السبب"]
+    data: List[List[str]] = [[_shape_pdf_cell(h, font) for h in headers]]
     for e in entries:
         data.append(
             [
-                str(e.get("branch", "") or ""),
-                str(e.get("amount", "") or ""),
-                str(e.get("date", "") or ""),
-                str(e.get("doc", "") or ""),
-                str(e.get("reason", "") or ""),
+                _shape_pdf_cell(str(e.get("branch", "") or ""), font),
+                _shape_pdf_cell(str(e.get("amount", "") or ""), font),
+                _shape_pdf_cell(str(e.get("date", "") or ""), font),
+                _shape_pdf_cell(str(e.get("doc", "") or ""), font),
+                _shape_pdf_cell(str(e.get("reason", "") or ""), font),
             ]
         )
 
@@ -121,11 +164,12 @@ def mismatches_to_pdf_bytes(entries: List[Dict[str, Any]]) -> bytes:
                 ("GRID", (0, 0), (-1, -1), 0.8, colors.black),
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#FFF200")),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.red),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTNAME", (0, 0), (-1, 0), header_font),
                 ("FONTSIZE", (0, 0), (-1, 0), 11),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("FONTSIZE", (0, 1), (-1, -1), 9),
+                ("FONTNAME", (0, 1), (-1, -1), font),
             ]
         )
     )
