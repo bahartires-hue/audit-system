@@ -23,6 +23,16 @@ from .services.analyzer import compute_summary, process
 from .services.reports import mismatches_to_csv_bytes, mismatches_to_excel_bytes, mismatches_to_pdf_bytes
 from .services.storage import save_upload_file
 
+# يظهر في رأس HTTP للتحقق من أن الخادم يقدّم أحدث واجهة بعد النشر
+UI_ASSET_VERSION = "9"
+
+_HTML_NO_CACHE = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+    "X-OptimalMatch-UI": UI_ASSET_VERSION,
+}
+
 app = FastAPI(title="OptimalMatch API | التطابق الأمثل")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -47,8 +57,10 @@ async def ui_cache_headers(request: Request, call_next):
         response.headers["Cache-Control"] = "no-store, max-age=0, must-revalidate"
         response.headers["Pragma"] = "no-cache"
     elif path in ("/", "/analyze", "/settings", "/login", "/reports", "/help") or path.startswith("/report"):
-        response.headers["Cache-Control"] = "no-store, max-age=0, must-revalidate"
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        response.headers["X-OptimalMatch-UI"] = UI_ASSET_VERSION
     return response
 
 
@@ -74,7 +86,7 @@ def _require_login_page(request: Request, html_path: Path) -> FileResponse | Red
     db = _SessionLocal()
     try:
         require_user(db, request)
-        return FileResponse(str(html_path))
+        return FileResponse(str(html_path), headers=dict(_HTML_NO_CACHE))
     except HTTPException:
         return RedirectResponse(url="/login", status_code=302)
     finally:
@@ -110,7 +122,7 @@ def ui_login(request: Request):
         u = current_user_from_request(db, request)
         if u:
             return RedirectResponse(url="/", status_code=302)
-        return FileResponse(str(FRONTEND_DIR / "login.html"))
+        return FileResponse(str(FRONTEND_DIR / "login.html"), headers=dict(_HTML_NO_CACHE))
     finally:
         db.close()
 
