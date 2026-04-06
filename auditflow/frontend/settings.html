@@ -146,6 +146,39 @@
         <div id="inviteOut" class="mt-4 text-sm font-extrabold text-slate-700 dark:text-slate-300"></div>
       </div>
 
+      <div id="adminPanel" class="hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 shadow-sm">
+        <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">لوحة المدير</h2>
+        <p class="text-slate-600 dark:text-slate-400 text-sm mt-1">هنا تتحكم بالحسابات، الخطط، وفترات الاشتراك.</p>
+        <div class="grid sm:grid-cols-3 gap-3 mt-4">
+          <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-3">
+            <div class="text-xs text-slate-500 dark:text-slate-400 font-extrabold">المستخدمون</div>
+            <div id="sumUsers" class="text-2xl font-extrabold">0</div>
+          </div>
+          <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-3">
+            <div class="text-xs text-slate-500 dark:text-slate-400 font-extrabold">الدعوات الفعالة</div>
+            <div id="sumInvites" class="text-2xl font-extrabold">0</div>
+          </div>
+          <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-3">
+            <div class="text-xs text-slate-500 dark:text-slate-400 font-extrabold">المشتركون المدفوعون</div>
+            <div id="sumPaid" class="text-2xl font-extrabold">0</div>
+          </div>
+        </div>
+        <div class="mt-4 overflow-auto rounded-2xl border border-slate-200 dark:border-slate-700">
+          <table class="w-full text-right text-sm">
+            <thead class="bg-slate-50 dark:bg-slate-800/80">
+              <tr>
+                <th class="px-3 py-2 font-extrabold">المستخدم</th>
+                <th class="px-3 py-2 font-extrabold">الخطة</th>
+                <th class="px-3 py-2 font-extrabold">الانتهاء</th>
+                <th class="px-3 py-2 font-extrabold">الحالة</th>
+                <th class="px-3 py-2 font-extrabold">إجراء</th>
+              </tr>
+            </thead>
+            <tbody id="adminUsersHost"></tbody>
+          </table>
+        </div>
+      </div>
+
       <footer class="text-center text-slate-500 dark:text-slate-400 text-sm font-extrabold pb-6">
         تطوير الموقع: محمد علي السوداني
       </footer>
@@ -205,12 +238,77 @@
               const data = await apiPostJson("/auth/invites", { expires_in_hours });
               out.innerHTML = `كود الدعوة: <span dir="ltr" class="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800">${data.code}</span><br/>صالح حتى: <span dir="ltr">${data.expires_at || "-"}</span>`;
               showToast("تم إنشاء دعوة جديدة ✔️", "#10b981");
+              await loadAdminPanel();
             } catch (e) {
               showToast(e.message || "تعذر إنشاء الدعوة", "#ef4444");
             }
           });
         } catch (_) {}
       })();
+      async function adminUpdateUser(userId, patch) {
+        try {
+          await apiPatchJson("/admin/users", { user_id: userId, ...patch });
+          showToast("تم تحديث المستخدم ✔️", "#10b981");
+          await loadAdminPanel();
+        } catch (e) {
+          showToast(e.message || "فشل التحديث", "#ef4444");
+        }
+      }
+      async function loadAdminPanel() {
+        const panel = document.getElementById("adminPanel");
+        const usersHost = document.getElementById("adminUsersHost");
+        if (!panel || !usersHost) return;
+        try {
+          const me = await apiGet("/auth/me");
+          if (!me?.is_admin) return;
+          panel.classList.remove("hidden");
+          const s = await apiGet("/admin/summary");
+          document.getElementById("sumUsers").innerText = String(s.total_users || 0);
+          document.getElementById("sumInvites").innerText = String(s.invite_active || 0);
+          document.getElementById("sumPaid").innerText = String(s.paid_active || 0);
+          const u = await apiGet("/admin/users?limit=400");
+          const items = u.items || [];
+          usersHost.innerHTML = "";
+          if (!items.length) {
+            usersHost.innerHTML = '<tr><td colspan="5" class="px-3 py-4 text-center text-slate-500">لا يوجد مستخدمون</td></tr>';
+            return;
+          }
+          items.forEach((x) => {
+            const tr = document.createElement("tr");
+            tr.className = "border-b border-slate-200 dark:border-slate-700";
+            const exp = x.subscription_expires_at || "-";
+            const activeTxt = x.is_active ? "نشط" : "موقوف";
+            tr.innerHTML = `
+              <td class="px-3 py-2"><div class="font-extrabold">${x.username}</div><div class="text-xs text-slate-500" dir="ltr">${x.email || "-"}</div></td>
+              <td class="px-3 py-2"><span class="font-extrabold">${x.plan_name || "free"}</span></td>
+              <td class="px-3 py-2" dir="ltr">${exp}</td>
+              <td class="px-3 py-2">${activeTxt}${x.is_admin ? " · مدير" : ""}</td>
+              <td class="px-3 py-2">
+                <div class="flex flex-wrap gap-1">
+                  <button class="px-2 py-1 rounded border text-xs font-extrabold" data-a="toggle">${x.is_active ? "إيقاف" : "تفعيل"}</button>
+                  <button class="px-2 py-1 rounded border text-xs font-extrabold" data-a="m1">1ش</button>
+                  <button class="px-2 py-1 rounded border text-xs font-extrabold" data-a="m3">3ش</button>
+                  <button class="px-2 py-1 rounded border text-xs font-extrabold" data-a="m6">6ش</button>
+                  <button class="px-2 py-1 rounded border text-xs font-extrabold" data-a="m12">1س</button>
+                  <button class="px-2 py-1 rounded border text-xs font-extrabold" data-a="m60">5س</button>
+                  <button class="px-2 py-1 rounded border text-xs font-extrabold" data-a="free">مجاني</button>
+                </div>
+              </td>
+            `;
+            tr.querySelector('[data-a="toggle"]')?.addEventListener("click", () => adminUpdateUser(x.id, { is_active: !x.is_active }));
+            tr.querySelector('[data-a="m1"]')?.addEventListener("click", () => adminUpdateUser(x.id, { plan_name: "paid", subscription_months: 1 }));
+            tr.querySelector('[data-a="m3"]')?.addEventListener("click", () => adminUpdateUser(x.id, { plan_name: "paid", subscription_months: 3 }));
+            tr.querySelector('[data-a="m6"]')?.addEventListener("click", () => adminUpdateUser(x.id, { plan_name: "paid", subscription_months: 6 }));
+            tr.querySelector('[data-a="m12"]')?.addEventListener("click", () => adminUpdateUser(x.id, { plan_name: "paid", subscription_months: 12 }));
+            tr.querySelector('[data-a="m60"]')?.addEventListener("click", () => adminUpdateUser(x.id, { plan_name: "paid", subscription_months: 60 }));
+            tr.querySelector('[data-a="free"]')?.addEventListener("click", () => adminUpdateUser(x.id, { plan_name: "free", subscription_months: 0 }));
+            usersHost.appendChild(tr);
+          });
+        } catch (e) {
+          // ignore for non-admins
+        }
+      }
+      loadAdminPanel();
       (function () {
         const inp = document.getElementById("erpSearchInp");
         const host = document.getElementById("activityHost");

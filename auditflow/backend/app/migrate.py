@@ -27,6 +27,12 @@ def run_migrations() -> None:
                 conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR"))
             if "is_admin" not in ucols:
                 conn.execute(text("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0"))
+            if "is_active" not in ucols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1"))
+            if "plan_name" not in ucols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN plan_name VARCHAR DEFAULT 'free'"))
+            if "subscription_expires_at" not in ucols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN subscription_expires_at DATETIME"))
             if "preferences_json" not in ucols:
                 conn.execute(text("ALTER TABLE users ADD COLUMN preferences_json JSON"))
 
@@ -43,3 +49,5 @@ def run_migrations() -> None:
         conn.execute(text("UPDATE analysis_reports SET archived = 0 WHERE archived IS NULL"))
         conn.execute(text("UPDATE analysis_reports SET tags_json = '[]' WHERE tags_json IS NULL"))
         conn.execute(text("UPDATE users SET preferences_json = '{}' WHERE preferences_json IS NULL"))
+        conn.execute(text("UPDATE users SET is_active = 1 WHERE is_active IS NULL"))
+        conn.execute(text("UPDATE users SET plan_name = 'free' WHERE plan_name IS NULL"))

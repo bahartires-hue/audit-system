@@ -81,6 +81,13 @@ def _is_bootstrap_admin_registration(db, username: str, email: str) -> bool:
     return False
 
 
+def _require_admin_user(db, request: Request) -> User:
+    user = require_user(db, request)
+    if int(user.is_admin or 0) != 1:
+        raise HTTPException(403, "هذه العملية للمدير فقط")
+    return user
+
+
 @router.get("/auth/me")
 def auth_me(request: Request):
     db = SessionLocal()
@@ -90,8 +97,21 @@ def auth_me(request: Request):
         username = u.username if u else None
         email = u.email if u else None
         is_admin = bool(int(u.is_admin or 0)) if u else False
+        is_active = bool(int((u.is_active if u else 1) or 0)) if u else False
+        plan_name = (u.plan_name or "free") if u else None
+        exp = u.subscription_expires_at if u else None
         res = Response(
-            content=json.dumps({"username": username, "email": email, "is_admin": is_admin, "csrf_token": csrf}),
+            content=json.dumps(
+                {
+                    "username": username,
+                    "email": email,
+                    "is_admin": is_admin,
+                    "is_active": is_active,
+                    "plan_name": plan_name,
+                    "subscription_expires_at": exp.isoformat() + "Z" if exp else None,
+                    "csrf_token": csrf,
+                }
+            ),
             media_type="application/json",
         )
         res.set_cookie(
@@ -139,6 +159,8 @@ async def auth_register(request: Request):
             username=username,
             email=email,
             is_admin=1 if bootstrap_admin else 0,
+            is_active=1,
+            plan_name="free",
             password_hash=hash_password(password),
         )
         db.add(user)
@@ -299,7 +321,11 @@ async def auth_reset_password(request: Request):
 async def auth_create_invite(request: Request):
     payload = await request.json()
     # Security by default: one-time, short-lived invites
-    max_uses = 1
+    max_uses = int((payload or {}).get("max_uses", 1) or 1)
+    if max_uses < 1:
+        max_uses = 1
+    if max_uses > 10:
+        max_uses = 10
     hours = int((payload or {}).get("expires_in_hours", 6) or 6)
     code = str((payload or {}).get("code", "")).strip() or secrets.token_urlsafe(8).replace("-", "").replace("_", "")
     code = code[:32]
@@ -309,9 +335,7 @@ async def auth_create_invite(request: Request):
     db = SessionLocal()
     try:
         require_csrf(request)
-        user = require_user(db, request)
-        if int(user.is_admin or 0) != 1:
-            raise HTTPException(403, "هذه العملية للمدير فقط")
+        user = _require_admin_user(db, request)
 
         exists = db.query(InviteCode).filter(InviteCode.code == code).first()
         if exists:
@@ -336,6 +360,138 @@ async def auth_create_invite(request: Request):
         db.close()
 
 
+@router.get("/auth/invites")
+def auth_list_invites(request: Request, limit: int = 100):
+    lim = max(1, min(int(limit or 100), 500))
+    db = SessionLocal()
+    try:
+        user = _require_admin_user(db, request)
+        rows = (
+            db.query(InviteCode)
+            .order_by(InviteCode.created_at.desc())
+            .limit(lim)
+            .all()
+        )
+        now = dt.datetime.utcnow()
+        items = []
+        for r in rows:
+            expired = bool(r.expires_at and r.expires_at < now)
+            items.append(
+                {
+                    "code": r.code,
+                    "max_uses": int(r.max_uses or 1),
+                    "used_count": int(r.used_count or 0),
+                    "disabled": bool(int(r.disabled or 0)),
+                    "expires_at": r.expires_at.isoformat() + "Z" if r.expires_at else None,
+                    "created_at": r.created_at.isoformat() + "Z" if r.created_at else None,
+                    "status": "expired" if expired else ("disabled" if int(r.disabled or 0) == 1 else "active"),
+                }
+            )
+        return {"items": items}
+    finally:
+        db.close()
+
+
+@router.get("/admin/summary")
+def admin_summary(request: Request):
+    db = SessionLocal()
+    try:
+        _ = _require_admin_user(db, request)
+        now = dt.datetime.utcnow()
+        total_users = db.query(User).count()
+        active_users = db.query(User).filter(User.is_active == 1).count()
+        paid_active = (
+            db.query(User)
+            .filter(User.is_active == 1, User.plan_name != "free", User.subscription_expires_at.isnot(None), User.subscription_expires_at > now)
+            .count()
+        )
+        invite_total = db.query(InviteCode).count()
+        invite_used = db.query(InviteCode).filter(InviteCode.used_count > 0).count()
+        invite_active = (
+            db.query(InviteCode)
+            .filter(InviteCode.disabled == 0)
+            .all()
+        )
+        invite_active_count = sum(1 for x in invite_active if not x.expires_at or x.expires_at > now)
+        return {
+            "total_users": total_users,
+            "active_users": active_users,
+            "paid_active": paid_active,
+            "invite_total": invite_total,
+            "invite_used": invite_used,
+            "invite_active": invite_active_count,
+        }
+    finally:
+        db.close()
+
+
+@router.get("/admin/users")
+def admin_users(request: Request, limit: int = 200):
+    lim = max(1, min(int(limit or 200), 1000))
+    db = SessionLocal()
+    try:
+        _ = _require_admin_user(db, request)
+        rows = db.query(User).order_by(User.created_at.desc()).limit(lim).all()
+        return {
+            "items": [
+                {
+                    "id": u.id,
+                    "username": u.username,
+                    "email": u.email,
+                    "is_admin": bool(int(u.is_admin or 0)),
+                    "is_active": bool(int(u.is_active or 0)),
+                    "plan_name": u.plan_name or "free",
+                    "subscription_expires_at": u.subscription_expires_at.isoformat() + "Z" if u.subscription_expires_at else None,
+                    "created_at": u.created_at.isoformat() + "Z" if u.created_at else None,
+                }
+                for u in rows
+            ]
+        }
+    finally:
+        db.close()
+
+
+@router.patch("/admin/users")
+async def admin_update_user(request: Request):
+    payload = await request.json()
+    user_id = str((payload or {}).get("user_id", "")).strip()
+    if not user_id:
+        raise HTTPException(400, "user_id مطلوب")
+    db = SessionLocal()
+    try:
+        admin = _require_admin_user(db, request)
+        target = db.query(User).filter(User.id == user_id).first()
+        if not target:
+            raise HTTPException(404, "المستخدم غير موجود")
+        if "is_active" in payload:
+            target.is_active = 1 if bool(payload.get("is_active")) else 0
+        if "plan_name" in payload:
+            p = str(payload.get("plan_name") or "free").strip().lower()
+            target.plan_name = p or "free"
+        if "subscription_months" in payload:
+            m = int(payload.get("subscription_months") or 0)
+            if m > 0:
+                base = target.subscription_expires_at if target.subscription_expires_at and target.subscription_expires_at > dt.datetime.utcnow() else dt.datetime.utcnow()
+                target.subscription_expires_at = base + dt.timedelta(days=30 * m)
+            else:
+                target.subscription_expires_at = None
+        db.commit()
+        log_event(
+            db,
+            "admin.user.updated",
+            admin.id,
+            {
+                "target_user_id": target.id,
+                "is_active": bool(int(target.is_active or 0)),
+                "plan_name": target.plan_name,
+                "subscription_expires_at": target.subscription_expires_at.isoformat() if target.subscription_expires_at else None,
+            },
+        )
+        return {"ok": True}
+    finally:
+        db.close()
+
+
 @router.post("/auth/login")
 @limiter.limit("25/minute")
 async def auth_login(request: Request):
@@ -349,6 +505,10 @@ async def auth_login(request: Request):
         user = db.query(User).filter(User.username == username).first()
         if not user:
             raise HTTPException(401, "بيانات الدخول غير صحيحة")
+        if int(user.is_active or 0) != 1:
+            raise HTTPException(403, "الحساب موقوف. تواصل مع الإدارة")
+        if user.subscription_expires_at and user.subscription_expires_at < dt.datetime.utcnow():
+            raise HTTPException(403, "انتهت صلاحية الاشتراك. تواصل مع الإدارة")
         if user.locked_until and user.locked_until > dt.datetime.utcnow():
             raise HTTPException(429, "الحساب مقفل مؤقتاً. حاول لاحقاً")
         if not verify_password(password, user.password_hash):

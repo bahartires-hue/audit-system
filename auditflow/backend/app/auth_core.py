@@ -93,6 +93,11 @@ def require_user(db: Session, request: Request) -> User:
     u = current_user_from_request(db, request)
     if not u:
         raise HTTPException(401, "يرجى تسجيل الدخول أولاً")
+    if int(getattr(u, "is_active", 1) or 0) != 1:
+        raise HTTPException(403, "الحساب موقوف. تواصل مع الإدارة")
+    exp = getattr(u, "subscription_expires_at", None)
+    if exp and exp < dt.datetime.utcnow():
+        raise HTTPException(403, "انتهت صلاحية الاشتراك. تواصل مع الإدارة")
     return u
 
 
