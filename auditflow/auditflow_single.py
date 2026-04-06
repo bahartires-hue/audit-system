@@ -2349,7 +2349,7 @@ function renderMismatchTable(entries, host, opts) {
         </tr>
       </thead>
       <tbody>
-        ${rows || `<tr><td colspan="7" class="px-3 py-6 text-center text-slate-600 dark:text-slate-400">لا توجد بيانات</td></tr>`}
+        ${rows || `<tr><td colspan="7" class="px-3 py-6 text-center text-emerald-700 dark:text-emerald-300 font-extrabold">لا توجد فروقات مالية، سعدنا بخدمتك</td></tr>`}
       </tbody>
     </table>
     </div>
@@ -2869,6 +2869,15 @@ ANALYZE_HTML = r"""<!doctype html>
 
     <main class="max-w-6xl mx-auto px-4 py-8">
       <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 md:p-8 shadow-sm">
+        <div class="mb-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-3">
+          <div class="text-xs font-extrabold text-slate-500 dark:text-slate-400 mb-2">القائمة السريعة قبل التحليل</div>
+          <div class="flex flex-wrap gap-2">
+            <a href="/" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-extrabold hover:bg-white dark:hover:bg-slate-900">لوحة التحكم</a>
+            <a href="/analyze" class="px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold">تحليل</a>
+            <a href="/reports" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-extrabold hover:bg-white dark:hover:bg-slate-900">التقارير</a>
+            <a href="/settings" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-extrabold hover:bg-white dark:hover:bg-slate-900">الإعدادات</a>
+          </div>
+        </div>
         <h1 class="text-2xl md:text-3xl font-extrabold text-center">تحليل المطابقة المالية</h1>
         <p class="text-center text-slate-600 dark:text-slate-400 mt-2">ارفع ملفي الفرع الأول والثاني (Excel/PDF/CSV) ثم شغّل التحليل.</p>
         <p class="text-center text-xs text-slate-500 dark:text-slate-500 mt-1">الحد الأقصى لحجم كل ملف يضبطه الخادم عبر <code class="text-slate-600 dark:text-slate-400">AUDITFLOW_MAX_UPLOAD_MB</code> (الافتراضي 15 ميجابايت).</p>

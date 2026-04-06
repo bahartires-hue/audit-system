@@ -332,7 +332,7 @@ function renderMismatchTable(entries, host, opts) {
         </tr>
       </thead>
       <tbody>
-        ${rows || `<tr><td colspan="7" class="px-3 py-6 text-center text-slate-600 dark:text-slate-400">لا توجد بيانات</td></tr>`}
+        ${rows || `<tr><td colspan="7" class="px-3 py-6 text-center text-emerald-700 dark:text-emerald-300 font-extrabold">لا توجد فروقات مالية، سعدنا بخدمتك</td></tr>`}
       </tbody>
     </table>
     </div>
