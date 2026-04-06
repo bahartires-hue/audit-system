@@ -557,6 +557,14 @@ async function initAuthUI() {
             <label class="block text-sm font-extrabold text-slate-700 dark:text-slate-300 mb-1">اسم المستخدم</label>
             <input id="authUsername" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20" />
           </div>
+          <div id="authEmailWrap" class="hidden">
+            <label class="block text-sm font-extrabold text-slate-700 dark:text-slate-300 mb-1">البريد الإلكتروني</label>
+            <input id="authEmail" type="email" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20" />
+          </div>
+          <div id="authInviteWrap" class="hidden">
+            <label class="block text-sm font-extrabold text-slate-700 dark:text-slate-300 mb-1">كود الدعوة</label>
+            <input id="authInviteCode" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20" />
+          </div>
           <div>
             <label class="block text-sm font-extrabold text-slate-700 dark:text-slate-300 mb-1">كلمة المرور</label>
             <input id="authPassword" type="password" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20" />
@@ -583,12 +591,18 @@ async function initAuthUI() {
     const cancel = document.getElementById("authCancelBtn");
     const close = document.getElementById("authCloseBtn");
     const u = document.getElementById("authUsername");
+    const eInp = document.getElementById("authEmail");
+    const eWrap = document.getElementById("authEmailWrap");
+    const invInp = document.getElementById("authInviteCode");
+    const invWrap = document.getElementById("authInviteWrap");
     const p = document.getElementById("authPassword");
     const rememberCb = document.getElementById("authRememberUsername");
-    if (!title || !submit || !cancel || !close || !u || !p) return;
+    if (!title || !submit || !cancel || !close || !u || !p || !eInp || !eWrap || !invInp || !invWrap) return;
 
     title.innerText = mode === "register" ? "إنشاء حساب جديد" : "تسجيل الدخول";
     submit.innerText = mode === "register" ? "تسجيل" : "دخول";
+    eWrap.classList.toggle("hidden", mode !== "register");
+    invWrap.classList.toggle("hidden", mode !== "register");
     let savedUser = "";
     try {
       savedUser = localStorage.getItem(AUDITFLOW_LAST_USERNAME_KEY) || "";
@@ -599,6 +613,8 @@ async function initAuthUI() {
     } catch (e) {}
     if (rememberCb) rememberCb.checked = remember;
     u.value = remember && savedUser ? savedUser : "";
+    eInp.value = "";
+    invInp.value = "";
     p.value = "";
     modal.classList.remove("hidden");
     modal.classList.add("flex");
@@ -616,6 +632,8 @@ async function initAuthUI() {
     };
     submit.onclick = async () => {
       const username = (u.value || "").trim();
+      const email = (eInp.value || "").trim();
+      const invite_code = (invInp.value || "").trim();
       const password = (p.value || "").trim();
       if (!username || !password) {
         showToast("أدخل اسم المستخدم وكلمة المرور", "#ef4444");
@@ -623,7 +641,15 @@ async function initAuthUI() {
       }
       try {
         if (mode === "register") {
-          await apiPostJson("/auth/register", { username, password });
+          if (!email) {
+            showToast("أدخل البريد الإلكتروني", "#ef4444");
+            return;
+          }
+          if (!invite_code) {
+            showToast("أدخل كود الدعوة", "#ef4444");
+            return;
+          }
+          await apiPostJson("/auth/register", { username, email, invite_code, password });
           showToast("تم إنشاء الحساب وتسجيل الدخول ✔️");
         } else {
           await apiPostJson("/auth/login", { username, password });
@@ -672,7 +698,8 @@ async function initAuthUI() {
     host.innerHTML = `
       <div class="flex items-center gap-2 flex-wrap justify-center">
         <button type="button" id="loginBtn" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-extrabold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">تسجيل دخول</button>
-        <button type="button" id="registerBtn" class="px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold hover:bg-slate-800 dark:hover:bg-slate-200">إنشاء حساب</button>
+        <button type="button" id="registerBtn" class="px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold hover:bg-slate-800 dark:hover:bg-slate-200">إنشاء حساب (دعوة)</button>
+        <button type="button" id="forgotBtn" class="px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700 text-sm font-extrabold text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40">نسيت كلمة المرور</button>
       </div>
     `;
 
@@ -682,6 +709,16 @@ async function initAuthUI() {
 
     document.getElementById("loginBtn")?.addEventListener("click", () => {
       openAuthModal("login");
+    });
+    document.getElementById("forgotBtn")?.addEventListener("click", async () => {
+      const email = prompt("أدخل بريدك الإلكتروني لاستعادة كلمة المرور:");
+      if (!email) return;
+      try {
+        await apiPostJson("/auth/request-password-reset", { email: String(email).trim() });
+        showToast("تم إرسال رابط الاستعادة إلى بريدك ✔️", "#10b981");
+      } catch (e) {
+        showToast(e.message || "تعذر إرسال رابط الاستعادة", "#ef4444");
+      }
     });
   }
 

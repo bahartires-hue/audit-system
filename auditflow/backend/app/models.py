@@ -12,10 +12,12 @@ class User(Base):
 
     id = Column(String, primary_key=True)
     username = Column(String, unique=True, nullable=False, index=True)
+    email = Column(String, unique=True, nullable=True, index=True)
     password_hash = Column(String, nullable=False)
     failed_attempts = Column(Integer, nullable=False, default=0)
     locked_until = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+    preferences_json = Column(JSON, nullable=False, default=lambda: {})
 
 
 class UserSession(Base):
@@ -35,7 +37,28 @@ class AuditLog(Base):
     action = Column(String, nullable=False)
     meta_json = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
-    preferences_json = Column(JSON, nullable=False, default=lambda: {})
+
+
+class InviteCode(Base):
+    __tablename__ = "invite_codes"
+
+    code = Column(String, primary_key=True)
+    created_by = Column(String, ForeignKey("users.id"), nullable=True, index=True)
+    max_uses = Column(Integer, nullable=False, default=1)
+    used_count = Column(Integer, nullable=False, default=0)
+    expires_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+    disabled = Column(Integer, nullable=False, default=0)
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    token = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    used = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
 
 class AnalysisReport(Base):

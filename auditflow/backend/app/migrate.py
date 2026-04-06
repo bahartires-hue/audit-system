@@ -7,6 +7,9 @@ from .db import engine
 
 def run_migrations() -> None:
     """SQLite: أعمدة ناقصة على قواعد قديمة."""
+    if engine.dialect.name != "sqlite":
+        # PostgreSQL: rely on metadata/create_all for new tables.
+        return
     with engine.begin() as conn:
         r = conn.execute(text("PRAGMA table_info(analysis_reports)"))
         cols = [row[1] for row in r.fetchall()]
@@ -20,6 +23,8 @@ def run_migrations() -> None:
                 conn.execute(text("ALTER TABLE users ADD COLUMN failed_attempts INTEGER DEFAULT 0"))
             if "locked_until" not in ucols:
                 conn.execute(text("ALTER TABLE users ADD COLUMN locked_until DATETIME"))
+            if "email" not in ucols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR"))
             if "preferences_json" not in ucols:
                 conn.execute(text("ALTER TABLE users ADD COLUMN preferences_json JSON"))
 

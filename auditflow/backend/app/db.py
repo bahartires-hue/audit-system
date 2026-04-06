@@ -18,10 +18,17 @@ def _default_sqlite_path() -> Path:
 
 DB_PATH = Path(os.getenv("DATABASE_PATH", str(_default_sqlite_path())))
 
-engine = create_engine(
-    f"sqlite:///{DB_PATH}",
-    connect_args={"check_same_thread": False},
-)
+DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
+if DATABASE_URL:
+    # Render/PostgreSQL path
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = "postgresql://" + DATABASE_URL[len("postgres://") :]
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+else:
+    engine = create_engine(
+        f"sqlite:///{DB_PATH}",
+        connect_args={"check_same_thread": False},
+    )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

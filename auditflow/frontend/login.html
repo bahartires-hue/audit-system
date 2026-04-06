@@ -95,6 +95,21 @@
     <script src="/static/app.js?v=9"></script>
     <script>
       initAuthUI();
+      (function initResetFlow() {
+        const token = new URLSearchParams(window.location.search).get("reset_token");
+        if (!token) return;
+        setTimeout(async () => {
+          const pass = prompt("أدخل كلمة المرور الجديدة (8 أحرف على الأقل):");
+          if (!pass) return;
+          try {
+            await apiPostJson("/auth/reset-password", { token, new_password: pass.trim() });
+            showToast("تم تحديث كلمة المرور، يمكنك تسجيل الدخول الآن ✔️", "#10b981");
+            history.replaceState({}, "", "/login");
+          } catch (e) {
+            showToast(e.message || "فشل إعادة تعيين كلمة المرور", "#ef4444");
+          }
+        }, 200);
+      })();
     </script>
   </body>
 </html>
