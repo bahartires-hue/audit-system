@@ -25,6 +25,8 @@ def run_migrations() -> None:
                 conn.execute(text("ALTER TABLE users ADD COLUMN locked_until DATETIME"))
             if "email" not in ucols:
                 conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR"))
+            if "is_admin" not in ucols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0"))
             if "preferences_json" not in ucols:
                 conn.execute(text("ALTER TABLE users ADD COLUMN preferences_json JSON"))
 

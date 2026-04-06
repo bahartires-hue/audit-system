@@ -645,10 +645,6 @@ async function initAuthUI() {
             showToast("أدخل البريد الإلكتروني", "#ef4444");
             return;
           }
-          if (!invite_code) {
-            showToast("أدخل كود الدعوة", "#ef4444");
-            return;
-          }
           await apiPostJson("/auth/register", { username, email, invite_code, password });
           showToast("تم إنشاء الحساب وتسجيل الدخول ✔️");
         } else {

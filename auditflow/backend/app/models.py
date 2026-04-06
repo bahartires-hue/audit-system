@@ -13,6 +13,7 @@ class User(Base):
     id = Column(String, primary_key=True)
     username = Column(String, unique=True, nullable=False, index=True)
     email = Column(String, unique=True, nullable=True, index=True)
+    is_admin = Column(Integer, nullable=False, default=0)
     password_hash = Column(String, nullable=False)
     failed_attempts = Column(Integer, nullable=False, default=0)
     locked_until = Column(DateTime, nullable=True)

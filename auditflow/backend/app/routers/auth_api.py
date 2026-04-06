@@ -67,6 +67,20 @@ def _consume_invite_if_db(db, code: str, user_id: str) -> None:
     log_event(db, "auth.invite.consume", user_id, {"code": c})
 
 
+def _is_bootstrap_admin_registration(db, username: str, email: str) -> bool:
+    # First account becomes admin automatically.
+    any_user = db.query(User.id).first()
+    if not any_user:
+        return True
+    admin_email = (os.getenv("AUDITFLOW_ADMIN_EMAIL") or "").strip().lower()
+    admin_username = (os.getenv("AUDITFLOW_ADMIN_USERNAME") or "").strip()
+    if admin_email and email == admin_email:
+        return True
+    if admin_username and username == admin_username:
+        return True
+    return False
+
+
 @router.get("/auth/me")
 def auth_me(request: Request):
     db = SessionLocal()
@@ -75,8 +89,9 @@ def auth_me(request: Request):
         csrf = request.cookies.get(CSRF_COOKIE) or issue_csrf_token()
         username = u.username if u else None
         email = u.email if u else None
+        is_admin = bool(int(u.is_admin or 0)) if u else False
         res = Response(
-            content=json.dumps({"username": username, "email": email, "csrf_token": csrf}),
+            content=json.dumps({"username": username, "email": email, "is_admin": is_admin, "csrf_token": csrf}),
             media_type="application/json",
         )
         res.set_cookie(
@@ -104,15 +119,14 @@ async def auth_register(request: Request):
         raise HTTPException(400, "اسم المستخدم قصير")
     if "@" not in email or "." not in email:
         raise HTTPException(400, "البريد الإلكتروني غير صالح")
-    if not invite_code:
-        raise HTTPException(400, "هذا النظام بدعوات فقط: أدخل كود الدعوة")
     if len(password) < 4:
         raise HTTPException(400, "كلمة المرور قصيرة")
 
     db = SessionLocal()
     try:
         require_csrf(request)
-        if not _is_invite_valid(db, invite_code):
+        bootstrap_admin = _is_bootstrap_admin_registration(db, username, email)
+        if not bootstrap_admin and not _is_invite_valid(db, invite_code):
             raise HTTPException(400, "كود الدعوة غير صالح أو منتهي")
         exists = db.query(User).filter(User.username == username).first()
         if exists:
@@ -120,15 +134,22 @@ async def auth_register(request: Request):
         exists_email = db.query(User).filter(User.email == email).first()
         if exists_email:
             raise HTTPException(400, "البريد الإلكتروني مستخدم بالفعل")
-        user = User(id=uuid.uuid4().hex, username=username, email=email, password_hash=hash_password(password))
+        user = User(
+            id=uuid.uuid4().hex,
+            username=username,
+            email=email,
+            is_admin=1 if bootstrap_admin else 0,
+            password_hash=hash_password(password),
+        )
         db.add(user)
         db.commit()
-        _consume_invite_if_db(db, invite_code, user.id)
+        if not bootstrap_admin:
+            _consume_invite_if_db(db, invite_code, user.id)
         db.commit()
 
         token = create_session(db, user.id)
         csrf = issue_csrf_token()
-        log_event(db, "auth.register", user.id, {"username": username, "email": email})
+        log_event(db, "auth.register", user.id, {"username": username, "email": email, "is_admin": bool(user.is_admin)})
         res = Response(content='{"ok":true}', media_type="application/json")
         res.set_cookie(
             key=SESSION_COOKIE,
@@ -276,28 +297,28 @@ async def auth_reset_password(request: Request):
 
 @router.post("/auth/invites")
 async def auth_create_invite(request: Request):
-    admin_key = (os.getenv("AUDITFLOW_ADMIN_KEY") or "").strip()
-    got_key = (request.headers.get("x-admin-key") or "").strip()
-    if not admin_key or got_key != admin_key:
-        raise HTTPException(403, "غير مصرح")
-
     payload = await request.json()
-    max_uses = int((payload or {}).get("max_uses", 1) or 1)
-    hours = int((payload or {}).get("expires_in_hours", 72) or 72)
+    # Security by default: one-time, short-lived invites
+    max_uses = 1
+    hours = int((payload or {}).get("expires_in_hours", 6) or 6)
     code = str((payload or {}).get("code", "")).strip() or secrets.token_urlsafe(8).replace("-", "").replace("_", "")
     code = code[:32]
-    if max_uses < 1:
-        max_uses = 1
     if hours < 1:
         hours = 1
 
     db = SessionLocal()
     try:
+        require_csrf(request)
+        user = require_user(db, request)
+        if int(user.is_admin or 0) != 1:
+            raise HTTPException(403, "هذه العملية للمدير فقط")
+
         exists = db.query(InviteCode).filter(InviteCode.code == code).first()
         if exists:
             raise HTTPException(400, "الكود موجود بالفعل")
         row = InviteCode(
             code=code,
+            created_by=user.id,
             max_uses=max_uses,
             used_count=0,
             expires_at=dt.datetime.utcnow() + dt.timedelta(hours=hours),
@@ -305,6 +326,7 @@ async def auth_create_invite(request: Request):
         )
         db.add(row)
         db.commit()
+        log_event(db, "auth.invite.created", user.id, {"code": code, "expires_in_hours": hours})
         return {
             "code": code,
             "max_uses": max_uses,
