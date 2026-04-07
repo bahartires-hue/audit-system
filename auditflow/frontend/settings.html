@@ -157,6 +157,21 @@
         <div id="inviteOut" class="mt-4 text-sm font-extrabold text-slate-700 dark:text-slate-300"></div>
       </div>
 
+      <div id="adminConfigCard" class="hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 shadow-sm">
+        <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">إعدادات عامة (مدير)</h2>
+        <p class="text-slate-600 dark:text-slate-400 text-sm mt-1">تحديث بيانات التواصل واسم المؤسسة بدون تعديل الكود.</p>
+        <div class="grid md:grid-cols-2 gap-3 mt-4">
+          <input id="cfgCompanyName" placeholder="اسم المؤسسة" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100" />
+          <input id="cfgAdminContact" placeholder="تواصل الإدارة (هاتف/واتساب)" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100" />
+          <input id="cfgWhatsapp" placeholder="رابط واتساب" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100" />
+          <input id="cfgEmail" placeholder="رابط البريد mailto:" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100" />
+        </div>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button id="saveAdminConfigBtn" class="px-4 py-2 rounded-xl bg-indigo-600 text-white font-extrabold hover:bg-indigo-700">حفظ الإعدادات</button>
+          <button id="downloadBackupBtn" class="px-4 py-2 rounded-xl border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-extrabold hover:bg-emerald-50 dark:hover:bg-emerald-950/40">تنزيل نسخة احتياطية</button>
+        </div>
+      </div>
+
       <div id="adminPanel" class="hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 shadow-sm">
         <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">لوحة المدير</h2>
         <p class="text-slate-600 dark:text-slate-400 text-sm mt-1">هنا تتحكم بالحسابات، الخطط، وفترات الاشتراك.</p>
@@ -254,6 +269,41 @@
         } catch (e) {
           host.innerHTML = `<p class="text-rose-600">${e.message || "تعذّر تحميل النشاط"}</p>`;
         }
+      })();
+      (async function setupAdminConfig() {
+        const card = document.getElementById("adminConfigCard");
+        const saveBtn = document.getElementById("saveAdminConfigBtn");
+        const backupBtn = document.getElementById("downloadBackupBtn");
+        const companyInp = document.getElementById("cfgCompanyName");
+        const contactInp = document.getElementById("cfgAdminContact");
+        const waInp = document.getElementById("cfgWhatsapp");
+        const emailInp = document.getElementById("cfgEmail");
+        if (!card || !saveBtn || !backupBtn || !companyInp || !contactInp || !waInp || !emailInp) return;
+        try {
+          const me = await apiGet("/auth/me");
+          if (!me?.is_admin) return;
+          card.classList.remove("hidden");
+          const cfg = await apiGet("/admin/config");
+          companyInp.value = cfg.company_name || "";
+          contactInp.value = cfg.admin_contact || "";
+          waInp.value = (cfg.social_links && cfg.social_links.whatsapp) || "";
+          emailInp.value = (cfg.social_links && cfg.social_links.email) || "";
+          saveBtn.addEventListener("click", async () => {
+            try {
+              await apiPatchJson("/admin/config", {
+                company_name: (companyInp.value || "").trim(),
+                admin_contact: (contactInp.value || "").trim(),
+                social_links: { whatsapp: (waInp.value || "").trim(), email: (emailInp.value || "").trim() },
+              });
+              showToast("تم حفظ الإعدادات العامة ✔️", "#10b981");
+            } catch (e) {
+              showToast(e.message || "تعذر حفظ الإعدادات", "#ef4444");
+            }
+          });
+          backupBtn.addEventListener("click", () => {
+            window.location.href = "/admin/backup";
+          });
+        } catch (_) {}
       })();
       (async function setupInviteCard() {
         const card = document.getElementById("inviteCard");

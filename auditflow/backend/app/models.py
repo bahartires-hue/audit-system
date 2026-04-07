@@ -65,6 +65,14 @@ class PasswordResetToken(Base):
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
 
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    key = Column(String, primary_key=True)
+    value_json = Column(JSON, nullable=False, default=dict)
+    updated_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
 class AnalysisReport(Base):
     __tablename__ = "analysis_reports"
 

@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import datetime as dt
+import gzip
+import io
 import json
 import os
 import secrets
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 
 from ..auth_core import (
     COOKIE_PATH,
@@ -29,10 +31,32 @@ from ..auth_core import (
 )
 from ..db import SessionLocal
 from ..mailer import send_password_reset_email
-from ..models import AuditLog, InviteCode, PasswordResetToken, User, UserSession
+from ..models import AnalysisReport, AppSetting, AuditLog, InviteCode, PasswordResetToken, User, UserSession
 from ..rate_limit import limiter
 
 router = APIRouter(tags=["auth"])
+
+
+def _default_admin_config() -> dict:
+    return {
+        "admin_contact": (os.getenv("AUDITFLOW_ADMIN_CONTACT") or "").strip(),
+        "company_name": "OptimalMatch",
+        "social_links": {
+            "whatsapp": "https://wa.me/966558815838",
+            "email": "mailto:auditsystem2030@gmail.com",
+        },
+    }
+
+
+def _get_admin_config(db) -> dict:
+    row = db.query(AppSetting).filter(AppSetting.key == "admin_config").first()
+    if not row or not isinstance(row.value_json, dict):
+        return _default_admin_config()
+    base = _default_admin_config()
+    base.update(row.value_json or {})
+    if not isinstance(base.get("social_links"), dict):
+        base["social_links"] = _default_admin_config()["social_links"]
+    return base
 
 
 def _invite_env_codes() -> set[str]:
@@ -477,6 +501,99 @@ def admin_summary(request: Request):
             "invite_active": invite_active_count,
             "expiring_7d": expiring_7d,
         }
+    finally:
+        db.close()
+
+
+@router.get("/admin/config")
+def admin_config_get(request: Request):
+    db = SessionLocal()
+    try:
+        _require_admin_user(db, request)
+        return _get_admin_config(db)
+    finally:
+        db.close()
+
+
+@router.patch("/admin/config")
+async def admin_config_patch(request: Request):
+    payload = await request.json()
+    patch = (payload or {}).get("config") or payload or {}
+    if not isinstance(patch, dict):
+        raise HTTPException(400, "config يجب أن يكون كائناً")
+    db = SessionLocal()
+    try:
+        admin = _require_admin_user(db, request)
+        row = db.query(AppSetting).filter(AppSetting.key == "admin_config").first()
+        current = _get_admin_config(db)
+        merged = {**current, **patch}
+        if isinstance(current.get("social_links"), dict):
+            social_patch = patch.get("social_links")
+            if isinstance(social_patch, dict):
+                merged["social_links"] = {**current["social_links"], **social_patch}
+        if not row:
+            row = AppSetting(key="admin_config", value_json=merged, updated_at=dt.datetime.utcnow())
+            db.add(row)
+        else:
+            row.value_json = merged
+            row.updated_at = dt.datetime.utcnow()
+        db.commit()
+        log_event(db, "admin.config.updated", admin.id, {"keys": list(patch.keys())})
+        return merged
+    finally:
+        db.close()
+
+
+@router.get("/admin/backup")
+def admin_backup(request: Request):
+    db = SessionLocal()
+    try:
+        admin = _require_admin_user(db, request)
+        users = db.query(User).order_by(User.created_at.desc()).all()
+        reports = db.query(AnalysisReport).order_by(AnalysisReport.created_at.desc()).limit(1000).all()
+        payload = {
+            "generated_at": dt.datetime.utcnow().isoformat() + "Z",
+            "by_admin": admin.username,
+            "users": [
+                {
+                    "id": u.id,
+                    "username": u.username,
+                    "email": u.email,
+                    "is_admin": int(u.is_admin or 0),
+                    "is_active": int(u.is_active or 0),
+                    "plan_name": u.plan_name,
+                    "subscription_expires_at": u.subscription_expires_at.isoformat() + "Z" if u.subscription_expires_at else None,
+                    "created_at": u.created_at.isoformat() + "Z" if u.created_at else None,
+                }
+                for u in users
+            ],
+            "reports": [
+                {
+                    "id": r.id,
+                    "user_id": r.user_id,
+                    "title": r.title,
+                    "branch1_name": r.branch1_name,
+                    "branch2_name": r.branch2_name,
+                    "status": r.status,
+                    "created_at": r.created_at.isoformat() + "Z" if r.created_at else None,
+                    "total_ops": r.total_ops,
+                    "matched_ops": r.matched_ops,
+                    "mismatch_ops": r.mismatch_ops,
+                    "errors_count": r.errors_count,
+                    "warnings_count": r.warnings_count,
+                    "archived": int(r.archived or 0),
+                }
+                for r in reports
+            ],
+        }
+        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        buff = io.BytesIO()
+        with gzip.GzipFile(fileobj=buff, mode="wb") as gz:
+            gz.write(raw)
+        buff.seek(0)
+        ts = dt.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        headers = {"Content-Disposition": f'attachment; filename="auditflow-backup-{ts}.json.gz"'}
+        return StreamingResponse(buff, media_type="application/gzip", headers=headers)
     finally:
         db.close()
 

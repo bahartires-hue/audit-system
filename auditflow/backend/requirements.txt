@@ -9,3 +9,5 @@ reportlab
 python-multipart
 slowapi
 arabic-reshaper
+pytest
+httpx

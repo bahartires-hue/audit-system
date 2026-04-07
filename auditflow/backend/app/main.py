@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import os
 import uuid
 from pathlib import Path
@@ -8,7 +9,7 @@ from urllib.parse import quote
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -16,7 +17,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from .auth_core import log_event, require_csrf, require_user
 from .db import SessionLocal as _SessionLocal
-from .models import AnalysisReport, init_db
+from .models import AnalysisReport, User, init_db
 from .rate_limit import limiter
 from .routers.auth_api import router as auth_router
 from .services.analyzer import analyze as analyze_pairs
@@ -63,6 +64,16 @@ async def ui_cache_headers(request: Request, call_next):
         response.headers["Expires"] = "0"
         response.headers["X-OptimalMatch-UI"] = UI_ASSET_VERSION
     return response
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    if _wants_html(request):
+        try:
+            return FileResponse(str(FRONTEND_DIR / "error.html"), status_code=500, headers=dict(_HTML_NO_CACHE))
+        except Exception:
+            return HTMLResponse("حدث خطأ غير متوقع", status_code=500)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -157,6 +168,29 @@ def ui_contact():
 @app.get("/social", response_class=HTMLResponse)
 def ui_social():
     return FileResponse(str(FRONTEND_DIR / "social.html"), headers=dict(_HTML_NO_CACHE))
+
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True, "service": "optimalmatch-api", "time": dt.datetime.utcnow().isoformat() + "Z"}
+
+
+@app.get("/metrics")
+def metrics():
+    db = _SessionLocal()
+    try:
+        total_users = db.query(User).count()
+        active_users = db.query(User).filter(User.is_active == 1).count()
+        total_reports = db.query(AnalysisReport).count()
+        return {
+            "ok": True,
+            "time": dt.datetime.utcnow().isoformat() + "Z",
+            "users_total": total_users,
+            "users_active": active_users,
+            "reports_total": total_reports,
+        }
+    finally:
+        db.close()
 
 
 def _classify_reason(entry: Dict[str, Any]) -> str:
