@@ -20,6 +20,20 @@ LOCK_MINUTES = 15
 COOKIE_PATH = "/"
 
 
+def admin_contact_text() -> str:
+    contact = (os.getenv("AUDITFLOW_ADMIN_CONTACT") or "").strip()
+    if contact:
+        return f"الحساب موقوف. تواصل مع الإدارة: {contact}"
+    return "الحساب موقوف. تواصل مع الإدارة"
+
+
+def subscription_expired_text() -> str:
+    contact = (os.getenv("AUDITFLOW_ADMIN_CONTACT") or "").strip()
+    if contact:
+        return f"انتهت صلاحية الاشتراك. تواصل مع الإدارة: {contact}"
+    return "انتهت صلاحية الاشتراك. تواصل مع الإدارة"
+
+
 def cookie_secure() -> bool:
     """على HTTPS في الإنتاج: ضع AUDITFLOW_COOKIE_SECURE=1"""
     return os.environ.get("AUDITFLOW_COOKIE_SECURE", "").lower() in ("1", "true", "yes")
@@ -94,10 +108,10 @@ def require_user(db: Session, request: Request) -> User:
     if not u:
         raise HTTPException(401, "يرجى تسجيل الدخول أولاً")
     if int(getattr(u, "is_active", 1) or 0) != 1:
-        raise HTTPException(403, "الحساب موقوف. تواصل مع الإدارة")
+        raise HTTPException(403, admin_contact_text())
     exp = getattr(u, "subscription_expires_at", None)
     if exp and exp < dt.datetime.utcnow():
-        raise HTTPException(403, "انتهت صلاحية الاشتراك. تواصل مع الإدارة")
+        raise HTTPException(403, subscription_expired_text())
     return u
 
 

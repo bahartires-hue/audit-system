@@ -20,9 +20,11 @@ from ..auth_core import (
     hash_password,
     issue_csrf_token,
     log_event,
+    admin_contact_text,
     require_csrf,
     require_user,
     session_max_age_seconds,
+    subscription_expired_text,
     verify_password,
 )
 from ..db import SessionLocal
@@ -150,6 +152,9 @@ async def auth_register(request: Request):
     email = str((payload or {}).get("email", "")).strip().lower()
     invite_code = str((payload or {}).get("invite_code", "")).strip()
     selected_plan = str((payload or {}).get("plan", "free")).strip().lower()
+    accepted_terms = bool((payload or {}).get("accepted_terms"))
+    accepted_privacy = bool((payload or {}).get("accepted_privacy"))
+    accepted_agreement = bool((payload or {}).get("accepted_agreement"))
     password = str((payload or {}).get("password", "")).strip()
     if len(username) < 3:
         raise HTTPException(400, "اسم المستخدم قصير")
@@ -157,6 +162,8 @@ async def auth_register(request: Request):
         raise HTTPException(400, "البريد الإلكتروني غير صالح")
     if len(password) < 4:
         raise HTTPException(400, "كلمة المرور قصيرة")
+    if not (accepted_terms and accepted_privacy and accepted_agreement):
+        raise HTTPException(400, "يجب الموافقة على شروط الاستخدام وسياسة الخصوصية واتفاقية المستخدم")
 
     db = SessionLocal()
     try:
@@ -192,6 +199,14 @@ async def auth_register(request: Request):
             plan_name=plan_name,
             subscription_expires_at=sub_exp,
             password_hash=hash_password(password),
+            preferences_json={
+                "legal_acceptance": {
+                    "terms": True,
+                    "privacy": True,
+                    "user_agreement": True,
+                    "accepted_at": dt.datetime.utcnow().isoformat() + "Z",
+                }
+            },
         )
         db.add(user)
         db.commit()
@@ -577,9 +592,9 @@ async def auth_login(request: Request):
         if int(user.is_active or 0) != 1:
             if str(user.plan_name or "").startswith("pending_"):
                 raise HTTPException(403, "تم إنشاء الحساب وبانتظار اعتماد الاشتراك من المدير")
-            raise HTTPException(403, "الحساب موقوف. تواصل مع الإدارة")
+            raise HTTPException(403, admin_contact_text())
         if user.subscription_expires_at and user.subscription_expires_at < dt.datetime.utcnow():
-            raise HTTPException(403, "انتهت صلاحية الاشتراك. تواصل مع الإدارة")
+            raise HTTPException(403, subscription_expired_text())
         if user.locked_until and user.locked_until > dt.datetime.utcnow():
             raise HTTPException(429, "الحساب مقفل مؤقتاً. حاول لاحقاً")
         if not verify_password(password, user.password_hash):

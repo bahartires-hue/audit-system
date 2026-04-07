@@ -25,7 +25,7 @@ from .services.reports import mismatches_to_csv_bytes, mismatches_to_excel_bytes
 from .services.storage import save_upload_file
 
 # يظهر في رأس HTTP للتحقق من أن الخادم يقدّم أحدث واجهة بعد النشر
-UI_ASSET_VERSION = "9"
+UI_ASSET_VERSION = "10"
 
 _HTML_NO_CACHE = {
     "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
@@ -57,7 +57,7 @@ async def ui_cache_headers(request: Request, call_next):
     if path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-store, max-age=0, must-revalidate"
         response.headers["Pragma"] = "no-cache"
-    elif path in ("/", "/analyze", "/settings", "/login", "/reports", "/help") or path.startswith("/report"):
+    elif path in ("/", "/analyze", "/settings", "/login", "/reports", "/help", "/terms", "/privacy", "/user-agreement") or path.startswith("/report"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
@@ -127,6 +127,21 @@ def ui_login(request: Request):
         return FileResponse(str(FRONTEND_DIR / "login.html"), headers=dict(_HTML_NO_CACHE))
     finally:
         db.close()
+
+
+@app.get("/terms", response_class=HTMLResponse)
+def ui_terms():
+    return FileResponse(str(FRONTEND_DIR / "terms.html"), headers=dict(_HTML_NO_CACHE))
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+def ui_privacy():
+    return FileResponse(str(FRONTEND_DIR / "privacy.html"), headers=dict(_HTML_NO_CACHE))
+
+
+@app.get("/user-agreement", response_class=HTMLResponse)
+def ui_user_agreement():
+    return FileResponse(str(FRONTEND_DIR / "user_agreement.html"), headers=dict(_HTML_NO_CACHE))
 
 
 def _classify_reason(entry: Dict[str, Any]) -> str:

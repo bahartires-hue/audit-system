@@ -584,6 +584,19 @@ async function initAuthUI() {
             <input id="authRememberUsername" type="checkbox" class="rounded border-slate-300 dark:border-slate-600" />
             <span class="text-sm font-extrabold text-slate-700 dark:text-slate-300">تذكير اسم المستخدم فقط (لا نحفظ كلمة المرور)</span>
           </label>
+          <div id="authLegalWrap" class="hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-3">
+            <label class="flex items-start gap-2 cursor-pointer select-none">
+              <input id="authAcceptLegal" type="checkbox" class="mt-1 rounded border-slate-300 dark:border-slate-600" />
+              <span class="text-xs leading-6 font-bold text-slate-700 dark:text-slate-300">
+                أوافق على
+                <a href="/terms" target="_blank" class="text-emerald-700 dark:text-emerald-300 underline">شروط الاستخدام</a>
+                و
+                <a href="/privacy" target="_blank" class="text-emerald-700 dark:text-emerald-300 underline">سياسة الخصوصية</a>
+                و
+                <a href="/user-agreement" target="_blank" class="text-emerald-700 dark:text-emerald-300 underline">اتفاقية المستخدم</a>.
+              </span>
+            </label>
+          </div>
         </div>
         <div class="mt-4 flex items-center justify-end gap-2">
           <button type="button" id="authCancelBtn" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-extrabold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">إلغاء</button>
@@ -608,15 +621,18 @@ async function initAuthUI() {
     const invWrap = document.getElementById("authInviteWrap");
     const planSel = document.getElementById("authPlanSelect");
     const planWrap = document.getElementById("authPlanWrap");
+    const legalWrap = document.getElementById("authLegalWrap");
+    const legalCb = document.getElementById("authAcceptLegal");
     const p = document.getElementById("authPassword");
     const rememberCb = document.getElementById("authRememberUsername");
-    if (!title || !submit || !cancel || !close || !u || !p || !eInp || !eWrap || !invInp || !invWrap || !planSel || !planWrap) return;
+    if (!title || !submit || !cancel || !close || !u || !p || !eInp || !eWrap || !invInp || !invWrap || !planSel || !planWrap || !legalWrap || !legalCb) return;
 
     title.innerText = mode === "register" ? "إنشاء حساب جديد" : "تسجيل الدخول";
     submit.innerText = mode === "register" ? "تسجيل" : "دخول";
     eWrap.classList.toggle("hidden", mode !== "register");
     invWrap.classList.toggle("hidden", mode !== "register");
     planWrap.classList.toggle("hidden", mode !== "register");
+    legalWrap.classList.toggle("hidden", mode !== "register");
     let savedUser = "";
     try {
       savedUser = localStorage.getItem(AUDITFLOW_LAST_USERNAME_KEY) || "";
@@ -630,6 +646,7 @@ async function initAuthUI() {
     eInp.value = "";
     invInp.value = "";
     planSel.value = "free";
+    legalCb.checked = false;
     p.value = "";
     modal.classList.remove("hidden");
     modal.classList.add("flex");
@@ -661,7 +678,20 @@ async function initAuthUI() {
             showToast("أدخل البريد الإلكتروني", "#ef4444");
             return;
           }
-          await apiPostJson("/auth/register", { username, email, invite_code, plan, password });
+          if (!legalCb.checked) {
+            showToast("يجب الموافقة على الشروط والسياسات لإكمال التسجيل", "#ef4444");
+            return;
+          }
+          await apiPostJson("/auth/register", {
+            username,
+            email,
+            invite_code,
+            plan,
+            password,
+            accepted_terms: true,
+            accepted_privacy: true,
+            accepted_agreement: true,
+          });
           showToast("تم إنشاء الحساب وتسجيل الدخول ✔️");
         } else {
           await apiPostJson("/auth/login", { username, password });
