@@ -4,6 +4,7 @@ import os
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -87,8 +88,9 @@ def _require_login_page(request: Request, html_path: Path) -> FileResponse | Red
     try:
         require_user(db, request)
         return FileResponse(str(html_path), headers=dict(_HTML_NO_CACHE))
-    except HTTPException:
-        return RedirectResponse(url="/login", status_code=302)
+    except HTTPException as e:
+        reason = quote(str(getattr(e, "detail", "") or "يرجى تسجيل الدخول أولاً"))
+        return RedirectResponse(url=f"/login?reason={reason}", status_code=302)
     finally:
         db.close()
 
@@ -115,13 +117,13 @@ def ui_help(request: Request):
 
 @app.get("/login", response_class=HTMLResponse)
 def ui_login(request: Request):
-    from .auth_core import current_user_from_request
-
     db = _SessionLocal()
     try:
-        u = current_user_from_request(db, request)
-        if u:
+        try:
+            require_user(db, request)
             return RedirectResponse(url="/", status_code=302)
+        except HTTPException:
+            pass
         return FileResponse(str(FRONTEND_DIR / "login.html"), headers=dict(_HTML_NO_CACHE))
     finally:
         db.close()

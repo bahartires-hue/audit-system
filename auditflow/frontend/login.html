@@ -110,6 +110,11 @@
           }
         }, 200);
       })();
+      (function showReasonMessage() {
+        const reason = new URLSearchParams(window.location.search).get("reason");
+        if (!reason) return;
+        showToast(reason, "#f59e0b");
+      })();
     </script>
   </body>
 </html>

@@ -32,6 +32,7 @@ import zipfile
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import quote
 
 import pandas as pd
 import pdfplumber
@@ -3362,7 +3363,14 @@ LOGIN_HTML = r"""<!doctype html>
     </main>
     <footer class="max-w-xl mx-auto px-4 pb-8 text-center text-slate-500 dark:text-slate-400 text-sm font-extrabold">تطوير الموقع: محمد علي السوداني</footer>
     <script src="/static/app.js"></script>
-    <script>initAuthUI();</script>
+    <script>
+      initAuthUI();
+      (function showReasonMessage() {
+        const reason = new URLSearchParams(window.location.search).get("reason");
+        if (!reason) return;
+        showToast(reason, "#f59e0b");
+      })();
+    </script>
   </body>
 </html>
 """
@@ -3395,8 +3403,9 @@ def ui_home(request: Request):
     try:
         _ = require_user(db, request)
         return HTMLResponse(INDEX_HTML)
-    except HTTPException:
-        return RedirectResponse(url="/login", status_code=302)
+    except HTTPException as e:
+        reason = quote(str(getattr(e, "detail", "") or "يرجى تسجيل الدخول أولاً"))
+        return RedirectResponse(url=f"/login?reason={reason}", status_code=302)
     finally:
         db.close()
 
@@ -3407,8 +3416,9 @@ def ui_analyze(request: Request):
     try:
         _ = require_user(db, request)
         return HTMLResponse(ANALYZE_HTML)
-    except HTTPException:
-        return RedirectResponse(url="/login", status_code=302)
+    except HTTPException as e:
+        reason = quote(str(getattr(e, "detail", "") or "يرجى تسجيل الدخول أولاً"))
+        return RedirectResponse(url=f"/login?reason={reason}", status_code=302)
     finally:
         db.close()
 
@@ -3419,8 +3429,9 @@ def ui_settings(request: Request):
     try:
         _ = require_user(db, request)
         return HTMLResponse(SETTINGS_HTML)
-    except HTTPException:
-        return RedirectResponse(url="/login", status_code=302)
+    except HTTPException as e:
+        reason = quote(str(getattr(e, "detail", "") or "يرجى تسجيل الدخول أولاً"))
+        return RedirectResponse(url=f"/login?reason={reason}", status_code=302)
     finally:
         db.close()
 
@@ -3429,9 +3440,11 @@ def ui_settings(request: Request):
 def ui_login(request: Request):
     db = db_session()
     try:
-        u = current_user_from_request(db, request)
-        if u:
+        try:
+            require_user(db, request)
             return RedirectResponse(url="/", status_code=302)
+        except HTTPException:
+            pass
         return HTMLResponse(LOGIN_HTML)
     finally:
         db.close()
@@ -3699,8 +3712,9 @@ def reports(request: Request):
         try:
             _ = require_user(db, request)
             return HTMLResponse(REPORTS_HTML)
-        except HTTPException:
-            return RedirectResponse(url="/login", status_code=302)
+        except HTTPException as e:
+            reason = quote(str(getattr(e, "detail", "") or "يرجى تسجيل الدخول أولاً"))
+            return RedirectResponse(url=f"/login?reason={reason}", status_code=302)
         finally:
             db.close()
 
@@ -3745,8 +3759,9 @@ def report(request: Request, id: str = Query(...)):
         try:
             _ = require_user(db, request)
             return HTMLResponse(REPORT_HTML)
-        except HTTPException:
-            return RedirectResponse(url="/login", status_code=302)
+        except HTTPException as e:
+            reason = quote(str(getattr(e, "detail", "") or "يرجى تسجيل الدخول أولاً"))
+            return RedirectResponse(url=f"/login?reason={reason}", status_code=302)
         finally:
             db.close()
 
