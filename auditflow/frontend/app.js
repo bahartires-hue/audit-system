@@ -784,6 +784,9 @@ function initNavAndTheme() {
   else if (path.startsWith("/report")) key = "reports";
   else if (path.startsWith("/settings")) key = "settings";
   else if (path.startsWith("/help")) key = "help";
+  else if (path.startsWith("/about")) key = "about";
+  else if (path.startsWith("/contact")) key = "contact";
+  else if (path.startsWith("/social")) key = "social";
 
   document.querySelectorAll("[data-nav]").forEach((el) => {
     el.classList.add("nav-link");

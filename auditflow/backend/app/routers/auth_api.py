@@ -521,6 +521,9 @@ async def admin_update_user(request: Request):
             raise HTTPException(404, "المستخدم غير موجود")
         if "is_active" in payload:
             target.is_active = 1 if bool(payload.get("is_active")) else 0
+            if int(target.is_active or 0) == 1:
+                target.failed_attempts = 0
+                target.locked_until = None
         if "plan_name" in payload:
             p = str(payload.get("plan_name") or "free").strip().lower()
             target.plan_name = p or "free"
@@ -530,6 +533,8 @@ async def admin_update_user(request: Request):
                 base = target.subscription_expires_at if target.subscription_expires_at and target.subscription_expires_at > dt.datetime.utcnow() else dt.datetime.utcnow()
                 target.subscription_expires_at = base + dt.timedelta(days=30 * m)
                 target.is_active = 1
+                target.failed_attempts = 0
+                target.locked_until = None
                 if target.plan_name.startswith("pending_"):
                     target.plan_name = target.plan_name.replace("pending_", "", 1) or "paid"
             else:

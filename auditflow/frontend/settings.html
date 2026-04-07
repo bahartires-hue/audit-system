@@ -89,6 +89,9 @@
         <a href="/reports" data-nav="reports">التقارير</a>
         <a href="/settings" data-nav="settings">الإعدادات</a>
         <a href="/help" data-nav="help">مساعدة</a>
+        <a href="/about" data-nav="about">من نحن</a>
+        <a href="/contact" data-nav="contact">تواصل معنا</a>
+        <a href="/social" data-nav="social">التواصل الاجتماعي</a>
       </div>
 
       <main class="erp-main">
@@ -119,9 +122,17 @@
       </div>
 
       <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 shadow-sm">
-        <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">سجل النشاط الأخير</h2>
-        <p class="text-slate-600 dark:text-slate-400 text-sm mt-1">آخر العمليات المسجّلة لحسابك (دخول، تقارير، تحديثات).</p>
-        <div id="activityHost" class="mt-4 space-y-2 text-sm font-bold text-slate-700 dark:text-slate-300 max-h-80 overflow-y-auto"></div>
+        <details id="activityPanel" class="group">
+          <summary class="cursor-pointer list-none flex items-center justify-between gap-3">
+            <span>
+              <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50 inline">سجل النشاط الأخير</h2>
+              <p class="text-slate-600 dark:text-slate-400 text-sm mt-1">آخر العمليات المسجّلة لحسابك (دخول، تقارير، تحديثات).</p>
+            </span>
+            <span class="text-xs font-extrabold text-slate-500 dark:text-slate-400 group-open:hidden">إظهار</span>
+            <span class="text-xs font-extrabold text-slate-500 dark:text-slate-400 hidden group-open:inline">إخفاء</span>
+          </summary>
+          <div id="activityHost" class="mt-4 space-y-2 text-sm font-bold text-slate-700 dark:text-slate-300 max-h-80 overflow-y-auto"></div>
+        </details>
       </div>
 
       <div id="inviteCard" class="hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 shadow-sm">
@@ -184,12 +195,13 @@
       </div>
 
       <footer class="text-center text-slate-500 dark:text-slate-400 text-sm font-extrabold pb-6">
-        تطوير الموقع: محمد علي السوداني
+        تطوير الموقع: محمد علي السوداني<br />
+        جميع الحقوق محفوظة © OptimalMatch
       </footer>
         </div>
       </main>
     </div>
-    <script src="/static/app.js?v=9"></script>
+    <script src="/static/app.js?v=11"></script>
     <script>
       initAuthUI();
       (async function showClientSubscriptionNotice() {
