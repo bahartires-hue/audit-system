@@ -88,6 +88,21 @@ def _require_admin_user(db, request: Request) -> User:
     return user
 
 
+def _months_for_plan(plan_name: str) -> int:
+    p = (plan_name or "").strip().lower()
+    if p in ("month", "1m", "m1"):
+        return 1
+    if p in ("3months", "3m", "m3"):
+        return 3
+    if p in ("6months", "6m", "m6"):
+        return 6
+    if p in ("year", "12m", "m12"):
+        return 12
+    if p in ("5years", "60m", "m60"):
+        return 60
+    return 0
+
+
 @router.get("/auth/me")
 def auth_me(request: Request):
     db = SessionLocal()
@@ -134,6 +149,7 @@ async def auth_register(request: Request):
     username = str((payload or {}).get("username", "")).strip()
     email = str((payload or {}).get("email", "")).strip().lower()
     invite_code = str((payload or {}).get("invite_code", "")).strip()
+    selected_plan = str((payload or {}).get("plan", "free")).strip().lower()
     password = str((payload or {}).get("password", "")).strip()
     if len(username) < 3:
         raise HTTPException(400, "اسم المستخدم قصير")
@@ -154,13 +170,27 @@ async def auth_register(request: Request):
         exists_email = db.query(User).filter(User.email == email).first()
         if exists_email:
             raise HTTPException(400, "البريد الإلكتروني مستخدم بالفعل")
+        plan_name = "free"
+        is_active = 1
+        sub_exp = None
+        if not bootstrap_admin:
+            months = _months_for_plan(selected_plan)
+            if months <= 0:
+                plan_name = "free"
+                is_active = 1
+            else:
+                # Customer picked a paid term: wait for admin approval/activation.
+                plan_name = f"pending_{selected_plan}"
+                is_active = 0
+
         user = User(
             id=uuid.uuid4().hex,
             username=username,
             email=email,
             is_admin=1 if bootstrap_admin else 0,
-            is_active=1,
-            plan_name="free",
+            is_active=is_active,
+            plan_name=plan_name,
+            subscription_expires_at=sub_exp,
             password_hash=hash_password(password),
         )
         db.add(user)
@@ -413,6 +443,16 @@ def admin_summary(request: Request):
             .all()
         )
         invite_active_count = sum(1 for x in invite_active if not x.expires_at or x.expires_at > now)
+        expiring_7d = (
+            db.query(User)
+            .filter(
+                User.is_active == 1,
+                User.subscription_expires_at.isnot(None),
+                User.subscription_expires_at > now,
+                User.subscription_expires_at <= now + dt.timedelta(days=7),
+            )
+            .count()
+        )
         return {
             "total_users": total_users,
             "active_users": active_users,
@@ -420,6 +460,7 @@ def admin_summary(request: Request):
             "invite_total": invite_total,
             "invite_used": invite_used,
             "invite_active": invite_active_count,
+            "expiring_7d": expiring_7d,
         }
     finally:
         db.close()
@@ -473,6 +514,9 @@ async def admin_update_user(request: Request):
             if m > 0:
                 base = target.subscription_expires_at if target.subscription_expires_at and target.subscription_expires_at > dt.datetime.utcnow() else dt.datetime.utcnow()
                 target.subscription_expires_at = base + dt.timedelta(days=30 * m)
+                target.is_active = 1
+                if target.plan_name.startswith("pending_"):
+                    target.plan_name = target.plan_name.replace("pending_", "", 1) or "paid"
             else:
                 target.subscription_expires_at = None
         db.commit()
@@ -492,6 +536,31 @@ async def admin_update_user(request: Request):
         db.close()
 
 
+@router.get("/auth/subscription-status")
+def auth_subscription_status(request: Request):
+    db = SessionLocal()
+    try:
+        user = current_user_from_request(db, request)
+        if not user:
+            raise HTTPException(401, "يرجى تسجيل الدخول أولاً")
+        now = dt.datetime.utcnow()
+        exp = user.subscription_expires_at
+        days_left = None
+        if exp:
+            days_left = int((exp - now).total_seconds() // 86400)
+        pending = str(user.plan_name or "").startswith("pending_")
+        return {
+            "is_admin": bool(int(user.is_admin or 0)),
+            "is_active": bool(int(user.is_active or 0)),
+            "plan_name": user.plan_name or "free",
+            "subscription_expires_at": exp.isoformat() + "Z" if exp else None,
+            "days_left": days_left,
+            "pending_approval": pending,
+        }
+    finally:
+        db.close()
+
+
 @router.post("/auth/login")
 @limiter.limit("25/minute")
 async def auth_login(request: Request):
@@ -506,6 +575,8 @@ async def auth_login(request: Request):
         if not user:
             raise HTTPException(401, "بيانات الدخول غير صحيحة")
         if int(user.is_active or 0) != 1:
+            if str(user.plan_name or "").startswith("pending_"):
+                raise HTTPException(403, "تم إنشاء الحساب وبانتظار اعتماد الاشتراك من المدير")
             raise HTTPException(403, "الحساب موقوف. تواصل مع الإدارة")
         if user.subscription_expires_at and user.subscription_expires_at < dt.datetime.utcnow():
             raise HTTPException(403, "انتهت صلاحية الاشتراك. تواصل مع الإدارة")

@@ -565,6 +565,17 @@ async function initAuthUI() {
             <label class="block text-sm font-extrabold text-slate-700 dark:text-slate-300 mb-1">كود الدعوة</label>
             <input id="authInviteCode" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20" />
           </div>
+          <div id="authPlanWrap" class="hidden">
+            <label class="block text-sm font-extrabold text-slate-700 dark:text-slate-300 mb-1">الخطة</label>
+            <select id="authPlanSelect" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20">
+              <option value="free">مجاني</option>
+              <option value="month">شهر</option>
+              <option value="3months">3 شهور</option>
+              <option value="6months">6 شهور</option>
+              <option value="year">سنة</option>
+              <option value="5years">5 سنوات</option>
+            </select>
+          </div>
           <div>
             <label class="block text-sm font-extrabold text-slate-700 dark:text-slate-300 mb-1">كلمة المرور</label>
             <input id="authPassword" type="password" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20" />
@@ -595,14 +606,17 @@ async function initAuthUI() {
     const eWrap = document.getElementById("authEmailWrap");
     const invInp = document.getElementById("authInviteCode");
     const invWrap = document.getElementById("authInviteWrap");
+    const planSel = document.getElementById("authPlanSelect");
+    const planWrap = document.getElementById("authPlanWrap");
     const p = document.getElementById("authPassword");
     const rememberCb = document.getElementById("authRememberUsername");
-    if (!title || !submit || !cancel || !close || !u || !p || !eInp || !eWrap || !invInp || !invWrap) return;
+    if (!title || !submit || !cancel || !close || !u || !p || !eInp || !eWrap || !invInp || !invWrap || !planSel || !planWrap) return;
 
     title.innerText = mode === "register" ? "إنشاء حساب جديد" : "تسجيل الدخول";
     submit.innerText = mode === "register" ? "تسجيل" : "دخول";
     eWrap.classList.toggle("hidden", mode !== "register");
     invWrap.classList.toggle("hidden", mode !== "register");
+    planWrap.classList.toggle("hidden", mode !== "register");
     let savedUser = "";
     try {
       savedUser = localStorage.getItem(AUDITFLOW_LAST_USERNAME_KEY) || "";
@@ -615,6 +629,7 @@ async function initAuthUI() {
     u.value = remember && savedUser ? savedUser : "";
     eInp.value = "";
     invInp.value = "";
+    planSel.value = "free";
     p.value = "";
     modal.classList.remove("hidden");
     modal.classList.add("flex");
@@ -634,6 +649,7 @@ async function initAuthUI() {
       const username = (u.value || "").trim();
       const email = (eInp.value || "").trim();
       const invite_code = (invInp.value || "").trim();
+      const plan = String(planSel.value || "free");
       const password = (p.value || "").trim();
       if (!username || !password) {
         showToast("أدخل اسم المستخدم وكلمة المرور", "#ef4444");
@@ -645,7 +661,7 @@ async function initAuthUI() {
             showToast("أدخل البريد الإلكتروني", "#ef4444");
             return;
           }
-          await apiPostJson("/auth/register", { username, email, invite_code, password });
+          await apiPostJson("/auth/register", { username, email, invite_code, plan, password });
           showToast("تم إنشاء الحساب وتسجيل الدخول ✔️");
         } else {
           await apiPostJson("/auth/login", { username, password });
@@ -694,7 +710,7 @@ async function initAuthUI() {
     host.innerHTML = `
       <div class="flex items-center gap-2 flex-wrap justify-center">
         <button type="button" id="loginBtn" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-extrabold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">تسجيل دخول</button>
-        <button type="button" id="registerBtn" class="px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold hover:bg-slate-800 dark:hover:bg-slate-200">إنشاء حساب (دعوة)</button>
+        <button type="button" id="registerBtn" class="px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold hover:bg-slate-800 dark:hover:bg-slate-200">إنشاء حساب جديد</button>
         <button type="button" id="forgotBtn" class="px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700 text-sm font-extrabold text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40">نسيت كلمة المرور</button>
       </div>
     `;

@@ -162,6 +162,10 @@
             <div class="text-xs text-slate-500 dark:text-slate-400 font-extrabold">المشتركون المدفوعون</div>
             <div id="sumPaid" class="text-2xl font-extrabold">0</div>
           </div>
+          <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-3">
+            <div class="text-xs text-slate-500 dark:text-slate-400 font-extrabold">ينتهون خلال 7 أيام</div>
+            <div id="sumExpiring" class="text-2xl font-extrabold text-amber-600 dark:text-amber-400">0</div>
+          </div>
         </div>
         <div class="mt-4 overflow-auto rounded-2xl border border-slate-200 dark:border-slate-700">
           <table class="w-full text-right text-sm">
@@ -188,6 +192,23 @@
     <script src="/static/app.js?v=9"></script>
     <script>
       initAuthUI();
+      (async function showClientSubscriptionNotice() {
+        try {
+          const s = await apiGet("/auth/subscription-status");
+          if (s?.is_admin) return;
+          if (s?.pending_approval) {
+            showToast("تم إنشاء حسابك وبانتظار اعتماد الاشتراك من المدير", "#f59e0b");
+            return;
+          }
+          if (!s?.is_active) {
+            showToast("حسابك موقوف حالياً. تواصل مع الإدارة", "#ef4444");
+            return;
+          }
+          if (typeof s?.days_left === "number" && s.days_left <= 7 && s.days_left >= 0) {
+            showToast(`تنبيه: اشتراكك ينتهي بعد ${s.days_left} يوم`, "#f59e0b");
+          }
+        } catch (_) {}
+      })();
       document.getElementById("changePassBtn").addEventListener("click", async () => {
         const old_password = document.getElementById("oldPass").value || "";
         const new_password = document.getElementById("newPass").value || "";
@@ -266,6 +287,7 @@
           document.getElementById("sumUsers").innerText = String(s.total_users || 0);
           document.getElementById("sumInvites").innerText = String(s.invite_active || 0);
           document.getElementById("sumPaid").innerText = String(s.paid_active || 0);
+          document.getElementById("sumExpiring").innerText = String(s.expiring_7d || 0);
           const u = await apiGet("/admin/users?limit=400");
           const items = u.items || [];
           usersHost.innerHTML = "";
