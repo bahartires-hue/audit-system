@@ -137,14 +137,14 @@
 
       <div id="inviteCard" class="hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 shadow-sm">
         <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">دعوة عميل جديد (مدير فقط)</h2>
-        <p class="text-slate-600 dark:text-slate-400 text-sm mt-1">الدعوة افتراضيًا لمرة واحدة وتنتهي خلال ساعات.</p>
+        <p class="text-slate-600 dark:text-slate-400 text-sm mt-1">الدعوة افتراضيًا لمستخدم واحد وتنتهي بعد أسبوع.</p>
         <div class="mt-4 flex flex-wrap items-center gap-3">
           <input
             id="inviteHours"
             type="number"
             min="1"
             max="168"
-            value="6"
+            value="168"
             class="w-28 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100"
           />
           <button
@@ -317,7 +317,7 @@
           card.classList.remove("hidden");
           btn.addEventListener("click", async () => {
             try {
-              const expires_in_hours = Math.max(1, Math.min(168, Number(hrs.value || 6)));
+              const expires_in_hours = Math.max(1, Math.min(168, Number(hrs.value || 168)));
               const data = await apiPostJson("/auth/invites", { expires_in_hours });
               out.innerHTML = `كود الدعوة: <span dir="ltr" class="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800">${data.code}</span><br/>صالح حتى: <span dir="ltr">${data.expires_at || "-"}</span>`;
               showToast("تم إنشاء دعوة جديدة ✔️", "#10b981");

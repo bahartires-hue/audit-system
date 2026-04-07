@@ -154,18 +154,22 @@
         <div class="erp-grid-2 mb-4">
           <div class="erp-card erp-card--accent-violet">
             <div class="flex items-center justify-between gap-2">
-              <span class="erp-kpi-label">اتجاه الأخطاء (آخر تقارير)</span>
-              <span class="text-[0.65rem] font-extrabold text-slate-400">أعلى = أكثر أخطاء</span>
+              <span class="erp-kpi-label">التقارير الأكثر أخطاءً (آخر 8)</span>
+              <span class="text-[0.65rem] font-extrabold text-slate-400">الشريط الأعلى = أخطاء أكثر</span>
             </div>
             <div id="dashChartBars" class="erp-chart-bars" aria-hidden="true"></div>
           </div>
           <div class="erp-card erp-card--accent-emerald">
-            <div class="erp-kpi-label text-center">توزيع آخر تقرير</div>
-            <div id="dashDonut" class="erp-donut" style="background: conic-gradient(#64748b 0deg 360deg)"></div>
-            <div class="flex justify-center gap-4 text-[0.7rem] font-extrabold flex-wrap">
-              <span class="text-rose-600 dark:text-rose-400">● أخطاء</span>
-              <span class="text-amber-600 dark:text-amber-400">● تحذيرات</span>
-              <span class="text-emerald-600 dark:text-emerald-400">● تطابق</span>
+            <div class="erp-kpi-label text-center">توزيع آخر تقرير (بالنسبة)</div>
+            <div class="w-full rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 h-8 mt-3 flex" dir="ltr">
+              <div id="distErrBar" class="bg-rose-400 h-full text-[10px] font-extrabold text-white flex items-center justify-center" style="width:0%">0%</div>
+              <div id="distWarnBar" class="bg-amber-400 h-full text-[10px] font-extrabold text-white flex items-center justify-center" style="width:0%">0%</div>
+              <div id="distMatchBar" class="bg-emerald-400 h-full text-[10px] font-extrabold text-white flex items-center justify-center" style="width:100%">100%</div>
+            </div>
+            <div class="flex justify-center gap-4 text-[0.7rem] font-extrabold flex-wrap mt-3">
+              <span class="text-rose-600 dark:text-rose-400">أخطاء: <span id="distErrTxt">0%</span></span>
+              <span class="text-amber-600 dark:text-amber-400">تحذيرات: <span id="distWarnTxt">0%</span></span>
+              <span class="text-emerald-600 dark:text-emerald-400">تطابق: <span id="distMatchTxt">100%</span></span>
             </div>
           </div>
         </div>
@@ -181,7 +185,7 @@
         <footer class="mt-8 pt-4 text-center text-slate-500 dark:text-slate-500 text-xs font-extrabold border-t border-slate-200 dark:border-slate-800">
           تطوير الموقع: محمد علي السوداني<br />
           جميع الحقوق محفوظة © OptimalMatch
-          <span class="block mt-1 opacity-70" dir="ltr">UI v9 — إن لم تتغير الشاشة: حدّث بقوة (Ctrl+Shift+R) أو تحقق من نشر Render</span>
+          <span class="block mt-1 opacity-70" dir="ltr">UI v12 — إن لم تتغير الشاشة: حدّث بقوة (Ctrl+Shift+R) أو تحقق من نشر Render</span>
         </footer>
       </main>
     </div>
@@ -205,18 +209,30 @@
             const w = Number(last.stats.warnings_count) || 0;
             const m = Number(last.stats.matched_ops) || 0;
             const t = e + w + m || 1;
-            const a1 = (e / t) * 360;
-            const a2 = (w / t) * 360;
-            const a3 = (m / t) * 360;
-            const d0 = 0;
-            const d1 = d0 + a1;
-            const d2 = d1 + a2;
-            const donut = document.getElementById("dashDonut");
-            donut.style.background = `conic-gradient(
-              #fb7185 0deg ${d1}deg,
-              #fbbf24 ${d1}deg ${d2}deg,
-              #34d399 ${d2}deg 360deg
-            )`;
+            const pe = Math.round((e / t) * 100);
+            const pw = Math.round((w / t) * 100);
+            const pm = Math.max(0, 100 - pe - pw);
+            const errBar = document.getElementById("distErrBar");
+            const warnBar = document.getElementById("distWarnBar");
+            const matchBar = document.getElementById("distMatchBar");
+            const errTxt = document.getElementById("distErrTxt");
+            const warnTxt = document.getElementById("distWarnTxt");
+            const matchTxt = document.getElementById("distMatchTxt");
+            if (errBar) {
+              errBar.style.width = `${pe}%`;
+              errBar.innerText = pe > 8 ? `${pe}%` : "";
+            }
+            if (warnBar) {
+              warnBar.style.width = `${pw}%`;
+              warnBar.innerText = pw > 8 ? `${pw}%` : "";
+            }
+            if (matchBar) {
+              matchBar.style.width = `${pm}%`;
+              matchBar.innerText = pm > 8 ? `${pm}%` : "";
+            }
+            if (errTxt) errTxt.innerText = `${pe}%`;
+            if (warnTxt) warnTxt.innerText = `${pw}%`;
+            if (matchTxt) matchTxt.innerText = `${pm}%`;
           }
 
           const barsHost = document.getElementById("dashChartBars");

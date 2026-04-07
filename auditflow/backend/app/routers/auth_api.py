@@ -10,6 +10,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
+from sqlalchemy import func
 
 from ..auth_core import (
     COOKIE_PATH,
@@ -195,9 +196,9 @@ async def auth_register(request: Request):
         bootstrap_admin = _is_bootstrap_admin_registration(db, username, email)
         if not bootstrap_admin and not _is_invite_valid(db, invite_code):
             raise HTTPException(400, "كود الدعوة غير صالح أو منتهي")
-        exists = db.query(User).filter(User.username == username).first()
+        exists = db.query(User).filter(func.lower(User.username) == username.lower()).first()
         if exists:
-            raise HTTPException(400, "اسم المستخدم موجود بالفعل")
+            raise HTTPException(400, "اسم المستخدم موجود بالفعل، سجّل دخولك مباشرة")
         exists_email = db.query(User).filter(User.email == email).first()
         if exists_email:
             raise HTTPException(400, "البريد الإلكتروني مستخدم بالفعل")
@@ -345,9 +346,14 @@ async def auth_request_password_reset(request: Request):
             # Fallback for local usage
             base_url = str(request.base_url).rstrip("/")
         reset_link = f"{base_url}/login?reset_token={token}"
-        send_password_reset_email(email, reset_link)
-        log_event(db, "auth.password_reset.requested", user.id, {"email": email})
-        return {"ok": True}
+        try:
+            send_password_reset_email(email, reset_link)
+            log_event(db, "auth.password_reset.requested", user.id, {"email": email, "delivery": "smtp"})
+            return {"ok": True}
+        except Exception:
+            # Fallback for environments without SMTP, keeps reset flow operational.
+            log_event(db, "auth.password_reset.requested", user.id, {"email": email, "delivery": "link_fallback"})
+            return {"ok": True, "delivery": "link_fallback", "reset_link": reset_link}
     finally:
         db.close()
 
@@ -390,16 +396,14 @@ async def auth_reset_password(request: Request):
 async def auth_create_invite(request: Request):
     payload = await request.json()
     # Security by default: one-time, short-lived invites
-    max_uses = int((payload or {}).get("max_uses", 1) or 1)
-    if max_uses < 1:
-        max_uses = 1
-    if max_uses > 10:
-        max_uses = 10
-    hours = int((payload or {}).get("expires_in_hours", 6) or 6)
+    max_uses = 1
+    hours = int((payload or {}).get("expires_in_hours", 168) or 168)
     code = str((payload or {}).get("code", "")).strip() or secrets.token_urlsafe(8).replace("-", "").replace("_", "")
     code = code[:32]
     if hours < 1:
         hours = 1
+    if hours > 168:
+        hours = 168
 
     db = SessionLocal()
     try:
@@ -708,7 +712,7 @@ async def auth_login(request: Request):
     db = SessionLocal()
     try:
         require_csrf(request)
-        user = db.query(User).filter(User.username == username).first()
+        user = db.query(User).filter(func.lower(User.username) == username.lower()).first()
         if not user:
             raise HTTPException(401, "بيانات الدخول غير صحيحة")
         if int(user.is_active or 0) != 1:

@@ -26,7 +26,7 @@ from .services.reports import mismatches_to_csv_bytes, mismatches_to_excel_bytes
 from .services.storage import save_upload_file
 
 # يظهر في رأس HTTP للتحقق من أن الخادم يقدّم أحدث واجهة بعد النشر
-UI_ASSET_VERSION = "11"
+UI_ASSET_VERSION = "12"
 
 _HTML_NO_CACHE = {
     "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",

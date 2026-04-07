@@ -756,8 +756,13 @@ async function initAuthUI() {
       const email = prompt("أدخل بريدك الإلكتروني لاستعادة كلمة المرور:");
       if (!email) return;
       try {
-        await apiPostJson("/auth/request-password-reset", { email: String(email).trim() });
-        showToast("تم إرسال رابط الاستعادة إلى بريدك ✔️", "#10b981");
+        const data = await apiPostJson("/auth/request-password-reset", { email: String(email).trim() });
+        if (data?.reset_link) {
+          prompt("هذا رابط استعادة كلمة المرور (انسخه وافتحه):", data.reset_link);
+          showToast("تم إنشاء رابط الاستعادة ✔️", "#10b981");
+        } else {
+          showToast("تم إرسال رابط الاستعادة إلى بريدك ✔️", "#10b981");
+        }
       } catch (e) {
         showToast(e.message || "تعذر إرسال رابط الاستعادة", "#ef4444");
       }
