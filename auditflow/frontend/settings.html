@@ -170,6 +170,14 @@
           <button id="saveAdminConfigBtn" class="px-4 py-2 rounded-xl bg-indigo-600 text-white font-extrabold hover:bg-indigo-700">حفظ الإعدادات</button>
           <button id="downloadBackupBtn" class="px-4 py-2 rounded-xl border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-extrabold hover:bg-emerald-50 dark:hover:bg-emerald-950/40">تنزيل نسخة احتياطية</button>
         </div>
+        <div class="mt-4 border-t border-slate-200 dark:border-slate-700 pt-4">
+          <h3 class="font-extrabold text-slate-900 dark:text-slate-50 text-sm">فحص SMTP</h3>
+          <p id="smtpStatusTxt" class="text-xs text-slate-500 dark:text-slate-400 mt-1">جاري الفحص...</p>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <input id="smtpTestEmail" type="email" placeholder="بريد لاختبار الإرسال" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100" />
+            <button id="smtpTestBtn" class="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-600 font-extrabold hover:bg-slate-50 dark:hover:bg-slate-800">اختبار الإرسال</button>
+          </div>
+        </div>
       </div>
 
       <div id="adminPanel" class="hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 shadow-sm">
@@ -278,7 +286,10 @@
         const contactInp = document.getElementById("cfgAdminContact");
         const waInp = document.getElementById("cfgWhatsapp");
         const emailInp = document.getElementById("cfgEmail");
-        if (!card || !saveBtn || !backupBtn || !companyInp || !contactInp || !waInp || !emailInp) return;
+        const smtpStatusTxt = document.getElementById("smtpStatusTxt");
+        const smtpTestEmail = document.getElementById("smtpTestEmail");
+        const smtpTestBtn = document.getElementById("smtpTestBtn");
+        if (!card || !saveBtn || !backupBtn || !companyInp || !contactInp || !waInp || !emailInp || !smtpStatusTxt || !smtpTestEmail || !smtpTestBtn) return;
         try {
           const me = await apiGet("/auth/me");
           if (!me?.is_admin) return;
@@ -288,6 +299,8 @@
           contactInp.value = cfg.admin_contact || "";
           waInp.value = (cfg.social_links && cfg.social_links.whatsapp) || "";
           emailInp.value = (cfg.social_links && cfg.social_links.email) || "";
+          const smtp = cfg.smtp || {};
+          smtpStatusTxt.innerText = smtp.enabled ? `SMTP مفعل (${smtp.host}:${smtp.port})` : "SMTP غير مفعّل";
           saveBtn.addEventListener("click", async () => {
             try {
               await apiPatchJson("/admin/config", {
@@ -302,6 +315,19 @@
           });
           backupBtn.addEventListener("click", () => {
             window.location.href = "/admin/backup";
+          });
+          smtpTestBtn.addEventListener("click", async () => {
+            const to_email = (smtpTestEmail.value || "").trim();
+            if (!to_email) {
+              showToast("أدخل بريد الاختبار", "#ef4444");
+              return;
+            }
+            try {
+              await apiPostJson("/admin/smtp-test", { to_email });
+              showToast("تم إرسال بريد الاختبار ✔️", "#10b981");
+            } catch (e) {
+              showToast(e.message || "فشل اختبار SMTP", "#ef4444");
+            }
           });
         } catch (_) {}
       })();

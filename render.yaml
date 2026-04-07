@@ -19,3 +19,18 @@ services:
       name: auditflow-data
       mountPath: /var/data
       sizeGB: 1
+  - type: cron
+    name: auditflow-backup-nightly
+    runtime: python
+    rootDir: auditflow/backend
+    schedule: "0 2 * * *"
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.jobs.backup_snapshot
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: AUDITFLOW_DATA_ROOT
+        value: /var/data
+      - key: AUDITFLOW_BACKUP_KEEP
+        value: "14"

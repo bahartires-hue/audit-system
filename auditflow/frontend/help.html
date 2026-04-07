@@ -131,6 +131,27 @@
               <a class="underline text-emerald-700 dark:text-emerald-300" href="/social">التواصل الاجتماعي</a>.
             </p>
           </div>
+          <div class="erp-card">
+            <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">Checklist بعد كل Deploy</h2>
+            <ul class="list-disc list-inside text-sm text-slate-600 dark:text-slate-400 mt-2 space-y-1">
+              <li>افتح <span dir="ltr">/healthz</span> وتأكد أن <span dir="ltr">ok=true</span>.</li>
+              <li>جرّب تسجيل دخول مدير + عميل.</li>
+              <li>نفّذ «نسيت كلمة المرور» وتأكد وصول رسالة/رابط الاستعادة.</li>
+              <li>أنشئ دعوة جديدة وتأكد أنها مستخدم واحد وصلاحية أسبوع.</li>
+              <li>نفّذ تحليل Excel للفرعين وتأكد إنشاء التقرير.</li>
+              <li>افتح «لوحة التحكم» وتأكد من تحديث مستخدم (إيقاف/تفعيل/خطة).</li>
+            </ul>
+          </div>
+          <div class="erp-card">
+            <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">دليل تشغيل المدير</h2>
+            <ul class="list-disc list-inside text-sm text-slate-600 dark:text-slate-400 mt-2 space-y-1">
+              <li>عند إيقاف عميل: غيّر الحالة إلى «موقوف» من لوحة التحكم.</li>
+              <li>عند إعادة التفعيل: فعّل المستخدم ثم جدد الخطة إذا لزم.</li>
+              <li>للنسخ الاحتياطي اليدوي: الإعدادات ← تنزيل نسخة احتياطية.</li>
+              <li>للنسخ الاحتياطي التلقائي: Job يومي في Render باسم <span dir="ltr">auditflow-backup-nightly</span>.</li>
+              <li>لفحص البريد: الإعدادات ← فحص SMTP ← اختبار الإرسال.</li>
+            </ul>
+          </div>
           <p class="text-center text-xs text-slate-500 dark:text-slate-400 font-extrabold pb-6">تطوير الموقع: محمد علي السوداني<br />جميع الحقوق محفوظة © OptimalMatch</p>
         </div>
       </main>

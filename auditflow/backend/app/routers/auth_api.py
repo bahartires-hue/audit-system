@@ -31,7 +31,7 @@ from ..auth_core import (
     verify_password,
 )
 from ..db import SessionLocal
-from ..mailer import send_password_reset_email
+from ..mailer import send_password_reset_email, send_smtp_test_email, smtp_status
 from ..models import AnalysisReport, AppSetting, AuditLog, InviteCode, PasswordResetToken, User, UserSession
 from ..rate_limit import limiter
 
@@ -543,7 +543,24 @@ async def admin_config_patch(request: Request):
             row.updated_at = dt.datetime.utcnow()
         db.commit()
         log_event(db, "admin.config.updated", admin.id, {"keys": list(patch.keys())})
+        merged["smtp"] = smtp_status()
         return merged
+    finally:
+        db.close()
+
+
+@router.post("/admin/smtp-test")
+async def admin_smtp_test(request: Request):
+    payload = await request.json()
+    to_email = str((payload or {}).get("to_email", "")).strip().lower()
+    if "@" not in to_email:
+        raise HTTPException(400, "أدخل بريدًا صحيحًا")
+    db = SessionLocal()
+    try:
+        admin = _require_admin_user(db, request)
+        send_smtp_test_email(to_email)
+        log_event(db, "admin.smtp_test.sent", admin.id, {"to_email": to_email})
+        return {"ok": True, "to_email": to_email}
     finally:
         db.close()
 
