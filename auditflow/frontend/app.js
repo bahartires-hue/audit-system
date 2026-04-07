@@ -792,10 +792,53 @@ function initNavAndTheme() {
   else if (path.startsWith("/about")) key = "about";
   else if (path.startsWith("/contact")) key = "contact";
   else if (path.startsWith("/social")) key = "social";
+  else if (path.startsWith("/terms")) key = "terms";
+  else if (path.startsWith("/privacy")) key = "privacy";
+  else if (path.startsWith("/user-agreement")) key = "agreement";
+
+  const sidebar = document.querySelector(".erp-sidebar__nav");
+  const mobileDrawer = document.getElementById("mobileNavDrawer");
+  const legalLinks = [
+    { href: "/terms", nav: "terms", title: "شروط الاستخدام", text: "شروط الاستخدام" },
+    { href: "/privacy", nav: "privacy", title: "سياسة الخصوصية", text: "سياسة الخصوصية" },
+    { href: "/user-agreement", nav: "agreement", title: "اتفاقية المستخدم", text: "اتفاقية المستخدم" },
+  ];
+  if (sidebar) {
+    legalLinks.forEach((x) => {
+      if (!sidebar.querySelector(`a[data-nav="${x.nav}"]`)) {
+        const a = document.createElement("a");
+        a.href = x.href;
+        a.className = "erp-side-link nav-link";
+        a.setAttribute("data-nav", x.nav);
+        a.setAttribute("title", x.title);
+        sidebar.appendChild(a);
+      }
+    });
+  }
+  if (mobileDrawer) {
+    legalLinks.forEach((x) => {
+      if (!mobileDrawer.querySelector(`a[data-nav="${x.nav}"]`)) {
+        const a = document.createElement("a");
+        a.href = x.href;
+        a.setAttribute("data-nav", x.nav);
+        a.textContent = x.text;
+        mobileDrawer.appendChild(a);
+      }
+    });
+  }
 
   document.querySelectorAll("[data-nav]").forEach((el) => {
     el.classList.add("nav-link");
     const k = el.getAttribute("data-nav");
+    if (k === "home") {
+      if (el.getAttribute("title")) el.setAttribute("title", "الرئيسية");
+      const txt = (el.textContent || "").trim();
+      if (txt === "لوحة التحكم") el.textContent = "الرئيسية";
+    } else if (k === "settings") {
+      if (el.getAttribute("title")) el.setAttribute("title", "لوحة التحكم");
+      const txt = (el.textContent || "").trim();
+      if (txt === "الإعدادات") el.textContent = "لوحة التحكم";
+    }
     const active = k === key;
     el.classList.toggle("nav-link--active", active);
     el.classList.toggle("nav-link--idle", !active);
@@ -815,7 +858,6 @@ function initNavAndTheme() {
   updateThemeToggleUi();
 
   const navMenuBtn = document.getElementById("navMenuBtn");
-  const mobileDrawer = document.getElementById("mobileNavDrawer");
   const closeMobileNav = () => {
     if (!mobileDrawer || !navMenuBtn) return;
     mobileDrawer.classList.remove("is-open");
@@ -836,6 +878,11 @@ function initNavAndTheme() {
       },
       { passive: true }
     );
+  }
+  const topTitle = document.querySelector(".erp-topbar__title");
+  if (topTitle) {
+    if ((topTitle.textContent || "").trim() === "لوحة التحكم") topTitle.textContent = "الرئيسية";
+    else if ((topTitle.textContent || "").trim() === "الإعدادات") topTitle.textContent = "لوحة التحكم";
   }
 }
 
