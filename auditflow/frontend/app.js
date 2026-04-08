@@ -452,27 +452,34 @@ async function loadReportDetail() {
     aiBtn.onclick = async () => {
       try {
         aiBtn.disabled = true;
-        aiBtn.textContent = "جارٍ التحليل...";
-        const out = await apiPostJson(`/ai/report-insights?id=${encodeURIComponent(reportId)}`, {});
-        const causes = (out.top_causes || []).map((x) => `<li>${x}</li>`).join("");
-        const actions = (out.actions || []).map((x) => `<li>${x}</li>`).join("");
+        aiBtn.textContent = "جارٍ التحليل الشامل...";
+        const out = await apiPostJson(`/ai/full-analysis?id=${encodeURIComponent(reportId)}`, {});
+        const causes = (out.root_causes || []).map((x) => `<li>${x}</li>`).join("");
+        const actions = (out.recommended_actions || []).map((x) => `<li>${x}</li>`).join("");
+        const msgs = (out.followup_messages || []).map((x) => `<li>${x}</li>`).join("");
+        const risk = Number(out.risk_score || 0);
         aiHost.innerHTML = `
           <div class="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 p-3">
-            <div class="font-extrabold text-slate-900 dark:text-slate-100 mb-2">ملخص</div>
-            <p class="leading-7">${out.summary || "لا يوجد ملخص"}</p>
-            <div class="mt-3 font-extrabold text-slate-900 dark:text-slate-100">أسباب محتملة</div>
+            <div class="flex items-center justify-between gap-2">
+              <div class="font-extrabold text-slate-900 dark:text-slate-100 mb-2">ملخص تنفيذي</div>
+              <span class="px-2 py-1 rounded-lg text-xs font-extrabold ${risk >= 70 ? "bg-rose-100 text-rose-700" : risk >= 40 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}">درجة المخاطر: ${risk}/100</span>
+            </div>
+            <p class="leading-7">${out.executive_summary || "لا يوجد ملخص"}</p>
+            <div class="mt-3 font-extrabold text-slate-900 dark:text-slate-100">الأسباب الجذرية المحتملة</div>
             <ul class="list-disc list-inside mt-1 space-y-1">${causes || "<li>لا توجد بيانات كافية</li>"}</ul>
-            <div class="mt-3 font-extrabold text-slate-900 dark:text-slate-100">خطة عمل مقترحة</div>
+            <div class="mt-3 font-extrabold text-slate-900 dark:text-slate-100">خطة العمل المقترحة</div>
             <ul class="list-disc list-inside mt-1 space-y-1">${actions || "<li>لا توجد توصيات حالياً</li>"}</ul>
+            <div class="mt-3 font-extrabold text-slate-900 dark:text-slate-100">رسائل متابعة جاهزة</div>
+            <ul class="list-disc list-inside mt-1 space-y-1">${msgs || "<li>لا توجد رسائل متابعة حالياً</li>"}</ul>
           </div>
         `;
-        showToast("تم توليد التحليل الذكي ✔️", "#10b981");
+        showToast("تم توليد التحليل الذكي الشامل ✔️", "#10b981");
       } catch (e) {
         aiHost.innerHTML = `<p class="text-rose-600">${e.message || "تعذر تشغيل التحليل الذكي"}</p>`;
         showToast(e.message || "تعذر تشغيل التحليل الذكي", "#ef4444");
       } finally {
         aiBtn.disabled = false;
-        aiBtn.textContent = "توليد التحليل الذكي";
+        aiBtn.textContent = "توليد التحليل الذكي الشامل";
       }
     };
   }

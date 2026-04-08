@@ -22,7 +22,7 @@ from .rate_limit import limiter
 from .routers.auth_api import router as auth_router
 from .services.analyzer import analyze as analyze_pairs
 from .services.analyzer import compute_summary, process
-from .services.ai_insights import explain_report
+from .services.ai_insights import full_analysis
 from .services.reports import mismatches_to_csv_bytes, mismatches_to_excel_bytes, mismatches_to_pdf_bytes
 from .services.storage import save_upload_file
 
@@ -437,8 +437,8 @@ async def patch_report(
         db.close()
 
 
-@app.post("/ai/report-insights")
-def ai_report_insights(request: Request, id: str = Query(...)):
+@app.post("/ai/full-analysis")
+def ai_full_analysis(request: Request, id: str = Query(...)):
     db = _SessionLocal()
     try:
         require_csrf(request)
@@ -463,12 +463,19 @@ def ai_report_insights(request: Request, id: str = Query(...)):
                 "warnings_count": r.warnings_count,
             },
         }
+        cached = (r.stats_json or {}).get("ai_full_analysis") if isinstance(r.stats_json, dict) else None
+        if cached and isinstance(cached, dict):
+            return cached
         mismatches = ((r.analysis_json or {}).get("mismatches") or [])[:300]
         try:
-            insights = explain_report(report_payload, mismatches)
+            insights = full_analysis(report_payload, mismatches)
         except RuntimeError as e:
             raise HTTPException(400, str(e))
-        log_event(db, "report.ai_insights", user.id, {"report_id": id})
+        stats_json = r.stats_json if isinstance(r.stats_json, dict) else {}
+        stats_json["ai_full_analysis"] = insights
+        r.stats_json = stats_json
+        db.commit()
+        log_event(db, "report.ai_full_analysis", user.id, {"report_id": id})
         return insights
     finally:
         db.close()
