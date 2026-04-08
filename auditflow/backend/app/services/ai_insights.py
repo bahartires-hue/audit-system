@@ -75,6 +75,63 @@ def _call_openai(prompt_payload: Dict[str, Any]) -> Dict[str, Any]:
         return {"summary": out_text.strip()[:600] or "تعذر تفسير ناتج التحليل الذكي"}
 
 
+def _local_full_analysis(report: Dict[str, Any], mismatches: List[Dict[str, Any]]) -> Dict[str, Any]:
+    stats = report.get("stats") or {}
+    total = int(stats.get("total_ops") or 0)
+    errors = int(stats.get("errors_count") or 0)
+    warnings = int(stats.get("warnings_count") or 0)
+    mismatch_ops = int(stats.get("mismatch_ops") or len(mismatches) or 0)
+    ratio = (mismatch_ops / total) if total > 0 else 0.0
+    risk = min(100, max(0, int(ratio * 100 + errors * 2 + warnings)))
+
+    reasons = [str(x.get("reason") or "").strip() for x in mismatches if str(x.get("reason") or "").strip()]
+    docs = [str(x.get("doc") or "").strip() for x in mismatches if str(x.get("doc") or "").strip()]
+    has_missing_doc = any("لا يوجد" in r or "مفقود" in r for r in reasons)
+    has_amount_issue = any("مبلغ" in r or "amount" in r.lower() for r in reasons)
+    has_type_issue = any("مدين" in r or "دائن" in r or "credit" in r.lower() or "debit" in r.lower() for r in reasons)
+    has_duplicates = len(docs) > len(set(docs)) if docs else False
+
+    root_causes: List[str] = []
+    if has_missing_doc:
+        root_causes.append("وجود قيود بدون مقابل واضح بين الفرعين لبعض المستندات.")
+    if has_amount_issue:
+        root_causes.append("اختلافات مبالغ في بعض القيود بين الفرعين.")
+    if has_type_issue:
+        root_causes.append("اختلاف في اتجاه القيد (مدين/دائن) لبعض العمليات.")
+    if has_duplicates:
+        root_causes.append("احتمال تكرار قيود لنفس المستند.")
+    if not root_causes:
+        root_causes.append("تباين بيانات بين الفرعين يحتاج مراجعة عينة من القيود الأحدث.")
+
+    actions = [
+        "مراجعة أعلى 10 قيود من حيث المبلغ أولاً لتقليل أثر الفروقات بسرعة.",
+        "مطابقة القيود التي لا يوجد لها مقابل وإغلاقها بملاحظات موحدة.",
+        "توحيد آلية ترميز المستندات بين الفرعين لتقليل التكرار.",
+    ]
+    if has_type_issue:
+        actions.append("مراجعة إعدادات التصدير للتأكد من اتجاه القيود (مدين/دائن).")
+    if has_duplicates:
+        actions.append("تفعيل فحص التكرار قبل رفع ملفات الفروع.")
+
+    followups = [
+        "الرجاء مراجعة القيود المعلّمة كأخطاء خلال اليوم وإرسال التحديث قبل نهاية الدوام.",
+        "يرجى توحيد إدخال نوع العملية والمستندات لتقليل الفروقات في الدفعة القادمة.",
+    ]
+
+    summary = (
+        f"التحليل الداخلي يشير إلى {mismatch_ops} فروقات من أصل {total} عملية. "
+        f"عدد الأخطاء {errors} والتحذيرات {warnings}. نوصي بمعالجة القيود الأعلى أثراً أولاً."
+    )
+    return {
+        "executive_summary": summary,
+        "root_causes": root_causes[:8],
+        "risk_score": risk,
+        "recommended_actions": actions[:8],
+        "followup_messages": followups[:6],
+        "analysis_source": "local-fallback",
+    }
+
+
 def _build_payload(report: Dict[str, Any], mismatches: List[Dict[str, Any]]) -> Dict[str, Any]:
     compact = _compact_mismatches(mismatches, limit=20)
     compact = [
@@ -94,18 +151,34 @@ def _build_payload(report: Dict[str, Any], mismatches: List[Dict[str, Any]]) -> 
 
 def explain_report(report: Dict[str, Any], mismatches: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not ai_enabled():
-        raise RuntimeError("التحليل الذكي غير مفعّل: يرجى ضبط OPENAI_API_KEY")
-    parsed = _call_openai(_build_payload(report, mismatches))
+        local = _local_full_analysis(report, mismatches)
+        return {
+            "summary": local["executive_summary"],
+            "top_causes": local["root_causes"][:6],
+            "actions": local["recommended_actions"][:6],
+            "analysis_source": "local-fallback",
+        }
+    try:
+        parsed = _call_openai(_build_payload(report, mismatches))
+    except RuntimeError:
+        local = _local_full_analysis(report, mismatches)
+        return {
+            "summary": local["executive_summary"],
+            "top_causes": local["root_causes"][:6],
+            "actions": local["recommended_actions"][:6],
+            "analysis_source": "local-fallback",
+        }
     return {
         "summary": str(parsed.get("summary") or "").strip(),
         "top_causes": [str(x).strip() for x in (parsed.get("top_causes") or []) if str(x).strip()][:6],
         "actions": [str(x).strip() for x in (parsed.get("actions") or []) if str(x).strip()][:6],
+        "analysis_source": "openai",
     }
 
 
 def full_analysis(report: Dict[str, Any], mismatches: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not ai_enabled():
-        raise RuntimeError("التحليل الذكي غير مفعّل: يرجى ضبط OPENAI_API_KEY")
+        return _local_full_analysis(report, mismatches)
     prompt = {
         "report_title": report.get("title") or "تقرير بدون عنوان",
         "branch1": report.get("branch1_name"),
@@ -117,7 +190,10 @@ def full_analysis(report: Dict[str, Any], mismatches: List[Dict[str, Any]]) -> D
             "recommended_actions (array), followup_messages (array). بالعربية العملية."
         ),
     }
-    parsed = _call_openai(prompt)
+    try:
+        parsed = _call_openai(prompt)
+    except RuntimeError:
+        return _local_full_analysis(report, mismatches)
     try:
         risk = int(parsed.get("risk_score") or 0)
     except Exception:
@@ -129,4 +205,5 @@ def full_analysis(report: Dict[str, Any], mismatches: List[Dict[str, Any]]) -> D
         "risk_score": risk,
         "recommended_actions": [str(x).strip() for x in (parsed.get("recommended_actions") or []) if str(x).strip()][:8],
         "followup_messages": [str(x).strip() for x in (parsed.get("followup_messages") or []) if str(x).strip()][:6],
+        "analysis_source": "openai",
     }
