@@ -558,7 +558,10 @@ async def admin_smtp_test(request: Request):
     db = SessionLocal()
     try:
         admin = _require_admin_user(db, request)
-        send_smtp_test_email(to_email)
+        try:
+            send_smtp_test_email(to_email)
+        except Exception as e:
+            raise HTTPException(400, f"فشل اختبار SMTP: {str(e) or 'تحقق من إعدادات البريد'}")
         log_event(db, "admin.smtp_test.sent", admin.id, {"to_email": to_email})
         return {"ok": True, "to_email": to_email}
     finally:
