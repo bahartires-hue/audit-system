@@ -922,6 +922,14 @@ function initNavAndTheme() {
     if ((topTitle.textContent || "").trim() === "لوحة التحكم") topTitle.textContent = "الرئيسية";
     else if ((topTitle.textContent || "").trim() === "الإعدادات") topTitle.textContent = "لوحة التحكم";
   }
+
+  // Normalize brand spelling across pages.
+  document.querySelectorAll(".app-brand__text").forEach((el) => {
+    el.textContent = "التطابق الأمثل";
+  });
+  document.querySelectorAll(".app-brand__en").forEach((el) => {
+    el.textContent = "OptimalMatch";
+  });
 }
 
 document.addEventListener("DOMContentLoaded", initNavAndTheme);
