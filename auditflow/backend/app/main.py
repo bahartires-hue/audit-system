@@ -22,11 +22,12 @@ from .rate_limit import limiter
 from .routers.auth_api import router as auth_router
 from .services.analyzer import analyze as analyze_pairs
 from .services.analyzer import compute_summary, process
+from .services.ai_insights import explain_report
 from .services.reports import mismatches_to_csv_bytes, mismatches_to_excel_bytes, mismatches_to_pdf_bytes
 from .services.storage import save_upload_file
 
 # يظهر في رأس HTTP للتحقق من أن الخادم يقدّم أحدث واجهة بعد النشر
-UI_ASSET_VERSION = "12"
+UI_ASSET_VERSION = "13"
 
 _HTML_NO_CACHE = {
     "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
@@ -432,6 +433,43 @@ async def patch_report(
             "notes": r.notes or "",
             "archived": bool(int(r.archived or 0)),
         }
+    finally:
+        db.close()
+
+
+@app.post("/ai/report-insights")
+def ai_report_insights(request: Request, id: str = Query(...)):
+    db = _SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        r: AnalysisReport | None = (
+            db.query(AnalysisReport)
+            .filter(AnalysisReport.id == id, AnalysisReport.user_id == user.id)
+            .first()
+        )
+        if not r:
+            raise HTTPException(404, "Report not found")
+        report_payload = {
+            "id": r.id,
+            "title": r.title,
+            "branch1_name": r.branch1_name,
+            "branch2_name": r.branch2_name,
+            "stats": {
+                "total_ops": r.total_ops,
+                "matched_ops": r.matched_ops,
+                "mismatch_ops": r.mismatch_ops,
+                "errors_count": r.errors_count,
+                "warnings_count": r.warnings_count,
+            },
+        }
+        mismatches = ((r.analysis_json or {}).get("mismatches") or [])[:300]
+        try:
+            insights = explain_report(report_payload, mismatches)
+        except RuntimeError as e:
+            raise HTTPException(400, str(e))
+        log_event(db, "report.ai_insights", user.id, {"report_id": id})
+        return insights
     finally:
         db.close()
 

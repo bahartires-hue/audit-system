@@ -445,6 +445,37 @@ async function loadReportDetail() {
       }
     };
   }
+
+  const aiBtn = document.getElementById("aiInsightsBtn");
+  const aiHost = document.getElementById("aiInsightsHost");
+  if (aiBtn && aiHost) {
+    aiBtn.onclick = async () => {
+      try {
+        aiBtn.disabled = true;
+        aiBtn.textContent = "جارٍ التحليل...";
+        const out = await apiPostJson(`/ai/report-insights?id=${encodeURIComponent(reportId)}`, {});
+        const causes = (out.top_causes || []).map((x) => `<li>${x}</li>`).join("");
+        const actions = (out.actions || []).map((x) => `<li>${x}</li>`).join("");
+        aiHost.innerHTML = `
+          <div class="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-slate-900 p-3">
+            <div class="font-extrabold text-slate-900 dark:text-slate-100 mb-2">ملخص</div>
+            <p class="leading-7">${out.summary || "لا يوجد ملخص"}</p>
+            <div class="mt-3 font-extrabold text-slate-900 dark:text-slate-100">أسباب محتملة</div>
+            <ul class="list-disc list-inside mt-1 space-y-1">${causes || "<li>لا توجد بيانات كافية</li>"}</ul>
+            <div class="mt-3 font-extrabold text-slate-900 dark:text-slate-100">خطة عمل مقترحة</div>
+            <ul class="list-disc list-inside mt-1 space-y-1">${actions || "<li>لا توجد توصيات حالياً</li>"}</ul>
+          </div>
+        `;
+        showToast("تم توليد التحليل الذكي ✔️", "#10b981");
+      } catch (e) {
+        aiHost.innerHTML = `<p class="text-rose-600">${e.message || "تعذر تشغيل التحليل الذكي"}</p>`;
+        showToast(e.message || "تعذر تشغيل التحليل الذكي", "#ef4444");
+      } finally {
+        aiBtn.disabled = false;
+        aiBtn.textContent = "توليد التحليل الذكي";
+      }
+    };
+  }
 }
 
 const AUDITFLOW_REMEMBER_USER_KEY = "auditflow_remember_username";
