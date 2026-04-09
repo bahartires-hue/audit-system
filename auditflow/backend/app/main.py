@@ -23,6 +23,7 @@ from .routers.auth_api import router as auth_router
 from .services.analyzer import analyze as analyze_pairs
 from .services.analyzer import compute_summary, process
 from .services.ai_insights import full_analysis
+from .services.pdf_convert import pdf_to_excel_bytes
 from .services.reports import mismatches_to_csv_bytes, mismatches_to_excel_bytes, mismatches_to_pdf_bytes
 from .services.storage import save_upload_file
 
@@ -293,6 +294,40 @@ def analyze_api(
     return {"reportId": report_id}
 
 
+@app.post("/convert/pdf-to-excel")
+def convert_pdf_to_excel(
+    request: Request,
+    file: UploadFile = File(...),
+):
+    require_csrf(request)
+    db = _SessionLocal()
+    try:
+        user = require_user(db, request)
+    finally:
+        db.close()
+
+    name = (file.filename or "").strip()
+    if not name.lower().endswith(".pdf"):
+        raise HTTPException(400, "الملف يجب أن يكون PDF")
+
+    job_id = uuid.uuid4().hex
+    try:
+        saved, original = save_upload_file(file, UPLOAD_DIR / "pdf-convert" / user.id / job_id)
+        excel_bytes = pdf_to_excel_bytes(saved)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(400, f"تعذر تحويل الملف: {str(e)}")
+
+    base = Path(original).stem if original else "converted"
+    filename = f"{base}.xlsx"
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @app.get("/reports")
 def list_reports(
     request: Request,
@@ -385,6 +420,47 @@ def get_report(request: Request, id: str = Query(...)):
             "stats_json": r.stats_json,
             "analysis_json": r.analysis_json,
         }
+    finally:
+        db.close()
+
+
+@app.get("/report/mismatches")
+def get_report_mismatches(
+    request: Request,
+    id: str = Query(...),
+    page: int = Query(1),
+    page_size: int = Query(100),
+    q: str = Query(""),
+):
+    p = max(1, int(page or 1))
+    ps = max(1, min(int(page_size or 100), 500))
+    qn = (q or "").strip().lower()
+    db = _SessionLocal()
+    try:
+        user = require_user(db, request)
+        r: AnalysisReport | None = (
+            db.query(AnalysisReport)
+            .filter(AnalysisReport.id == id, AnalysisReport.user_id == user.id)
+            .first()
+        )
+        if not r:
+            raise HTTPException(404, "Report not found")
+        all_items = (r.analysis_json or {}).get("mismatches", []) or []
+        if qn:
+            filtered = []
+            for x in all_items:
+                doc = str(x.get("doc") or "").lower()
+                reason = str(x.get("reason") or "").lower()
+                amount = str(x.get("amount") or "").lower()
+                if qn in f"{doc} {reason} {amount}":
+                    filtered.append(x)
+        else:
+            filtered = list(all_items)
+        total = len(filtered)
+        start = (p - 1) * ps
+        end = start + ps
+        items = filtered[start:end]
+        return {"items": items, "total": total, "page": p, "page_size": ps}
     finally:
         db.close()
 

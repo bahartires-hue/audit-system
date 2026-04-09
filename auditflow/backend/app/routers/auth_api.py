@@ -8,7 +8,7 @@ import os
 import secrets
 import uuid
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import func
 
@@ -31,7 +31,7 @@ from ..auth_core import (
     verify_password,
 )
 from ..db import SessionLocal
-from ..mailer import send_password_reset_email, send_smtp_test_email, smtp_status
+from ..mailer import send_password_reset_email, send_plain_email, send_smtp_test_email, smtp_status
 from ..models import AnalysisReport, AppSetting, AuditLog, InviteCode, PasswordResetToken, User, UserSession
 from ..rate_limit import limiter
 
@@ -115,6 +115,16 @@ def _require_admin_user(db, request: Request) -> User:
     return user
 
 
+def _has_role(user: User, required: str) -> bool:
+    req = (required or "").strip().lower()
+    role = (getattr(user, "role_name", "") or "user").strip().lower()
+    if int(getattr(user, "is_admin", 0) or 0) == 1:
+        return True
+    if req in ("", "user"):
+        return True
+    return role == req
+
+
 def _months_for_plan(plan_name: str) -> int:
     p = (plan_name or "").strip().lower()
     if p in ("month", "1m", "m1"):
@@ -148,9 +158,17 @@ def auth_me(request: Request):
                     "username": username,
                     "email": email,
                     "is_admin": is_admin,
+                    "role_name": (u.role_name if u else "user"),
                     "is_active": is_active,
                     "plan_name": plan_name,
                     "subscription_expires_at": exp.isoformat() + "Z" if exp else None,
+                    "roles": {
+                        "user": bool(u),
+                        "support": _has_role(u, "support") if u else False,
+                        "auditor": _has_role(u, "auditor") if u else False,
+                        "manager": _has_role(u, "manager") if u else False,
+                        "admin": _has_role(u, "admin") if u else False,
+                    },
                     "csrf_token": csrf,
                 }
             ),
@@ -220,6 +238,7 @@ async def auth_register(request: Request):
             username=username,
             email=email,
             is_admin=1 if bootstrap_admin else 0,
+            role_name="admin" if bootstrap_admin else "user",
             is_active=is_active,
             plan_name=plan_name,
             subscription_expires_at=sub_exp,
@@ -622,6 +641,119 @@ def admin_backup(request: Request):
         db.close()
 
 
+@router.post("/admin/backup/validate")
+async def admin_backup_validate(request: Request, backup_file: UploadFile = File(...)):
+    db = SessionLocal()
+    try:
+        admin = _require_admin_user(db, request)
+        raw = await backup_file.read()
+        try:
+            if backup_file.filename and backup_file.filename.lower().endswith(".gz"):
+                raw = gzip.decompress(raw)
+            parsed = json.loads(raw.decode("utf-8"))
+        except Exception:
+            raise HTTPException(400, "ملف النسخة الاحتياطية غير صالح")
+        users = parsed.get("users")
+        reports = parsed.get("reports")
+        if not isinstance(users, list) or not isinstance(reports, list):
+            raise HTTPException(400, "بنية النسخة الاحتياطية غير صحيحة")
+        log_event(
+            db,
+            "admin.backup.validated",
+            admin.id,
+            {"users_count": len(users), "reports_count": len(reports), "filename": backup_file.filename or "backup"},
+        )
+        return {"ok": True, "users_count": len(users), "reports_count": len(reports)}
+    finally:
+        db.close()
+
+
+@router.get("/admin/audit")
+def admin_audit(
+    request: Request,
+    limit: int = 200,
+    action: str = "",
+    user_id: str = "",
+    q: str = "",
+):
+    lim = max(1, min(int(limit or 200), 1000))
+    db = SessionLocal()
+    try:
+        _ = _require_admin_user(db, request)
+        query = db.query(AuditLog).order_by(AuditLog.created_at.desc())
+        if action.strip():
+            query = query.filter(AuditLog.action == action.strip())
+        if user_id.strip():
+            query = query.filter(AuditLog.user_id == user_id.strip())
+        rows = query.limit(lim).all()
+        qn = q.strip().lower()
+        items = []
+        for x in rows:
+            meta = x.meta_json if isinstance(x.meta_json, dict) else {}
+            if qn:
+                raw = f"{x.action} {x.user_id or ''} {json.dumps(meta, ensure_ascii=False)}".lower()
+                if qn not in raw:
+                    continue
+            items.append(
+                {
+                    "id": x.id,
+                    "user_id": x.user_id,
+                    "action": x.action,
+                    "meta": meta,
+                    "created_at": x.created_at.isoformat() + "Z" if x.created_at else None,
+                }
+            )
+        return {"items": items}
+    finally:
+        db.close()
+
+
+@router.post("/admin/notify-expiring")
+async def admin_notify_expiring(request: Request):
+    payload = await request.json()
+    days = max(1, min(int((payload or {}).get("days", 7) or 7), 30))
+    db = SessionLocal()
+    try:
+        admin = _require_admin_user(db, request)
+        now = dt.datetime.utcnow()
+        rows = (
+            db.query(User)
+            .filter(
+                User.is_active == 1,
+                User.subscription_expires_at.isnot(None),
+                User.subscription_expires_at > now,
+                User.subscription_expires_at <= now + dt.timedelta(days=days),
+                User.email.isnot(None),
+            )
+            .all()
+        )
+        sent = 0
+        failed = 0
+        for u in rows:
+            try:
+                send_plain_email(
+                    to_email=str(u.email),
+                    subject="تنبيه قرب انتهاء الاشتراك | OptimalMatch",
+                    body=(
+                        f"مرحباً {u.username},\n\n"
+                        f"اشتراكك ({u.plan_name}) سينتهي قريباً في {u.subscription_expires_at}.\n"
+                        "يرجى التواصل مع الإدارة للتجديد.\n"
+                    ),
+                )
+                sent += 1
+            except Exception:
+                failed += 1
+        log_event(
+            db,
+            "admin.notify_expiring.sent",
+            admin.id,
+            {"days": days, "targets": len(rows), "sent": sent, "failed": failed},
+        )
+        return {"ok": True, "targets": len(rows), "sent": sent, "failed": failed}
+    finally:
+        db.close()
+
+
 @router.get("/admin/users")
 def admin_users(request: Request, limit: int = 200):
     lim = max(1, min(int(limit or 200), 1000))
@@ -636,6 +768,7 @@ def admin_users(request: Request, limit: int = 200):
                     "username": u.username,
                     "email": u.email,
                     "is_admin": bool(int(u.is_admin or 0)),
+                    "role_name": (u.role_name or ("admin" if int(u.is_admin or 0) == 1 else "user")),
                     "is_active": bool(int(u.is_active or 0)),
                     "plan_name": u.plan_name or "free",
                     "subscription_expires_at": u.subscription_expires_at.isoformat() + "Z" if u.subscription_expires_at else None,
@@ -668,6 +801,14 @@ async def admin_update_user(request: Request):
         if "plan_name" in payload:
             p = str(payload.get("plan_name") or "free").strip().lower()
             target.plan_name = p or "free"
+        if "role_name" in payload:
+            role = str(payload.get("role_name") or "user").strip().lower()
+            allowed = {"user", "auditor", "support", "manager", "admin"}
+            if role not in allowed:
+                raise HTTPException(400, "role_name غير مدعوم")
+            target.role_name = role
+            if role == "admin":
+                target.is_admin = 1
         if "subscription_months" in payload:
             m = int(payload.get("subscription_months") or 0)
             if m > 0:
@@ -689,6 +830,7 @@ async def admin_update_user(request: Request):
                 "target_user_id": target.id,
                 "is_active": bool(int(target.is_active or 0)),
                 "plan_name": target.plan_name,
+                "role_name": target.role_name,
                 "subscription_expires_at": target.subscription_expires_at.isoformat() if target.subscription_expires_at else None,
             },
         )
@@ -712,6 +854,7 @@ def auth_subscription_status(request: Request):
         pending = str(user.plan_name or "").startswith("pending_")
         return {
             "is_admin": bool(int(user.is_admin or 0)),
+            "role_name": user.role_name or ("admin" if int(user.is_admin or 0) == 1 else "user"),
             "is_active": bool(int(user.is_active or 0)),
             "plan_name": user.plan_name or "free",
             "subscription_expires_at": exp.isoformat() + "Z" if exp else None,

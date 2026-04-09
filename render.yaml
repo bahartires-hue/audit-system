@@ -34,3 +34,16 @@ services:
         value: /var/data
       - key: AUDITFLOW_BACKUP_KEEP
         value: "14"
+  - type: cron
+    name: auditflow-notify-expiring-daily
+    runtime: python
+    rootDir: auditflow/backend
+    schedule: "0 8 * * *"
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.jobs.notify_expiring
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: AUDITFLOW_NOTIFY_DAYS
+        value: "7"

@@ -112,6 +112,9 @@
               <button type="button" id="b1_excel" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs active:bg-emerald-50 active:border-emerald-200 active:text-emerald-700" onclick="setType(1,'excel')">Excel</button>
               <button type="button" id="b1_pdf" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs" onclick="setType(1,'pdf')">PDF</button>
             </div>
+            <div class="flex justify-center mb-2">
+              <button type="button" id="convertPdf1Btn" class="px-3 py-1.5 rounded-lg border border-blue-200 text-blue-700 text-xs font-extrabold hover:bg-blue-50">تحويل PDF إلى Excel</button>
+            </div>
 
             <input type="file" id="file1" class="hidden" />
             <div id="dz1" class="dropzone dropzone--rich border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl bg-white dark:bg-slate-950 min-h-upload flex items-center justify-center cursor-pointer transition-colors" draggable="false">
@@ -136,6 +139,9 @@
             <div class="flex gap-2 justify-center mt-3 mb-3">
               <button type="button" id="b2_excel" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs" onclick="setType(2,'excel')">Excel</button>
               <button type="button" id="b2_pdf" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs" onclick="setType(2,'pdf')">PDF</button>
+            </div>
+            <div class="flex justify-center mb-2">
+              <button type="button" id="convertPdf2Btn" class="px-3 py-1.5 rounded-lg border border-blue-200 text-blue-700 text-xs font-extrabold hover:bg-blue-50">تحويل PDF إلى Excel</button>
             </div>
 
             <input type="file" id="file2" class="hidden" />
@@ -175,7 +181,7 @@
       </main>
     </div>
 
-    <script src="/static/app.js?v=12"></script>
+    <script src="/static/app.js?v=13"></script>
     <script>
       initAuthUI();
       let type1 = "excel";
@@ -250,6 +256,57 @@
       // activate defaults
       setType(1, "excel");
       setType(2, "excel");
+
+      async function convertPdfForInput(inputId, expectedType, fileNameId, buttonId, branch) {
+        const input = document.getElementById(inputId);
+        const fileName = document.getElementById(fileNameId);
+        const btn = document.getElementById(buttonId);
+        if (!input || !btn) return;
+        const file = input.files?.[0] || null;
+        if (!file) {
+          showToast("اختر ملف PDF أولًا", "#ef4444");
+          return;
+        }
+        const n = (file.name || "").toLowerCase();
+        if (!n.endsWith(".pdf")) {
+          showToast("الملف المختار ليس PDF", "#ef4444");
+          return;
+        }
+        setLoading(btn, true, "جارٍ التحويل...");
+        try {
+          syncCsrfFromCookie();
+          const csrf = localStorage.getItem("csrf_token") || "";
+          const fd = new FormData();
+          fd.append("file", file);
+          const res = await fetch("/convert/pdf-to-excel", {
+            method: "POST",
+            body: fd,
+            headers: { Accept: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "X-CSRF-Token": csrf },
+            credentials: "include",
+          });
+          if (!res.ok) throw new Error(await readErrorMessage(res));
+          const blob = await res.blob();
+          const newName = (file.name || "converted.pdf").replace(/\.pdf$/i, ".xlsx");
+          const converted = new File([blob], newName, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+          const dt = new DataTransfer();
+          dt.items.add(converted);
+          input.files = dt.files;
+          if (fileName) fileName.innerText = "تم التحويل: " + converted.name;
+          setType(branch, "excel");
+          showToast("تم التحويل إلى Excel ✔️", "#10b981");
+        } catch (e) {
+          showToast(e.message || "فشل تحويل PDF", "#ef4444");
+        } finally {
+          setLoading(btn, false, "تحويل PDF إلى Excel");
+        }
+      }
+
+      document.getElementById("convertPdf1Btn")?.addEventListener("click", () =>
+        convertPdfForInput("file1", () => type1, "fileName1", "convertPdf1Btn", 1)
+      );
+      document.getElementById("convertPdf2Btn")?.addEventListener("click", () =>
+        convertPdfForInput("file2", () => type2, "fileName2", "convertPdf2Btn", 2)
+      );
 
       async function startAnalyze() {
         const btn = document.getElementById("startBtn");

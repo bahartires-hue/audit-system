@@ -14,6 +14,7 @@ class User(Base):
     username = Column(String, unique=True, nullable=False, index=True)
     email = Column(String, unique=True, nullable=True, index=True)
     is_admin = Column(Integer, nullable=False, default=0)
+    role_name = Column(String, nullable=False, default="user")
     is_active = Column(Integer, nullable=False, default=1)
     plan_name = Column(String, nullable=False, default="free")
     subscription_expires_at = Column(DateTime, nullable=True)

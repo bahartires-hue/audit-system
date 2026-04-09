@@ -93,3 +93,30 @@ def send_smtp_test_email(to_email: str) -> None:
         if user:
             smtp.login(user, password)
         smtp.send_message(msg)
+
+
+def send_plain_email(to_email: str, subject: str, body: str) -> None:
+    if not _smtp_enabled():
+        raise RuntimeError("SMTP غير مفعّل: يرجى ضبط SMTP_HOST")
+    host = (os.getenv("SMTP_HOST") or "").strip()
+    port = int((os.getenv("SMTP_PORT") or "587").strip())
+    user = (os.getenv("SMTP_USER") or "").strip()
+    password = os.getenv("SMTP_PASS") or ""
+    sender = (os.getenv("SMTP_FROM") or user).strip()
+    if not sender:
+        raise RuntimeError("SMTP_FROM غير مضبوط")
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = sender
+    msg["To"] = to_email
+    msg.set_content(body)
+    with smtplib.SMTP(host, port, timeout=20) as smtp:
+        smtp.ehlo()
+        try:
+            smtp.starttls()
+            smtp.ehlo()
+        except Exception:
+            pass
+        if user:
+            smtp.login(user, password)
+        smtp.send_message(msg)
