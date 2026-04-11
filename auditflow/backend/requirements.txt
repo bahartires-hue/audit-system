@@ -9,6 +9,7 @@ reportlab
 python-multipart
 slowapi
 arabic-reshaper
-python-bidi
+# 0.6+ يبني عبر Rust/maturin ويفشل على Render (ملفات cargo للقراءة فقط). الإصدار 4.x نصّي فقط.
+python-bidi==0.4.2
 pytest
 httpx
