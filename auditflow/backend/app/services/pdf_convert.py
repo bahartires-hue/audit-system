@@ -109,10 +109,14 @@ def _prepare_dataframe_for_excel_export(df: pd.DataFrame) -> pd.DataFrame:
 def pdf_to_excel_bytes(file_path: str) -> bytes:
     df = read_pdf(file_path)
     if df is None or df.empty:
-        raise ValueError("تعذر استخراج بيانات من PDF. تأكد أن الملف نصي وفيه جدول واضح.")
+        raise ValueError(
+            "تعذر استخراج بيانات من PDF. جرّب ملفاً نصياً (وليس صورة ممسوحة)، أو صدّره من البرنامج كـ PDF، أو استخدم Excel/CSV."
+        )
+    raw = df.copy()
     df = _prepare_dataframe_for_excel_export(df)
+    # إن أزالت إزالة الترويسة كل الصفوف، نصدّر الجدول الخام كما استُخرج (أفضل من فشل كامل).
     if df is None or df.empty:
-        raise ValueError("تعذر إنتاج Excel بعد إزالة الترويسة. جرّب ملف PDF أوضح.")
+        df = raw
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="converted")

@@ -1114,6 +1114,45 @@ def _estimate_extractable_rows(df: Optional[pd.DataFrame]) -> int:
     return n
 
 
+def _extract_tables_best_effort(page: Any) -> List[List[List[Any]]]:
+    """يجرب عدة إعدادات؛ الجداول بدون خطوط واضحة تفشل مع الافتراضي أحياناً."""
+    variants: List[Optional[Dict[str, Any]]] = [
+        None,
+        {
+            "vertical_strategy": "lines",
+            "horizontal_strategy": "lines",
+            "intersection_tolerance": 5,
+            "snap_tolerance": 3,
+            "join_tolerance": 3,
+        },
+        {"vertical_strategy": "text", "horizontal_strategy": "text", "snap_tolerance": 5, "join_tolerance": 5},
+        {"vertical_strategy": "lines", "horizontal_strategy": "text", "intersection_tolerance": 5},
+    ]
+    best_tables: Optional[List[List[List[Any]]]] = None
+    best_score = -1
+    for ts in variants:
+        try:
+            if ts is None:
+                tables = page.extract_tables()
+            else:
+                tables = page.extract_tables(table_settings=ts)
+        except Exception:
+            continue
+        if not tables:
+            continue
+        score = 0
+        for table in tables:
+            if not table:
+                continue
+            for row in table:
+                if row and any(cell is not None and str(cell).strip() for cell in row):
+                    score += 1
+        if score > best_score:
+            best_score = score
+            best_tables = tables
+    return best_tables or []
+
+
 def read_pdf(file_path: str) -> Optional[pd.DataFrame]:
     table_df: Optional[pd.DataFrame] = None
     all_text = ""
@@ -1124,7 +1163,7 @@ def read_pdf(file_path: str) -> Optional[pd.DataFrame]:
             text_parts: List[str] = []
             for page in pdf.pages:
                 text_parts.append(page.extract_text() or "")
-                tables = page.extract_tables()
+                tables = _extract_tables_best_effort(page)
                 if not tables:
                     continue
                 for table in tables:
