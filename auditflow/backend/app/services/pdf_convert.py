@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import io
 import re
+import unicodedata
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -13,6 +15,35 @@ from .analyzer import (
     read_pdf,
     safe,
 )
+
+
+def _has_arabic_script(s: str) -> bool:
+    for c in s:
+        o = ord(c)
+        if 0x0600 <= o <= 0x06FF or 0xFB50 <= o <= 0xFDFF or 0xFE70 <= o <= 0xFEFF:
+            return True
+    return False
+
+
+def _excel_arabic_display(value: Any) -> Any:
+    """عرض عربي صحيح في Excel: NFKC + ربط الحروف + اتجاه ثنائي (مثل تصدير PDF)."""
+    if value is None:
+        return value
+    if isinstance(value, float) and pd.isna(value):
+        return value
+    if not isinstance(value, str):
+        return value
+    s = value.strip()
+    if not s or not _has_arabic_script(s):
+        return value
+    try:
+        import arabic_reshaper
+        from bidi.algorithm import get_display
+
+        t = unicodedata.normalize("NFKC", s)
+        return get_display(arabic_reshaper.reshape(t))
+    except Exception:
+        return value
 
 # تاريخ في السطر (كشوف عربية غالبًا يوم/شهر/سنة)
 _DATE_IN_ROW = re.compile(
@@ -117,10 +148,24 @@ def pdf_to_excel_bytes(file_path: str) -> bytes:
     # إن أزالت إزالة الترويسة كل الصفوف، نصدّر الجدول الخام كما استُخرج (أفضل من فشل كامل).
     if df is None or df.empty:
         df = raw
+
+    df = _apply_arabic_for_excel_export(df)
+
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="converted")
+        ws = writer.book["converted"]
+        ws.sheet_view.rightToLeft = True
     return out.getvalue()
+
+
+def _apply_arabic_for_excel_export(df: pd.DataFrame) -> pd.DataFrame:
+    """يُطبَّق على الأعمدة والخلايا النصية فقط؛ الأرقام تبقى أرقاماً."""
+    out = df.copy()
+    out.columns = [_excel_arabic_display(str(c)) for c in out.columns]
+    for col in out.columns:
+        out[col] = out[col].map(lambda x: _excel_arabic_display(x) if isinstance(x, str) else x)
+    return out
 
 
 def pdf_file_to_excel_bytes(pdf_path: str | Path) -> bytes:
