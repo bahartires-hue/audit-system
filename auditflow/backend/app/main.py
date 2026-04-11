@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import os
 import uuid
 from pathlib import Path
@@ -8,6 +9,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -70,6 +72,9 @@ async def ui_cache_headers(request: Request, call_next):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, HTTPException):
+        return await http_exception_handler(request, exc)
+    logging.getLogger("uvicorn.error").exception("Unhandled error: %s", request.url.path)
     if _wants_html(request):
         try:
             return FileResponse(str(FRONTEND_DIR / "error.html"), status_code=500, headers=dict(_HTML_NO_CACHE))
