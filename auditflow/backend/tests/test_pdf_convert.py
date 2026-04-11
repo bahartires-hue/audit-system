@@ -66,3 +66,16 @@ def test_convert_pdf_to_excel_ok():
     assert res.status_code == 200
     assert "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" in (res.headers.get("content-type") or "")
     assert len(res.content) > 100
+
+
+def test_convert_pdf_arabic_filename_header_ok():
+    """أسماء ملفات عربية في Content-Disposition كانت تسبب UnicodeEncodeError → 500."""
+    client = _auth_client()
+    pdf_bytes = _sample_pdf_bytes()
+    res = client.post(
+        "/convert/pdf-to-excel",
+        files={"file": ("بصره.pdf", pdf_bytes, "application/pdf")},
+    )
+    assert res.status_code == 200
+    cd = res.headers.get("content-disposition") or ""
+    assert "filename*=UTF-8''" in cd or "attachment" in cd

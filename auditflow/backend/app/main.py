@@ -101,6 +101,14 @@ def _wants_html(request: Request) -> bool:
     return ("text/html" in accept) or (accept == "" or "*/*" in accept)
 
 
+def _attachment_content_disposition(download_name: str) -> str:
+    """Content-Disposition مع دعم أسماء يونيكود (RFC 5987). القيمة latin-1 فقط تتسبب بـ 500 مع أسماء عربية."""
+    raw = (download_name or "download").strip() or "download"
+    ext = Path(raw).suffix
+    ascii_fallback = f"download{ext}" if ext else "download.bin"
+    return f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quote(raw, safe='')}"
+
+
 def _require_login_page(request: Request, html_path: Path) -> FileResponse | RedirectResponse:
     db = _SessionLocal()
     try:
@@ -334,7 +342,7 @@ def convert_pdf_to_excel(
     return Response(
         content=excel_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": _attachment_content_disposition(filename)},
     )
 
 
@@ -589,7 +597,7 @@ def download_report(request: Request, id: str = Query(...), format: str = Query(
             return Response(
                 content=excel_bytes,
                 media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+                headers={"Content-Disposition": _attachment_content_disposition(filename)},
             )
 
         if fmt == "pdf":
@@ -601,7 +609,7 @@ def download_report(request: Request, id: str = Query(...), format: str = Query(
             return Response(
                 content=pdf_bytes,
                 media_type="application/pdf",
-                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+                headers={"Content-Disposition": _attachment_content_disposition(filename)},
             )
 
         if fmt == "csv":
@@ -610,7 +618,7 @@ def download_report(request: Request, id: str = Query(...), format: str = Query(
             return Response(
                 content=csv_bytes,
                 media_type="text/csv; charset=utf-8",
-                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+                headers={"Content-Disposition": _attachment_content_disposition(filename)},
             )
 
         raise HTTPException(400, "format يجب أن يكون: excel أو pdf أو csv")
