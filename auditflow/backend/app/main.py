@@ -28,7 +28,7 @@ from .services.reports import mismatches_to_csv_bytes, mismatches_to_excel_bytes
 from .services.storage import save_upload_file
 
 # يظهر في رأس HTTP للتحقق من أن الخادم يقدّم أحدث واجهة بعد النشر
-UI_ASSET_VERSION = "13"
+UI_ASSET_VERSION = "14"
 
 _HTML_NO_CACHE = {
     "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
@@ -60,7 +60,7 @@ async def ui_cache_headers(request: Request, call_next):
     if path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-store, max-age=0, must-revalidate"
         response.headers["Pragma"] = "no-cache"
-    elif path in ("/", "/analyze", "/settings", "/login", "/reports", "/help", "/terms", "/privacy", "/user-agreement", "/about", "/contact", "/social") or path.startswith("/report"):
+    elif path in ("/", "/analyze", "/convert", "/settings", "/login", "/reports", "/help", "/terms", "/privacy", "/user-agreement", "/about", "/contact", "/social") or path.startswith("/report"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
@@ -116,6 +116,11 @@ def ui_home(request: Request):
 @app.get("/analyze", response_class=HTMLResponse)
 def ui_analyze(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "analyze.html")
+
+
+@app.get("/convert", response_class=HTMLResponse)
+def ui_convert(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "convert.html")
 
 
 @app.get("/settings", response_class=HTMLResponse)
