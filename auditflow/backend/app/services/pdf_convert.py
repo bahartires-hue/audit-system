@@ -156,7 +156,36 @@ def pdf_to_excel_bytes(file_path: str) -> bytes:
         df.to_excel(writer, index=False, sheet_name="converted")
         ws = writer.book["converted"]
         ws.sheet_view.rightToLeft = True
+        _format_converted_excel_sheet(ws)
     return out.getvalue()
+
+
+def _format_converted_excel_sheet(ws: Any) -> None:
+    """عرض أوضح: تفاف نص، عرض أعمدة يمنع قص التواريخ/العربي في الواجهة."""
+    from openpyxl.styles import Alignment
+    from openpyxl.utils import get_column_letter
+
+    body = Alignment(wrap_text=True, vertical="top")
+    header = Alignment(wrap_text=True, vertical="center", horizontal="center")
+
+    for cell in ws[1]:
+        cell.alignment = header
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+        for cell in row:
+            cell.alignment = body
+
+    max_scan = min(ws.max_row, 800)
+    for c in range(1, ws.max_column + 1):
+        max_len = 14
+        for r in range(1, max_scan + 1):
+            val = ws.cell(row=r, column=c).value
+            if val is None:
+                continue
+            s = str(val)
+            max_len = max(max_len, min(len(s), 120))
+        # عربي يحتاج عرضاً أكبر من عدد الحروف؛ حد أعلى معقول لـ Excel
+        width = min(max(max_len * 1.12 + 2, 14), 78)
+        ws.column_dimensions[get_column_letter(c)].width = width
 
 
 def _apply_arabic_for_excel_export(df: pd.DataFrame) -> pd.DataFrame:
