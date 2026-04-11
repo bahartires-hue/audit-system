@@ -9,10 +9,14 @@ from typing import Any
 import pandas as pd
 
 from .analyzer import (
+    _is_balance_column_name,
     _normalize_arabic_digits,
     _promote_ledger_header_row,
     detect_columns,
+    detect_document_type_column,
+    infer_document_kind_from_narrative,
     read_pdf,
+    resolve_document_columns,
     safe,
 )
 
@@ -137,6 +141,108 @@ def _prepare_dataframe_for_excel_export(df: pd.DataFrame) -> pd.DataFrame:
     return _trim_table_for_excel(df)
 
 
+def _narrative_blob(row: pd.Series, df: pd.DataFrame) -> str:
+    """نص للاستدلال على نوع المستند من أعمدة البيان/المستند."""
+    parts: list[str] = []
+    for name in ("بيان", "المستند", "مستند", "الشرح", "الوصف"):
+        if name not in df.columns:
+            continue
+        v = row.get(name)
+        if pd.notna(v) and str(v).strip():
+            parts.append(str(v).strip())
+    return " ".join(parts)
+
+
+def _infer_doc_type_fallback(narrative: str) -> str:
+    """كلمات شائعة في كشوف العملاء إذا لم يُستنتج النوع من القاموس الرئيسي."""
+    if not narrative:
+        return ""
+    s = unicodedata.normalize("NFKC", _normalize_arabic_digits(narrative))
+    if "افتتاح" in s or "الافتتاحي" in s or "ﺍﻺﻔﺘﺗﺎﺤﻳ" in narrative:
+        return "الرصيد الافتتاحي"
+    if "سند قبض" in s or "ﻕﺑﻗ ﺩﻧﺳ" in narrative:
+        if "بنك" in s or "ﻲﻛﻧﺑ" in narrative:
+            return "سند قبض بنكي"
+        return "سند قبض"
+    if "سند صرف" in s:
+        return "سند صرف"
+    if "فاتورة مبيعات" in s or ("مبيعات" in s and "فاتور" in s):
+        if "آجل" in s or "ﺝﻵﺍ" in narrative:
+            return "فاتورة مبيعات آجلة"
+        return "فاتورة مبيعات"
+    if "فاتورة مشتريات" in s or ("مشتريات" in s and "فاتور" in s):
+        return "فاتورة مشتريات"
+    if "مردود" in s:
+        return "مردود"
+    if "دفع" in s or "ﻊﻓﺩ" in narrative:
+        return "دفعة / تسوية"
+    return ""
+
+
+def _reframe_ledger_columns_clean(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    صيغة موحّدة للتصدير: التاريخ، نوع المستند، مدين، دائن، الرصيد (فارغ إن لم يُستخرج عمود رصيد).
+    """
+    if df is None or df.empty:
+        return df
+
+    debit_col, credit_col, date_col = detect_columns(df.copy())
+    if "التاريخ" in df.columns:
+        date_col = date_col or "التاريخ"
+    if debit_col is None and "مدين" in df.columns:
+        debit_col = "مدين"
+
+    if date_col is None or debit_col is None or date_col not in df.columns or debit_col not in df.columns:
+        return df
+
+    balance_col = None
+    for c in df.columns:
+        if _is_balance_column_name(c):
+            balance_col = c
+            break
+
+    doc_type_col = detect_document_type_column(df)
+    if not doc_type_col:
+        prim, _fb = resolve_document_columns(df)
+        doc_type_col = prim
+
+    rows: list[dict[str, Any]] = []
+    for _, row in df.iterrows():
+        dt = row.get(date_col)
+        deb = row.get(debit_col)
+        cre = row.get(credit_col) if credit_col and credit_col in df.columns else None
+        bal = row.get(balance_col) if balance_col and balance_col in df.columns else None
+
+        if doc_type_col and doc_type_col in df.columns:
+            raw_dt = row.get(doc_type_col)
+            doc_t = str(raw_dt).strip() if pd.notna(raw_dt) and str(raw_dt).strip() else ""
+        else:
+            doc_t = ""
+
+        if not doc_t:
+            nar = _narrative_blob(row, df)
+            doc_t = infer_document_kind_from_narrative(nar) or _infer_doc_type_fallback(nar)
+
+        def _blank_num(x: Any) -> Any:
+            if x is None:
+                return ""
+            if isinstance(x, float) and pd.isna(x):
+                return ""
+            return x
+
+        rows.append(
+            {
+                "التاريخ": dt,
+                "نوع المستند": doc_t or "",
+                "مدين": deb,
+                "دائن": _blank_num(cre),
+                "الرصيد": _blank_num(bal),
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
 def pdf_to_excel_bytes(file_path: str) -> bytes:
     df = read_pdf(file_path)
     if df is None or df.empty:
@@ -148,6 +254,8 @@ def pdf_to_excel_bytes(file_path: str) -> bytes:
     # إن أزالت إزالة الترويسة كل الصفوف، نصدّر الجدول الخام كما استُخرج (أفضل من فشل كامل).
     if df is None or df.empty:
         df = raw
+
+    df = _reframe_ledger_columns_clean(df)
 
     df = _apply_arabic_for_excel_export(df)
 
