@@ -212,16 +212,14 @@ def _normalize_debit_credit_by_context(doc_t: str, narrative: str, deb: Any, cre
     if major <= 0:
         return deb, cre
 
+    kind = (doc_t or "").strip()
     ns = unicodedata.normalize("NFKC", _normalize_arabic_digits(narrative or ""))
     has_credit_hint = ("دائن" in ns) or ("نئاد" in ns) or ("ﺩﺍﺋﻥ" in narrative)
     has_debit_hint = ("مدين" in ns) or ("نيدم" in ns) or ("ﻣﺩﻳﻥ" in narrative)
-    # تلميح صريح في السطر له الأولوية حتى لو الكشف الرقمي يبدو "قوياً".
-    if has_credit_hint and not has_debit_hint:
-        return "", round(major, 2)
-    if has_debit_hint and not has_credit_hint:
-        return round(major, 2), ""
+    # حالة شائعة في كشوف المخازن: عمود الحركة يلتقط المبلغ في المدين رغم أن النص يصرّح "دائن".
+    if "توريد مخزني" in kind and has_credit_hint and not has_debit_hint and d0 > 0 and c0 <= 0.0001:
+        return "", round(max(major, d0), 2)
 
-    kind = (doc_t or "").strip()
     # إذا المبلغ المستخرج في الخانات أصغر بكثير من المبلغ الموجود في البيان، نستخدم الأكبر.
     weak_detect = (max(d0, c0) <= 0) or (major >= max(d0, c0) * 1.8 and major >= 50)
     if not weak_detect:
@@ -231,10 +229,19 @@ def _normalize_debit_credit_by_context(doc_t: str, narrative: str, deb: Any, cre
         return "", round(major, 2)
     if "صرف" in kind:
         return round(major, 2), ""
+    if "توريد مخزني" in kind:
+        return "", round(major, 2)
+    if "صرف مخزني" in kind:
+        return round(major, 2), ""
     if "مبيعات" in kind or "افتتاح" in kind:
         return round(major, 2), ""
     if "مشتريات" in kind:
         return "", round(major, 2)
+    # في النوع غير المعروف فقط: استخدم التلميح الصريح دائن/مدين.
+    if has_credit_hint and not has_debit_hint:
+        return "", round(major, 2)
+    if has_debit_hint and not has_credit_hint:
+        return round(major, 2), ""
     # افتراضي: حافظ على الجانب الأقوى إن وجد، وإلا ضعها مدين
     if c0 > d0:
         return "", round(major, 2)
