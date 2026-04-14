@@ -177,6 +177,17 @@ def _looks_like_seq_column(series: pd.Series) -> bool:
     return uniq[0] in (0, 1) and all((b - a) == 1 for a, b in zip(uniq[:-1], uniq[1:]))
 
 
+def _looks_like_doc_number_column(series: pd.Series) -> bool:
+    """استبعاد عمود رقم السند في الجداول المجهولة (عادة أرقام صحيحة فريدة بلا كسور/أصفار)."""
+    nums = pd.to_numeric(series, errors="coerce").dropna()
+    if len(nums) < 4:
+        return False
+    frac_ratio = float(((nums - nums.round()).abs() > 0.0001).mean())
+    unique_ratio = float(nums.nunique()) / float(len(nums))
+    zero_ratio = float((nums.abs() <= 0.0001).mean())
+    return frac_ratio <= 0.02 and unique_ratio >= 0.85 and zero_ratio <= 0.05
+
+
 def _reframe_anonymous_pdf_table(df: pd.DataFrame) -> pd.DataFrame | None:
     """جداول PDF ذات أعمدة _c* بدون رؤوس واضحة."""
     if df is None or df.empty:
@@ -196,6 +207,8 @@ def _reframe_anonymous_pdf_table(df: pd.DataFrame) -> pd.DataFrame | None:
         if len(nums) < max(2, int(len(df) * 0.35)):
             continue
         if _looks_like_seq_column(s):
+            continue
+        if _looks_like_doc_number_column(s):
             continue
         if nums.max() <= 0:
             continue
@@ -232,9 +245,17 @@ def _reframe_anonymous_pdf_table(df: pd.DataFrame) -> pd.DataFrame | None:
     movement_set = set(movement_cols)
     numeric_candidates = [name for name in numeric_cols if name not in movement_set]
     if numeric_candidates:
+        # نُفضّل عموداً ذا سلوك مالي (كسور/فواصل عشرية) لتفادي التقاط أرقام السند.
+        def _money_like_score(col_name: str) -> tuple[float, int]:
+            src = df[col_name].astype(str).fillna("")
+            has_decimal_hint = float(src.str.contains(r"[\.٫]", regex=True).mean())
+            vals = pd.to_numeric(df[col_name], errors="coerce").dropna()
+            frac_ratio = float(((vals - vals.round()).abs() > 0.0001).mean()) if len(vals) else 0.0
+            return (max(has_decimal_hint, frac_ratio), list(df.columns).index(col_name))
+
         balance_numeric_col = max(
             numeric_candidates,
-            key=lambda n: list(df.columns).index(n),
+            key=_money_like_score,
         )
 
     date_pat = re.compile(r"\d{4}[-/]\d{2}[-/]\d{2}")
