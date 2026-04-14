@@ -7,11 +7,14 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import pdfplumber
 
 from .analyzer import (
+    _dataframe_from_pdf_grid,
     _is_balance_column_name,
     _normalize_arabic_digits,
     _promote_ledger_header_row,
+    _trim_pdf_table_df,
     detect_columns,
     detect_document_type_column,
     infer_document_kind_from_narrative,
@@ -200,6 +203,82 @@ def _extract_amount_candidates(text: str) -> list[float]:
     return vals
 
 
+def _extract_statement_rows_from_pdf_text(file_path: str) -> pd.DataFrame | None:
+    """
+    Fallback لكشوف الحساب التي تفشل extract_tables فيها.
+    يلتقط أسطر الحركة بصيغة: [رقم سند] [نوع] [تاريخ] [مدين] [دائن] [رصيد...]
+    """
+    date_pat = re.compile(
+        r"(\d{4}\s*\D\s*\d{2}\s*\D\s*\d{2})|(\d{2}\s*\D\s*\d{2}\s*\D\s*\d{4})"
+    )
+    rows: list[dict[str, Any]] = []
+    try:
+        with pdfplumber.open(file_path) as pdf:
+            for pg in pdf.pages:
+                txt = pg.extract_text() or ""
+                for raw in txt.splitlines():
+                    line = _normalize_arabic_digits((raw or "").replace("\x00", " "))
+                    line = re.sub(r"\s+", " ", line).strip()
+                    if not line:
+                        continue
+                    dm = date_pat.search(line)
+                    if not dm:
+                        continue
+                    date_s = dm.group(0).replace("/", "-").replace(".", "-")
+                    after = line[dm.end() :].strip()
+                    raw_nums = _NUM_TOKEN.findall(after)
+                    nums: list[str] = []
+                    for tok in raw_nums:
+                        v = safe(tok)
+                        if v is None:
+                            continue
+                        t = tok.strip()
+                        # تجاهل شظايا التاريخ مثل -04 و -01، والإبقاء على مبالغ/أصفار الحركة.
+                        looks_amount = ("." in t or "٫" in t or abs(float(v)) >= 50.0 or abs(float(v)) <= 0.0001)
+                        if looks_amount:
+                            nums.append(t)
+                    if len(nums) < 2:
+                        continue
+                    deb = safe(nums[0])
+                    cre = safe(nums[1])
+                    if deb is None and cre is None:
+                        continue
+                    if (deb is None or abs(float(deb)) <= 0.0001) and (cre is None or abs(float(cre)) <= 0.0001):
+                        continue
+                    bal = safe(nums[2]) if len(nums) >= 3 else None
+                    rows.append(
+                        {
+                            "التاريخ": date_s,
+                            "مدين": float(deb) if deb is not None else "",
+                            "دائن": float(cre) if cre is not None else "",
+                            "الرصيد": float(bal) if bal is not None else "",
+                            "بيان": raw.strip(),
+                            "مستند": "",
+                        }
+                    )
+    except Exception:
+        return None
+    if len(rows) < 2:
+        return None
+    return pd.DataFrame(rows)
+
+
+def _extract_table_df_direct(file_path: str) -> pd.DataFrame | None:
+    """استخراج مباشر من جداول pdfplumber لاستخدامه كـ fallback عند فشل read_pdf في اختيار المرشح الأفضل."""
+    try:
+        with pdfplumber.open(file_path) as pdf:
+            tables = [tb for pg in pdf.pages for tb in (pg.extract_tables() or [])]
+            grid_rows = [rw for tb in tables for rw in (tb or []) if rw and any(c is not None for c in rw)]
+        if not grid_rows:
+            return None
+        df = _dataframe_from_pdf_grid(grid_rows)
+        if df is None or df.empty:
+            return None
+        return _trim_pdf_table_df(df.reset_index(drop=True))
+    except Exception:
+        return None
+
+
 def _normalize_debit_credit_by_context(doc_t: str, narrative: str, deb: Any, cre: Any) -> tuple[Any, Any]:
     """تصحيح انحرافات استخراج مدين/دائن عندما يظهر المبلغ الحقيقي داخل البيان فقط."""
     d = safe(deb)
@@ -338,6 +417,14 @@ def _reframe_ledger_columns_clean(df: pd.DataFrame) -> pd.DataFrame:
 
 def pdf_to_excel_bytes(file_path: str) -> bytes:
     df = read_pdf(file_path)
+    if df is not None and len(df) <= 2:
+        table_df = _extract_table_df_direct(file_path)
+        if table_df is not None and len(table_df) > len(df):
+            df = table_df
+        else:
+            fallback_df = _extract_statement_rows_from_pdf_text(file_path)
+            if fallback_df is not None and len(fallback_df) > len(df):
+                df = fallback_df
     if df is None or df.empty:
         raise ValueError(
             "تعذر استخراج بيانات من PDF. جرّب ملفاً نصياً (وليس صورة ممسوحة)، أو صدّره من البرنامج كـ PDF، أو استخدم Excel/CSV."
