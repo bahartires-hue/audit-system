@@ -415,10 +415,17 @@ def _extract_amount_candidates(text: str) -> list[float]:
         if v is None:
             continue
         x = float(v)
+        ax = abs(x)
         # تجاهل الأرقام الصغيرة غالباً (رقم تسلسل/يوم)
-        if abs(x) < 1:
+        if ax < 1:
             continue
-        vals.append(abs(x))
+        # تجاهل السنة (مثل 2026) إذا انزلقت من التاريخ داخل السطر.
+        if x == int(x) and 1900 <= ax <= 2100:
+            continue
+        # تجاهل المعرفات الطويلة (رقم مرجع/فاتورة) التي ليست مبلغاً مالياً.
+        if x == int(x) and ax >= 100000:
+            continue
+        vals.append(ax)
     return vals
 
 
@@ -575,6 +582,38 @@ def _is_noise_ledger_row(dt: Any, doc_t: str, deb: Any, cre: Any, bal: Any) -> b
     return has_date and not has_doc and b0 <= 0.0001 and max(d0, c0) <= 1.0
 
 
+def _is_footer_or_meta_row(narrative: str, doc_t: str, deb: Any, cre: Any) -> bool:
+    s = _normalize_arabic_digits(unicodedata.normalize("NFKC", str(narrative or "")))
+    if not s.strip():
+        return False
+    markers = (
+        "تاريخ التقرير",
+        "طبع بواسطة",
+        "خلال مدة",
+        "يعتبر هذا الكشف",
+        "من تاريخ",
+        "الى تاريخ",
+        "إلى تاريخ",
+        "رقم العميل",
+        "العملة",
+        "اجمالي الرصيد",
+        "الإجمالي",
+    )
+    if any(m in s for m in markers):
+        return True
+    loose_markers = ("تقرير", "طبع", "بواسطة", "الكشف", "اعتراض", "مدة")
+    if sum(1 for m in loose_markers if m in s) >= 2:
+        return True
+    if doc_t:
+        return False
+    d = safe(deb)
+    c = safe(cre)
+    d0 = abs(float(d)) if d is not None else 0.0
+    c0 = abs(float(c)) if c is not None else 0.0
+    # أرقام صغيرة جدًا متداخلة مع نصوص الترويسة/التذييل غالباً ليست حركة.
+    return (0 < d0 <= 25.0 and 0 < c0 <= 25.0) or (max(d0, c0) <= 25.0 and ("شركة" in s or "تقرير" in s))
+
+
 def _reframe_ledger_columns_clean(df: pd.DataFrame) -> pd.DataFrame:
     """
     صيغة موحّدة للتصدير: التاريخ، نوع المستند، مدين، دائن، الرصيد (فارغ إن لم يُستخرج عمود رصيد).
@@ -657,6 +696,16 @@ def _reframe_ledger_columns_clean(df: pd.DataFrame) -> pd.DataFrame:
 
         if _is_noise_ledger_row(dt, doc_t, deb, cre, bal):
             continue
+        if _is_footer_or_meta_row(nar, doc_t, deb, cre):
+            continue
+        if not doc_t and not doc_no:
+            d = safe(deb)
+            c = safe(cre)
+            d0 = abs(float(d)) if d is not None else 0.0
+            c0 = abs(float(c)) if c is not None else 0.0
+            # شظايا مرجع/تذييل قد تظهر كدائن صغير بدون نوع مستند.
+            if c0 > 0.0001 and c0 < 1000.0 and d0 <= 0.0001:
+                continue
 
         rows.append(
             {
