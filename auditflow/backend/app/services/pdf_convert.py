@@ -226,6 +226,20 @@ def _normalize_debit_credit_by_context(doc_t: str, narrative: str, deb: Any, cre
     return round(major, 2), ""
 
 
+def _is_noise_ledger_row(dt: Any, doc_t: str, deb: Any, cre: Any, bal: Any) -> bool:
+    """حذف صفوف ضجيج شائعة (مثل رقم 1 القادم من الترويسة) قبل التصدير."""
+    d = safe(deb)
+    c = safe(cre)
+    b = safe(bal)
+    d0 = abs(float(d)) if d is not None else 0.0
+    c0 = abs(float(c)) if c is not None else 0.0
+    b0 = abs(float(b)) if b is not None else 0.0
+    has_doc = bool((doc_t or "").strip())
+    has_date = pd.notna(dt) and str(dt).strip() not in ("", "NaT", "nat")
+    # صف بتاريخ + مبلغ صغير جداً + بدون نوع مستند/رصيد => غالباً ليس حركة.
+    return has_date and not has_doc and b0 <= 0.0001 and max(d0, c0) <= 1.0
+
+
 def _reframe_ledger_columns_clean(df: pd.DataFrame) -> pd.DataFrame:
     """
     صيغة موحّدة للتصدير: التاريخ، نوع المستند، مدين، دائن، الرصيد (فارغ إن لم يُستخرج عمود رصيد).
@@ -279,7 +293,13 @@ def _reframe_ledger_columns_clean(df: pd.DataFrame) -> pd.DataFrame:
                 return ""
             if isinstance(x, float) and pd.isna(x):
                 return ""
+            v = safe(x)
+            if v is not None and abs(float(v)) <= 0.0001:
+                return ""
             return x
+
+        if _is_noise_ledger_row(dt, doc_t, deb, cre, bal):
+            continue
 
         rows.append(
             {
