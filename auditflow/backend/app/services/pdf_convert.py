@@ -258,13 +258,15 @@ def _reframe_anonymous_pdf_table(df: pd.DataFrame) -> pd.DataFrame | None:
         else:
             debit_val = round(amt, 2)
 
+        bal_val = _extract_balance_from_text(blob)
+
         out_rows.append(
             {
                 "التاريخ": date_s,
                 "نوع المستند": doc_t or "",
                 "مدين": debit_val,
                 "دائن": credit_val,
-                "الرصيد": "",
+                "الرصيد": bal_val,
             }
         )
 
@@ -321,6 +323,17 @@ def _extract_amount_candidates(text: str) -> list[float]:
             continue
         vals.append(abs(x))
     return vals
+
+
+def _extract_balance_from_text(text: str) -> Any:
+    s = _normalize_arabic_digits(text or "")
+    m = re.search(r"(?:مدين|دائن|نيدم|نئاد)\s*([-+]?\d[\d,٬٫\.]*)", s)
+    if not m:
+        return ""
+    v = safe(m.group(1))
+    if v is None or abs(float(v)) <= 0.0001:
+        return ""
+    return round(abs(float(v)), 2)
 
 
 def _extract_statement_rows_from_pdf_text(file_path: str) -> pd.DataFrame | None:
@@ -531,9 +544,6 @@ def _reframe_ledger_columns_clean(df: pd.DataFrame) -> pd.DataFrame:
             if x is None:
                 return ""
             if isinstance(x, float) and pd.isna(x):
-                return ""
-            v = safe(x)
-            if v is not None and abs(float(v)) <= 0.0001:
                 return ""
             return x
 
