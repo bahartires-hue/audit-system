@@ -213,6 +213,30 @@ def _reframe_anonymous_pdf_table(df: pd.DataFrame) -> pd.DataFrame | None:
     if len(movement_cols) < 2:
         movement_cols = numeric_cols[:2]
 
+    # عمود الرصيد النصي غالباً يحتوي "مدين/دائن" بشكل متكرر.
+    balance_text_col: str | None = None
+    best_hits = 0
+    for c in df.columns:
+        hits = 0
+        for v in df[c].tolist():
+            if pd.isna(v):
+                continue
+            s = _normalize_arabic_digits(str(v))
+            if ("مدين" in s) or ("دائن" in s) or ("نيدم" in s) or ("نئاد" in s):
+                hits += 1
+        if hits > best_hits:
+            best_hits = hits
+            balance_text_col = str(c)
+    # إن لم يظهر عمود رصيد نصي واضح، نُفضّل عموداً رقمياً ثالثاً (غالباً الرصيد الجاري).
+    balance_numeric_col: str | None = None
+    movement_set = set(movement_cols)
+    numeric_candidates = [name for name in numeric_cols if name not in movement_set]
+    if numeric_candidates:
+        balance_numeric_col = max(
+            numeric_candidates,
+            key=lambda n: list(df.columns).index(n),
+        )
+
     date_pat = re.compile(r"\d{4}[-/]\d{2}[-/]\d{2}")
     out_rows: list[dict[str, Any]] = []
     for _, row in df.iterrows():
@@ -258,7 +282,19 @@ def _reframe_anonymous_pdf_table(df: pd.DataFrame) -> pd.DataFrame | None:
         else:
             debit_val = round(amt, 2)
 
-        bal_val = _extract_balance_from_text(blob)
+        bal_val: Any = ""
+        if balance_numeric_col and balance_numeric_col in df.columns:
+            raw_bal = safe(row.get(balance_numeric_col))
+            if raw_bal is not None:
+                bal_val = round(abs(float(raw_bal)), 2)
+        if balance_text_col and balance_text_col in df.columns:
+            bv = row.get(balance_text_col)
+            if pd.notna(bv) and str(bv).strip():
+                text_bal = _extract_balance_from_text(str(bv))
+                if text_bal != "":
+                    bal_val = text_bal
+        if bal_val == "":
+            bal_val = _extract_balance_from_text(blob)
 
         out_rows.append(
             {
@@ -331,7 +367,7 @@ def _extract_balance_from_text(text: str) -> Any:
     if not m:
         return ""
     v = safe(m.group(1))
-    if v is None or abs(float(v)) <= 0.0001:
+    if v is None:
         return ""
     return round(abs(float(v)), 2)
 
