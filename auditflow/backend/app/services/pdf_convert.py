@@ -383,8 +383,12 @@ def _extract_amount_candidates(text: str) -> list[float]:
 
 
 def _extract_balance_from_text(text: str) -> Any:
-    s = _normalize_arabic_digits(text or "")
-    m = re.search(r"(?:مدين|دائن|نيدم|نئاد)\s*([-+]?\d[\d,٬٫\.]*)", s)
+    s0 = _normalize_arabic_digits(text or "")
+    s = unicodedata.normalize("NFKC", s0)
+    s = s.replace("ی", "ي").replace("ى", "ي").replace("ک", "ك")
+    m = re.search(r"(?:مدين|دائن|نيدم|نئاد|نئد|نادئ)\s*([-+]?\d[\d,٬٫\.]*)", s)
+    if not m:
+        m = re.search(r"([-+]?\d[\d,٬٫\.]*)\s*(?:مدين|دائن|نيدم|نئاد|نئد|نادئ)", s)
     if not m:
         return ""
     v = safe(m.group(1))
