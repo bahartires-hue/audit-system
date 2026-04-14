@@ -30,7 +30,7 @@ def _has_arabic_script(s: str) -> bool:
 
 
 def _excel_arabic_display(value: Any) -> Any:
-    """عرض عربي صحيح في Excel: NFKC + ربط الحروف + اتجاه ثنائي (مثل تصدير PDF)."""
+    """تطبيع خفيف للنص العربي دون قلب ترتيب الأرقام داخل Excel."""
     if value is None:
         return value
     if isinstance(value, float) and pd.isna(value):
@@ -41,11 +41,8 @@ def _excel_arabic_display(value: Any) -> Any:
     if not s or not _has_arabic_script(s):
         return value
     try:
-        import arabic_reshaper
-        from bidi.algorithm import get_display
-
-        t = unicodedata.normalize("NFKC", s)
-        return get_display(arabic_reshaper.reshape(t))
+        # NFKC يحول presentation forms لنص عربي قياسي بدون تغيير ترتيب الكلمات/الأرقام.
+        return unicodedata.normalize("NFKC", s)
     except Exception:
         return value
 
@@ -179,6 +176,56 @@ def _infer_doc_type_fallback(narrative: str) -> str:
     return ""
 
 
+_NUM_TOKEN = re.compile(r"[-+]?\d[\d,٬٫\.]*")
+
+
+def _extract_amount_candidates(text: str) -> list[float]:
+    vals: list[float] = []
+    s = _normalize_arabic_digits(text or "")
+    for tok in _NUM_TOKEN.findall(s):
+        v = safe(tok)
+        if v is None:
+            continue
+        x = float(v)
+        # تجاهل الأرقام الصغيرة غالباً (رقم تسلسل/يوم)
+        if abs(x) < 1:
+            continue
+        vals.append(abs(x))
+    return vals
+
+
+def _normalize_debit_credit_by_context(doc_t: str, narrative: str, deb: Any, cre: Any) -> tuple[Any, Any]:
+    """تصحيح انحرافات استخراج مدين/دائن عندما يظهر المبلغ الحقيقي داخل البيان فقط."""
+    d = safe(deb)
+    c = safe(cre)
+    d0 = abs(float(d)) if d is not None else 0.0
+    c0 = abs(float(c)) if c is not None else 0.0
+
+    nums = _extract_amount_candidates(narrative)
+    major = max(nums) if nums else 0.0
+    if major <= 0:
+        return deb, cre
+
+    kind = (doc_t or "").strip()
+    # إذا المبلغ المستخرج في الخانات أصغر بكثير من المبلغ الموجود في البيان، نستخدم الأكبر.
+    weak_detect = (max(d0, c0) <= 0) or (major >= max(d0, c0) * 1.8 and major >= 50)
+    if not weak_detect:
+        return deb, cre
+
+    if "قبض" in kind:
+        return "", round(major, 2)
+    if "صرف" in kind:
+        return round(major, 2), ""
+    if "مبيعات" in kind or "افتتاح" in kind:
+        return round(major, 2), ""
+    if "مشتريات" in kind:
+        return "", round(major, 2)
+    # افتراضي: حافظ على الجانب الأقوى إن وجد، وإلا ضعها مدين
+    if c0 > d0:
+        return "", round(major, 2)
+    return round(major, 2), ""
+
+
 def _reframe_ledger_columns_clean(df: pd.DataFrame) -> pd.DataFrame:
     """
     صيغة موحّدة للتصدير: التاريخ، نوع المستند، مدين، دائن، الرصيد (فارغ إن لم يُستخرج عمود رصيد).
@@ -222,6 +269,10 @@ def _reframe_ledger_columns_clean(df: pd.DataFrame) -> pd.DataFrame:
         if not doc_t:
             nar = _narrative_blob(row, df)
             doc_t = infer_document_kind_from_narrative(nar) or _infer_doc_type_fallback(nar)
+        else:
+            nar = _narrative_blob(row, df)
+
+        deb, cre = _normalize_debit_credit_by_context(doc_t, nar, deb, cre)
 
         def _blank_num(x: Any) -> Any:
             if x is None:
