@@ -396,7 +396,7 @@ def _promote_ledger_header_row(df: pd.DataFrame) -> pd.DataFrame:
     return dfc
 
 
-def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+def _detect_debit_credit_date_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     df.columns = df.columns.astype(str).str.strip()
 
     debit_col = None
@@ -492,37 +492,209 @@ def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Opti
     return debit_col, credit_col, date_col
 
 
+def _header_norm(value: Any) -> str:
+    s = unicodedata.normalize("NFKC", str(value or "")).lower().strip()
+    s = s.replace("_", " ").replace("-", " ")
+    s = re.sub(r"\s+", " ", s)
+    return s
+
+
+def _name_has_any(col: Any, needles: List[str]) -> bool:
+    n = _header_norm(col)
+    return any(k in n for k in needles)
+
+
+def _text_keyword_ratio(series: pd.Series, keywords: List[str]) -> float:
+    vals = [str(v).strip().lower() for v in series.tolist() if pd.notna(v) and str(v).strip()]
+    if not vals:
+        return 0.0
+    hit = 0
+    for v in vals:
+        if any(k in v for k in keywords):
+            hit += 1
+    return float(hit) / float(len(vals))
+
+
+def _doc_number_content_score(series: pd.Series) -> float:
+    vals = [str(v).strip() for v in series.tolist() if pd.notna(v) and str(v).strip()]
+    if len(vals) < 3:
+        return 0.0
+    pure_num = 0
+    dec_like = 0
+    for v in vals:
+        vn = _normalize_arabic_digits(v).replace(",", "").replace("٬", "")
+        if re.fullmatch(r"\d{2,20}", vn):
+            pure_num += 1
+        if re.fullmatch(r"\d+\.\d+", vn):
+            dec_like += 1
+    unique_ratio = float(len(set(vals))) / float(len(vals))
+    pure_ratio = float(pure_num) / float(len(vals))
+    dec_ratio = float(dec_like) / float(len(vals))
+    return max(0.0, pure_ratio * 0.7 + unique_ratio * 0.5 - dec_ratio * 0.7)
+
+
+def _extract_doc_number_text(value: Any) -> str:
+    s = _normalize_arabic_digits(str(value or ""))
+    nums = re.findall(r"\b\d{4,}\b", s)
+    if not nums:
+        nums = re.findall(r"\b\d{3,}\b", s)
+    filtered = []
+    for n in nums:
+        if len(n) == 4 and n.startswith(("19", "20")):
+            continue
+        filtered.append(n)
+    cand = filtered or nums
+    if not cand:
+        return ""
+    cand.sort(key=lambda x: (len(x), x))
+    return cand[-1]
+
+
+def detect_columns(df: pd.DataFrame) -> Dict[str, Optional[str]]:
+    """
+    اكتشاف ذكي للأعمدة المحاسبية دون الاعتماد على ترتيب الأعمدة.
+    """
+    if df is None or df.empty:
+        return {
+            "date": None,
+            "debit": None,
+            "credit": None,
+            "doc_number": None,
+            "doc_type": None,
+            "description": None,
+            "balance": None,
+        }
+    df = df.copy()
+    df.columns = df.columns.astype(str).str.strip()
+
+    debit_col, credit_col, date_col = _detect_debit_credit_date_columns(df)
+
+    balance_col: Optional[str] = None
+    for col in df.columns:
+        if _name_has_any(col, ["الرصيد", "رصيد", "balance", "running balance"]):
+            balance_col = col
+            break
+
+    doc_number_col: Optional[str] = None
+    doc_num_names = [
+        "رقم المستند",
+        "رقم السند",
+        "رقم سند",
+        "مرجع",
+        "reference",
+        "ref",
+        "doc no",
+        "document no",
+        "voucher",
+    ]
+    for col in df.columns:
+        if _name_has_any(col, doc_num_names):
+            doc_number_col = col
+            break
+    if doc_number_col is None:
+        best_col = None
+        best_score = 0.0
+        for col in df.columns:
+            if col in (debit_col, credit_col, date_col, balance_col):
+                continue
+            score = _doc_number_content_score(df[col])
+            if score > best_score:
+                best_col = col
+                best_score = score
+        if best_score >= 0.75:
+            doc_number_col = best_col
+
+    doc_type_col: Optional[str] = None
+    doc_type_names = ["نوع المستند", "المستند", "doc type", "document type", "type"]
+    doc_type_keywords = ["فاتورة", "سند", "قبض", "صرف", "مردود", "قيد", "invoice", "voucher", "receipt", "payment"]
+    for col in df.columns:
+        if col == doc_number_col:
+            continue
+        if _name_has_any(col, doc_type_names):
+            doc_type_col = col
+            break
+    if doc_type_col is None:
+        best_col = None
+        best_ratio = 0.0
+        for col in df.columns:
+            if col in (debit_col, credit_col, date_col, balance_col, doc_number_col):
+                continue
+            ratio = _text_keyword_ratio(df[col], doc_type_keywords)
+            if ratio > best_ratio:
+                best_col = col
+                best_ratio = ratio
+        if best_ratio >= 0.18:
+            doc_type_col = best_col
+
+    description_col: Optional[str] = None
+    desc_names = ["البيان", "الوصف", "description", "desc", "details", "الشرح"]
+    for col in df.columns:
+        if _name_has_any(col, desc_names):
+            description_col = col
+            break
+    if description_col is None:
+        best_col = None
+        best_len = 0.0
+        for col in df.columns:
+            if col in (debit_col, credit_col, date_col, balance_col, doc_number_col, doc_type_col):
+                continue
+            vals = [str(v).strip() for v in df[col].tolist() if pd.notna(v) and str(v).strip()]
+            if not vals:
+                continue
+            avg_len = sum(len(v) for v in vals) / len(vals)
+            if avg_len > best_len:
+                best_len = avg_len
+                best_col = col
+        if best_len >= 8:
+            description_col = best_col
+
+    return {
+        "date": date_col,
+        "debit": debit_col,
+        "credit": credit_col,
+        "doc_number": doc_number_col,
+        "doc_type": doc_type_col,
+        "description": description_col,
+        "balance": balance_col,
+    }
+
+
+def normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    cols = detect_columns(df)
+    out = pd.DataFrame(index=df.index.copy())
+    out["date"] = (
+        df[cols["date"]].map(_parse_datetime_cell_to_iso) if cols["date"] in df.columns else ""
+    )
+    out["debit"] = df[cols["debit"]].map(safe) if cols["debit"] in df.columns else ""
+    out["credit"] = df[cols["credit"]].map(safe) if cols["credit"] in df.columns else ""
+    out["doc_number"] = (
+        df[cols["doc_number"]].map(lambda v: str(v).strip() if pd.notna(v) else "")
+        if cols["doc_number"] in df.columns
+        else ""
+    )
+    out["doc_type"] = (
+        df[cols["doc_type"]].map(lambda v: str(v).strip() if pd.notna(v) else "")
+        if cols["doc_type"] in df.columns
+        else ""
+    )
+    out["description"] = (
+        df[cols["description"]].map(lambda v: str(v).strip() if pd.notna(v) else "")
+        if cols["description"] in df.columns
+        else ""
+    )
+    out["balance"] = df[cols["balance"]].map(safe) if cols["balance"] in df.columns else ""
+
+    # تحسين التوحيد عند غياب أعمدة صريحة في الملف المصدر.
+    if (out["doc_number"] == "").all() and "description" in out.columns:
+        out["doc_number"] = out["description"].map(_extract_doc_number_text)
+    if (out["doc_type"] == "").all() and "description" in out.columns:
+        out["doc_type"] = out["description"].map(lambda s: infer_document_kind_from_narrative(str(s or "")) or "")
+
+    return out[["date", "debit", "credit", "doc_number", "doc_type", "description", "balance"]]
+
+
 def detect_document_type_column(df: pd.DataFrame) -> Optional[str]:
-    for col in df.columns:
-        n = str(col).strip().lower()
-        if "رقم السند" in n or "رقم سند" in n or n in ("#", "م"):
-            continue
-        if n in ("العنوان", "عنوان", "العميل", "اسم العميل", "المورد"):
-            continue
-        if "ضريبي" in n or "سجل التجاري" in n:
-            continue
-        if "نوع المستند" in n:
-            return col
-    for col in df.columns:
-        n = str(col).strip().lower()
-        if "رقم السند" in n or "رقم سند" in n:
-            continue
-        if n == "المستند" or n.endswith(" المستند"):
-            return col
-    for col in df.columns:
-        n = str(col).strip().lower()
-        if "رقم السند" in n or "رقم سند" in n:
-            continue
-        if n == "نوع" or (n.startswith("نوع") and "عميل" not in n and "مورد" not in n and "حساب" not in n):
-            return col
-    for col in df.columns:
-        n = str(col).strip().lower()
-        if "رقم السند" in n or "رقم سند" in n:
-            continue
-        for key in ("نوع القيد", "نوع الحركة", "طبيعة القيد", "تصنيف الحركة"):
-            if key in n:
-                return col
-    return None
+    return detect_columns(df).get("doc_type")
 
 
 def resolve_document_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str]]:
@@ -1011,7 +1183,7 @@ def _trim_pdf_table_df(df: pd.DataFrame) -> pd.DataFrame:
             return dfc.iloc[idx + 1 :].reset_index(drop=True)
 
     try:
-        _, _, date_col = detect_columns(dfc.copy())
+        date_col = detect_columns(dfc.copy()).get("date")
     except Exception:
         return dfc
 
@@ -1099,7 +1271,8 @@ def _estimate_extractable_rows(df: Optional[pd.DataFrame]) -> int:
         dfc.columns = dfc.columns.astype(str).str.strip()
         dfc = _promote_ledger_header_row(dfc)
         dfc.columns = dfc.columns.astype(str).str.strip()
-        debit_col, credit_col, _ = detect_columns(dfc)
+        detected = detect_columns(dfc)
+        debit_col, credit_col = detected.get("debit"), detected.get("credit")
     except Exception:
         return 0
 
@@ -1410,7 +1583,10 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
     df.columns = df.columns.astype(str).str.strip()
     df = _promote_ledger_header_row(df)
     df.columns = df.columns.astype(str).str.strip()
-    debit_col, credit_col, date_col = detect_columns(df)
+    detected_cols = detect_columns(df)
+    debit_col = detected_cols.get("debit")
+    credit_col = detected_cols.get("credit")
+    date_col = detected_cols.get("date")
     doc_col, doc_fb = resolve_document_columns(df)
 
     data: List[Dict[str, Any]] = []

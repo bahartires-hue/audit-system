@@ -92,7 +92,8 @@ def _trim_table_for_excel(df: pd.DataFrame) -> pd.DataFrame:
             return dfc.iloc[idx:].reset_index(drop=True)
 
     try:
-        debit_col, credit_col, _ = detect_columns(dfc.copy())
+        detected_cols = detect_columns(dfc.copy())
+        debit_col, credit_col = detected_cols.get("debit"), detected_cols.get("credit")
     except Exception:
         return dfc
 
@@ -163,6 +164,31 @@ def _find_doc_number_column(df: pd.DataFrame) -> str | None:
     return None
 
 
+def _extract_doc_number_from_text(text: str) -> str:
+    s = _normalize_arabic_digits(str(text or ""))
+    if not s.strip():
+        return ""
+    nums = re.findall(r"\b\d{3,}\b", s)
+    return nums[-1] if nums else ""
+
+
+def _normalize_debit_credit_cells(deb: Any, cre: Any) -> tuple[Any, Any]:
+    """إظهار 0 في الطرف المقابل إذا وُجد مبلغ حقيقي في طرف واحد."""
+    d = safe(deb)
+    c = safe(cre)
+    d_has = d is not None and abs(float(d)) > 0.0001
+    c_has = c is not None and abs(float(c)) > 0.0001
+    if d_has and not c_has:
+        return round(abs(float(d)), 2), 0
+    if c_has and not d_has:
+        return 0, round(abs(float(c)), 2)
+    if d is None and c is None:
+        return "", ""
+    out_d = round(abs(float(d)), 2) if d is not None else 0
+    out_c = round(abs(float(c)), 2) if c is not None else 0
+    return out_d, out_c
+
+
 def _looks_like_seq_column(series: pd.Series) -> bool:
     vals = pd.to_numeric(series, errors="coerce").dropna()
     if len(vals) < 3:
@@ -220,6 +246,12 @@ def _reframe_anonymous_pdf_table(df: pd.DataFrame) -> pd.DataFrame | None:
         numeric_stats.append((name, zero_ratio, non_null, list(df.columns).index(c)))
     if not numeric_cols:
         return None
+
+    doc_no_col: str | None = None
+    for c in df.columns:
+        if _looks_like_doc_number_column(df[c]):
+            doc_no_col = str(c)
+            break
 
     # في كشوف الحساب: عمودا الحركة (مدين/دائن) غالباً فيهما أصفار كثيرة.
     movement_cols = [x[0] for x in sorted(numeric_stats, key=lambda t: (-t[1], -t[2], t[3]))[:2]]
@@ -302,6 +334,7 @@ def _reframe_anonymous_pdf_table(df: pd.DataFrame) -> pd.DataFrame | None:
             debit_val = round(amt, 2)
         else:
             debit_val = round(amt, 2)
+        debit_val, credit_val = _normalize_debit_credit_cells(debit_val, credit_val)
 
         bal_val: Any = ""
         if balance_numeric_col and balance_numeric_col in df.columns:
@@ -317,8 +350,15 @@ def _reframe_anonymous_pdf_table(df: pd.DataFrame) -> pd.DataFrame | None:
         if bal_val == "":
             bal_val = _extract_balance_from_text(blob)
 
+        doc_no = ""
+        if doc_no_col and doc_no_col in df.columns:
+            doc_no = _extract_doc_number_from_text(row.get(doc_no_col))
+        if not doc_no:
+            doc_no = _extract_doc_number_from_text(blob)
+
         out_rows.append(
             {
+                "رقم السند": doc_no,
                 "التاريخ": date_s,
                 "نوع المستند": doc_t or "",
                 "مدين": debit_val,
@@ -545,7 +585,10 @@ def _reframe_ledger_columns_clean(df: pd.DataFrame) -> pd.DataFrame:
     if anon is not None and not anon.empty:
         return anon
 
-    debit_col, credit_col, date_col = detect_columns(df.copy())
+    detected_cols = detect_columns(df.copy())
+    debit_col = detected_cols.get("debit")
+    credit_col = detected_cols.get("credit")
+    date_col = detected_cols.get("date")
     if "التاريخ" in df.columns:
         date_col = date_col or "التاريخ"
     if debit_col is None and "مدين" in df.columns:
@@ -586,6 +629,9 @@ def _reframe_ledger_columns_clean(df: pd.DataFrame) -> pd.DataFrame:
         deb = row.get(debit_col)
         cre = row.get(credit_col) if credit_col and credit_col in df.columns else None
         bal = row.get(balance_col) if balance_col and balance_col in df.columns else None
+        doc_no = ""
+        if doc_no_col and doc_no_col in df.columns:
+            doc_no = _extract_doc_number_from_text(row.get(doc_no_col))
 
         if doc_type_col and doc_type_col in df.columns:
             raw_dt = row.get(doc_type_col)
@@ -600,6 +646,7 @@ def _reframe_ledger_columns_clean(df: pd.DataFrame) -> pd.DataFrame:
             nar = _narrative_blob(row, df)
 
         deb, cre = _normalize_debit_credit_by_context(doc_t, nar, deb, cre)
+        deb, cre = _normalize_debit_credit_cells(deb, cre)
 
         def _blank_num(x: Any) -> Any:
             if x is None:
@@ -613,6 +660,7 @@ def _reframe_ledger_columns_clean(df: pd.DataFrame) -> pd.DataFrame:
 
         rows.append(
             {
+                "رقم السند": doc_no,
                 "التاريخ": dt,
                 "نوع المستند": doc_t or "",
                 "مدين": deb,
