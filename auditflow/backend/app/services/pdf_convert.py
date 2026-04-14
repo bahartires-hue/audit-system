@@ -153,6 +153,126 @@ def _narrative_blob(row: pd.Series, df: pd.DataFrame) -> str:
     return " ".join(parts)
 
 
+def _find_doc_number_column(df: pd.DataFrame) -> str | None:
+    for c in df.columns:
+        n = str(c).strip().lower()
+        if "رقم السند" in n or "رقم سند" in n:
+            return c
+        if "السند" in n and "رقم" in n:
+            return c
+    return None
+
+
+def _looks_like_seq_column(series: pd.Series) -> bool:
+    vals = pd.to_numeric(series, errors="coerce").dropna()
+    if len(vals) < 3:
+        return False
+    ints = vals.astype(int)
+    if ((vals - ints).abs() > 0.0001).any():
+        return False
+    uniq = sorted(set(ints.tolist()))
+    if len(uniq) < 3:
+        return False
+    # 1..N متتابعة غالباً تسلسل صفوف وليس مبلغاً.
+    return uniq[0] in (0, 1) and all((b - a) == 1 for a, b in zip(uniq[:-1], uniq[1:]))
+
+
+def _reframe_anonymous_pdf_table(df: pd.DataFrame) -> pd.DataFrame | None:
+    """جداول PDF ذات أعمدة _c* بدون رؤوس واضحة."""
+    if df is None or df.empty:
+        return None
+    col_names = [str(c) for c in df.columns]
+    if not any(n.startswith("_c") for n in col_names):
+        return None
+    if any(k in " ".join(col_names) for k in ("التاريخ", "مدين", "دائن")):
+        return None
+
+    # أعمدة رقمية مرشحة (مع استبعاد تسلسل الصف).
+    numeric_cols: list[str] = []
+    numeric_stats: list[tuple[str, float, int, int]] = []  # (col, zero_ratio, valid_count, col_idx)
+    for c in df.columns:
+        s = df[c]
+        nums = pd.to_numeric(s, errors="coerce").dropna()
+        if len(nums) < max(2, int(len(df) * 0.35)):
+            continue
+        if _looks_like_seq_column(s):
+            continue
+        if nums.max() <= 0:
+            continue
+        name = str(c)
+        numeric_cols.append(name)
+        non_null = len(nums)
+        zeros = int((nums.abs() <= 0.0001).sum())
+        zero_ratio = float(zeros) / float(non_null) if non_null else 0.0
+        numeric_stats.append((name, zero_ratio, non_null, list(df.columns).index(c)))
+    if not numeric_cols:
+        return None
+
+    # في كشوف الحساب: عمودا الحركة (مدين/دائن) غالباً فيهما أصفار كثيرة.
+    movement_cols = [x[0] for x in sorted(numeric_stats, key=lambda t: (-t[1], -t[2], t[3]))[:2]]
+    if len(movement_cols) < 2:
+        movement_cols = numeric_cols[:2]
+
+    date_pat = re.compile(r"\d{4}[-/]\d{2}[-/]\d{2}")
+    out_rows: list[dict[str, Any]] = []
+    for _, row in df.iterrows():
+        blob_parts: list[str] = []
+        for c in df.columns:
+            v = row.get(c)
+            if pd.notna(v) and str(v).strip():
+                blob_parts.append(str(v).strip())
+        blob = _normalize_arabic_digits(" ".join(blob_parts))
+        dm = date_pat.search(blob)
+        if not dm:
+            continue
+        date_s = dm.group(0).replace("/", "-")
+        doc_t = infer_document_kind_from_narrative(blob) or _infer_doc_type_fallback(blob)
+
+        row_vals: list[float] = []
+        for c in movement_cols:
+            v = safe(row.get(c))
+            if v is None:
+                continue
+            x = abs(float(v))
+            if x <= 0.0001:
+                continue
+            row_vals.append(x)
+        if not row_vals:
+            continue
+        amt = max(row_vals)
+
+        ns = unicodedata.normalize("NFKC", blob)
+        has_credit = ("دائن" in ns) or ("نئاد" in ns) or ("ﺩﺍﺋﻥ" in blob)
+        has_debit = ("مدين" in ns) or ("نيدم" in ns) or ("ﻣﺩﻳﻥ" in blob)
+        debit_val: Any = ""
+        credit_val: Any = ""
+        kind = (doc_t or "")
+        if "توريد" in kind:
+            credit_val = round(amt, 2)
+        elif "صرف" in kind:
+            debit_val = round(amt, 2)
+        elif has_credit and not has_debit:
+            credit_val = round(amt, 2)
+        elif has_debit and not has_credit:
+            debit_val = round(amt, 2)
+        else:
+            debit_val = round(amt, 2)
+
+        out_rows.append(
+            {
+                "التاريخ": date_s,
+                "نوع المستند": doc_t or "",
+                "مدين": debit_val,
+                "دائن": credit_val,
+                "الرصيد": "",
+            }
+        )
+
+    if len(out_rows) < 2:
+        return None
+    return pd.DataFrame(out_rows)
+
+
 def _infer_doc_type_fallback(narrative: str) -> str:
     """كلمات شائعة في كشوف العملاء إذا لم يُستنتج النوع من القاموس الرئيسي."""
     if not narrative:
@@ -347,6 +467,9 @@ def _reframe_ledger_columns_clean(df: pd.DataFrame) -> pd.DataFrame:
     """
     if df is None or df.empty:
         return df
+    anon = _reframe_anonymous_pdf_table(df)
+    if anon is not None and not anon.empty:
+        return anon
 
     debit_col, credit_col, date_col = detect_columns(df.copy())
     if "التاريخ" in df.columns:
@@ -355,6 +478,21 @@ def _reframe_ledger_columns_clean(df: pd.DataFrame) -> pd.DataFrame:
         debit_col = "مدين"
 
     if date_col is None or debit_col is None or date_col not in df.columns or debit_col not in df.columns:
+        return df
+
+    doc_no_col = _find_doc_number_column(df)
+    # بعض ملفات PDF تُسند رقم السند خطأً إلى دائن/مدين عبر detect_columns.
+    if doc_no_col is not None:
+        if debit_col == doc_no_col:
+            debit_col = "مدين" if "مدين" in df.columns else None
+        if credit_col == doc_no_col:
+            credit_col = "دائن" if "دائن" in df.columns else None
+    if debit_col is None and "مدين" in df.columns:
+        debit_col = "مدين"
+    if credit_col is None and "دائن" in df.columns:
+        credit_col = "دائن"
+
+    if date_col is None or debit_col is None:
         return df
 
     balance_col = None
