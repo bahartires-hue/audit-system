@@ -163,6 +163,12 @@ def _infer_doc_type_fallback(narrative: str) -> str:
         return "سند قبض"
     if "سند صرف" in s:
         return "سند صرف"
+    if ("توريد" in s and "مخزن" in s) or ("ديروت" in s and "ينزخم" in s) or ("ﻲﻧزﺧﻣ" in narrative and "دﯾروﺗ" in narrative):
+        return "توريد مخزني"
+    if ("صرف" in s and "مخزن" in s) or ("فرص" in s and "ينزخم" in s) or ("ﻲﻧزﺧﻣ" in narrative and "فرﺻ" in narrative):
+        return "صرف مخزني"
+    if "تحويل" in s and "مخزن" in s:
+        return "تحويل مخزني"
     if "فاتورة مبيعات" in s or ("مبيعات" in s and "فاتور" in s):
         if "آجل" in s or "ﺝﻵﺍ" in narrative:
             return "فاتورة مبيعات آجلة"
@@ -205,6 +211,15 @@ def _normalize_debit_credit_by_context(doc_t: str, narrative: str, deb: Any, cre
     major = max(nums) if nums else 0.0
     if major <= 0:
         return deb, cre
+
+    ns = unicodedata.normalize("NFKC", _normalize_arabic_digits(narrative or ""))
+    has_credit_hint = ("دائن" in ns) or ("نئاد" in ns) or ("ﺩﺍﺋﻥ" in narrative)
+    has_debit_hint = ("مدين" in ns) or ("نيدم" in ns) or ("ﻣﺩﻳﻥ" in narrative)
+    # تلميح صريح في السطر له الأولوية حتى لو الكشف الرقمي يبدو "قوياً".
+    if has_credit_hint and not has_debit_hint:
+        return "", round(major, 2)
+    if has_debit_hint and not has_credit_hint:
+        return round(major, 2), ""
 
     kind = (doc_t or "").strip()
     # إذا المبلغ المستخرج في الخانات أصغر بكثير من المبلغ الموجود في البيان، نستخدم الأكبر.
