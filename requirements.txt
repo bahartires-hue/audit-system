@@ -1,8 +1,1 @@
-fastapi
-uvicorn
-pandas
-sqlalchemy
-psycopg2-binary
-python-multipart
-openpyxl
-pdfplumber
+-r auditflow/backend/requirements.txt
