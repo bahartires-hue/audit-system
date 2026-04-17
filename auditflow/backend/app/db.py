@@ -25,6 +25,8 @@ if DATABASE_URL:
         DATABASE_URL = "postgresql://" + DATABASE_URL[len("postgres://") :]
     engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 else:
+    # Ensure SQLite directory exists on fresh/containerized deploys (Railway/Render).
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     engine = create_engine(
         f"sqlite:///{DB_PATH}",
         connect_args={"check_same_thread": False},
