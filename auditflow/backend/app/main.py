@@ -21,6 +21,7 @@ from .auth_core import log_event, require_csrf, require_user
 from .db import SessionLocal as _SessionLocal
 from .models import AnalysisReport, User, init_db
 from .rate_limit import limiter
+from .routers.accounting_api import router as accounting_router
 from .routers.auth_api import router as auth_router
 from .services.analyzer import analyze as analyze_pairs
 from .services.analyzer import compute_summary, process
@@ -90,6 +91,7 @@ FRONTEND_DIR = BASE_DIR / "frontend"
 
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 app.include_router(auth_router)
+app.include_router(accounting_router)
 
 init_db()
 
