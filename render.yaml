@@ -1,5 +1,5 @@
-# Blueprint لـ Render.com — جذر المستودع: audit-system
-# يشغّل الـ backend (FastAPI) من auditflow/backend مع واجهة frontend المدمجة.
+# Blueprint مجاني مبسّط لـ Render.com — Web service فقط.
+# مهيأ للخطة Free بدون disk أو خدمات إضافية مدفوعة.
 services:
   - type: web
     name: auditflow
@@ -11,39 +11,5 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.9"
-      - key: AUDITFLOW_DATA_ROOT
-        value: /var/data
       - key: AUDITFLOW_COOKIE_SECURE
         value: "1"
-    disk:
-      name: auditflow-data
-      mountPath: /var/data
-      sizeGB: 1
-  - type: cron
-    name: auditflow-backup-nightly
-    runtime: python
-    rootDir: auditflow/backend
-    schedule: "0 2 * * *"
-    plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: python -m app.jobs.backup_snapshot
-    envVars:
-      - key: PYTHON_VERSION
-        value: "3.11.9"
-      - key: AUDITFLOW_DATA_ROOT
-        value: /var/data
-      - key: AUDITFLOW_BACKUP_KEEP
-        value: "14"
-  - type: cron
-    name: auditflow-notify-expiring-daily
-    runtime: python
-    rootDir: auditflow/backend
-    schedule: "0 8 * * *"
-    plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: python -m app.jobs.notify_expiring
-    envVars:
-      - key: PYTHON_VERSION
-        value: "3.11.9"
-      - key: AUDITFLOW_NOTIFY_DAYS
-        value: "7"
