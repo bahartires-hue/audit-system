@@ -42,6 +42,7 @@
         white-space: nowrap;
         color: #1f2937;
         background: #f9fafb;
+        cursor: pointer;
       }
       .ops-tab.is-active {
         box-shadow: inset 0 0 0 2px #1f2937;
@@ -69,6 +70,12 @@
       }
       .ops-tab--fuchsia {
         background: #f8b4d9;
+      }
+      .module-pane {
+        display: none;
+      }
+      .module-pane.is-open {
+        display: block;
       }
     </style>
   </head>
@@ -131,18 +138,18 @@
       <main class="erp-main space-y-4">
         <section class="erp-card">
           <div class="ops-ribbon" aria-label="شريط العمليات">
-            <button class="ops-tab ops-tab--slate">🧾 المخزن والأصناف</button>
-            <button class="ops-tab ops-tab--cyan">🛒 المشتريات والموردين</button>
-            <button class="ops-tab ops-tab--lime">💰 المصروفات والعهد</button>
-            <button class="ops-tab ops-tab--mint">📚 الحسابات والسندات</button>
-            <button class="ops-tab ops-tab--sand">📊 تقارير الحسابات</button>
-            <button class="ops-tab ops-tab--rose">🚚 تقارير المخزون</button>
-            <button class="ops-tab ops-tab--yellow">⚙️ نظام الإدارة</button>
-            <button class="ops-tab ops-tab--fuchsia is-active">🛍️ المتجر</button>
+            <button type="button" class="ops-tab ops-tab--slate" data-module-tab="inventory">🧾 المخزن والأصناف</button>
+            <button type="button" class="ops-tab ops-tab--cyan" data-module-tab="purchases">🛒 المشتريات والموردين</button>
+            <button type="button" class="ops-tab ops-tab--lime" data-module-tab="expenses">💰 المصروفات والعهد</button>
+            <button type="button" class="ops-tab ops-tab--mint is-active" data-module-tab="accounting">📚 الحسابات والسندات</button>
+            <button type="button" class="ops-tab ops-tab--sand" data-module-tab="reports">📊 تقارير الحسابات</button>
+            <button type="button" class="ops-tab ops-tab--rose" data-module-tab="stock_reports">🚚 تقارير المخزون</button>
+            <button type="button" class="ops-tab ops-tab--yellow" data-module-tab="admin">⚙️ نظام الإدارة</button>
+            <button type="button" class="ops-tab ops-tab--fuchsia" data-module-tab="store">🛍️ المتجر</button>
           </div>
         </section>
 
-        <section class="erp-card">
+        <section class="erp-card module-pane is-open" data-module-pane="accounting">
           <h1 class="text-lg font-extrabold mb-2">إدارة الحسابات</h1>
           <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
             <input id="accCode" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="كود الحساب" />
@@ -161,7 +168,7 @@
           <div id="accountsHost" class="mt-3 text-sm"></div>
         </section>
 
-        <section class="erp-card">
+        <section class="erp-card module-pane is-open" data-module-pane="accounting purchases">
           <h2 class="text-lg font-extrabold mb-2">العملاء والموردون</h2>
           <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
             <input id="cpName" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم الطرف" />
@@ -178,7 +185,7 @@
           <div id="counterpartiesHost" class="mt-3 text-sm"></div>
         </section>
 
-        <section class="erp-card">
+        <section class="erp-card module-pane is-open" data-module-pane="accounting purchases">
           <h2 class="text-lg font-extrabold mb-2">إنشاء فاتورة (بيع/شراء)</h2>
           <div class="grid grid-cols-1 md:grid-cols-6 gap-2 mb-2">
             <select id="invType" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
@@ -205,7 +212,7 @@
           <div id="invoicesHost" class="mt-3 text-sm"></div>
         </section>
 
-        <section class="erp-card">
+        <section class="erp-card module-pane is-open" data-module-pane="accounting">
           <h2 class="text-lg font-extrabold mb-2">سند قبض / صرف</h2>
           <div class="grid grid-cols-1 md:grid-cols-7 gap-2">
             <select id="vType" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
@@ -222,7 +229,7 @@
           <div id="vouchersHost" class="mt-3 text-sm"></div>
         </section>
 
-        <section class="erp-card">
+        <section class="erp-card module-pane is-open" data-module-pane="accounting admin">
           <h2 class="text-lg font-extrabold mb-2">الفترات المحاسبية</h2>
           <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
             <input id="periodName" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم الفترة" />
@@ -233,7 +240,7 @@
           <div id="periodsHost" class="mt-3 text-sm"></div>
         </section>
 
-        <section class="erp-card">
+        <section class="erp-card module-pane is-open" data-module-pane="reports accounting">
           <h2 class="text-lg font-extrabold mb-2">التقارير المحاسبية</h2>
           <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
             <input id="reportFrom" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
@@ -243,6 +250,14 @@
           </div>
           <div id="trialBalanceHost" class="text-sm mb-3"></div>
           <div id="ledgerHost" class="text-sm"></div>
+        </section>
+
+        <section class="erp-card module-pane" data-module-pane="inventory stock_reports expenses store">
+          <h2 class="text-lg font-extrabold mb-2">هذه الوحدة قيد التجهيز</h2>
+          <div class="rounded-xl border px-4 py-4 text-sm opacity-80">
+            اخترت وحدة من الشريط العلوي، وتم تجهيز واجهة التبويبات بنفس نمط النظام المرجعي.
+            سنربط وظائفها التفصيلية (نماذج + تقارير + API) في المرحلة التالية.
+          </div>
         </section>
       </main>
     </div>
@@ -452,6 +467,17 @@
         }
 
         function wireActions() {
+          document.querySelectorAll("[data-module-tab]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const active = btn.getAttribute("data-module-tab") || "";
+              document.querySelectorAll("[data-module-tab]").forEach((x) => x.classList.toggle("is-active", x === btn));
+              document.querySelectorAll("[data-module-pane]").forEach((pane) => {
+                const keys = String(pane.getAttribute("data-module-pane") || "").split(/\s+/).filter(Boolean);
+                pane.classList.toggle("is-open", keys.includes(active));
+              });
+            });
+          });
+
           document.getElementById("accCreateBtn")?.addEventListener("click", async () => {
             try {
               await apiPostJson("/accounting/accounts", {
