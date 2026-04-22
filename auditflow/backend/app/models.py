@@ -167,7 +167,10 @@ class AccountingInvoice(Base):
     invoice_date = Column(DateTime, nullable=False, index=True)
     counterparty_id = Column(String, ForeignKey("counterparties.id"), nullable=False, index=True)
     description = Column(Text, nullable=True)
+    subtotal_amount = Column(Float, nullable=False, default=0.0)
+    tax_amount = Column(Float, nullable=False, default=0.0)
     total_amount = Column(Float, nullable=False, default=0.0)
+    paid_amount = Column(Float, nullable=False, default=0.0)
     status = Column(String, nullable=False, default="draft", index=True)  # draft | posted
     offset_account_id = Column(String, ForeignKey("accounts.id"), nullable=False, index=True)
     journal_entry_id = Column(String, ForeignKey("journal_entries.id"), nullable=True, index=True)
@@ -183,7 +186,39 @@ class AccountingInvoiceLine(Base):
     description = Column(Text, nullable=True)
     qty = Column(Float, nullable=False, default=1.0)
     unit_price = Column(Float, nullable=False, default=0.0)
+    tax_rate = Column(Float, nullable=False, default=0.0)
+    net_amount = Column(Float, nullable=False, default=0.0)
+    tax_amount = Column(Float, nullable=False, default=0.0)
     amount = Column(Float, nullable=False, default=0.0)
+
+
+class AccountingPeriod(Base):
+    __tablename__ = "accounting_periods"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    start_date = Column(DateTime, nullable=False, index=True)
+    end_date = Column(DateTime, nullable=False, index=True)
+    is_closed = Column(Integer, nullable=False, default=0, index=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class PaymentVoucher(Base):
+    __tablename__ = "payment_vouchers"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    voucher_type = Column(String, nullable=False, index=True)  # receipt | payment
+    voucher_no = Column(String, nullable=False, index=True)
+    voucher_date = Column(DateTime, nullable=False, index=True)
+    counterparty_id = Column(String, ForeignKey("counterparties.id"), nullable=True, index=True)
+    account_id = Column(String, ForeignKey("accounts.id"), nullable=False, index=True)
+    cash_account_id = Column(String, ForeignKey("accounts.id"), nullable=False, index=True)
+    amount = Column(Float, nullable=False, default=0.0)
+    description = Column(Text, nullable=True)
+    journal_entry_id = Column(String, ForeignKey("journal_entries.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
 
 def init_db() -> None:

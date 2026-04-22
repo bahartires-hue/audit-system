@@ -23,6 +23,12 @@ def _migrate_postgresql() -> None:
         "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS tags_json JSON DEFAULT '[]'::json",
         "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS notes TEXT",
         "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS archived INTEGER DEFAULT 0",
+        "ALTER TABLE accounting_invoices ADD COLUMN IF NOT EXISTS subtotal_amount DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE accounting_invoices ADD COLUMN IF NOT EXISTS tax_amount DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE accounting_invoices ADD COLUMN IF NOT EXISTS paid_amount DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE accounting_invoice_lines ADD COLUMN IF NOT EXISTS tax_rate DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE accounting_invoice_lines ADD COLUMN IF NOT EXISTS net_amount DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE accounting_invoice_lines ADD COLUMN IF NOT EXISTS tax_amount DOUBLE PRECISION DEFAULT 0",
     ]
     with engine.begin() as conn:
         for sql in stmts:
@@ -40,6 +46,12 @@ def _migrate_postgresql() -> None:
                 "UPDATE users SET preferences_json = '{}'::json WHERE preferences_json IS NULL"
             )
         )
+        conn.execute(text("UPDATE accounting_invoices SET subtotal_amount = COALESCE(total_amount, 0) WHERE subtotal_amount IS NULL"))
+        conn.execute(text("UPDATE accounting_invoices SET tax_amount = 0 WHERE tax_amount IS NULL"))
+        conn.execute(text("UPDATE accounting_invoices SET paid_amount = 0 WHERE paid_amount IS NULL"))
+        conn.execute(text("UPDATE accounting_invoice_lines SET tax_rate = 0 WHERE tax_rate IS NULL"))
+        conn.execute(text("UPDATE accounting_invoice_lines SET net_amount = COALESCE(amount, 0) WHERE net_amount IS NULL"))
+        conn.execute(text("UPDATE accounting_invoice_lines SET tax_amount = 0 WHERE tax_amount IS NULL"))
         conn.execute(text("UPDATE users SET is_active = 1 WHERE is_active IS NULL"))
         conn.execute(text("UPDATE users SET plan_name = 'free' WHERE plan_name IS NULL"))
         conn.execute(
@@ -97,8 +109,34 @@ def run_migrations() -> None:
             if "archived" not in rcols:
                 conn.execute(text("ALTER TABLE analysis_reports ADD COLUMN archived INTEGER DEFAULT 0"))
 
+        r4 = conn.execute(text("PRAGMA table_info(accounting_invoices)"))
+        inv_cols = [row[1] for row in r4.fetchall()]
+        if inv_cols:
+            if "subtotal_amount" not in inv_cols:
+                conn.execute(text("ALTER TABLE accounting_invoices ADD COLUMN subtotal_amount REAL DEFAULT 0"))
+            if "tax_amount" not in inv_cols:
+                conn.execute(text("ALTER TABLE accounting_invoices ADD COLUMN tax_amount REAL DEFAULT 0"))
+            if "paid_amount" not in inv_cols:
+                conn.execute(text("ALTER TABLE accounting_invoices ADD COLUMN paid_amount REAL DEFAULT 0"))
+
+        r5 = conn.execute(text("PRAGMA table_info(accounting_invoice_lines)"))
+        inv_line_cols = [row[1] for row in r5.fetchall()]
+        if inv_line_cols:
+            if "tax_rate" not in inv_line_cols:
+                conn.execute(text("ALTER TABLE accounting_invoice_lines ADD COLUMN tax_rate REAL DEFAULT 0"))
+            if "net_amount" not in inv_line_cols:
+                conn.execute(text("ALTER TABLE accounting_invoice_lines ADD COLUMN net_amount REAL DEFAULT 0"))
+            if "tax_amount" not in inv_line_cols:
+                conn.execute(text("ALTER TABLE accounting_invoice_lines ADD COLUMN tax_amount REAL DEFAULT 0"))
+
         conn.execute(text("UPDATE analysis_reports SET archived = 0 WHERE archived IS NULL"))
         conn.execute(text("UPDATE analysis_reports SET tags_json = '[]' WHERE tags_json IS NULL"))
+        conn.execute(text("UPDATE accounting_invoices SET subtotal_amount = COALESCE(total_amount, 0) WHERE subtotal_amount IS NULL"))
+        conn.execute(text("UPDATE accounting_invoices SET tax_amount = 0 WHERE tax_amount IS NULL"))
+        conn.execute(text("UPDATE accounting_invoices SET paid_amount = 0 WHERE paid_amount IS NULL"))
+        conn.execute(text("UPDATE accounting_invoice_lines SET tax_rate = 0 WHERE tax_rate IS NULL"))
+        conn.execute(text("UPDATE accounting_invoice_lines SET net_amount = COALESCE(amount, 0) WHERE net_amount IS NULL"))
+        conn.execute(text("UPDATE accounting_invoice_lines SET tax_amount = 0 WHERE tax_amount IS NULL"))
         conn.execute(text("UPDATE users SET preferences_json = '{}' WHERE preferences_json IS NULL"))
         conn.execute(text("UPDATE users SET is_active = 1 WHERE is_active IS NULL"))
         conn.execute(text("UPDATE users SET plan_name = 'free' WHERE plan_name IS NULL"))
