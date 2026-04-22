@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
+    <title>المحاسبة | OptimalMatch</title>
+    <link rel="icon" href="/static/favicon.svg?v=9" type="image/svg+xml" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/tailwind.css?v=9" />
+    <link rel="stylesheet" href="/static/dark.css?v=9" />
+    <style>
+      body {
+        font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      }
+    </style>
+  </head>
+  <body class="erp-shell bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
+    <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
+
+    <aside class="erp-sidebar" aria-label="القائمة الرئيسية">
+      <a href="/" class="erp-sidebar__brand app-brand flex-col items-center gap-1" aria-label="التطابق الأمثل OptimalMatch">
+        <span class="app-brand__mark" style="width: 2.35rem; height: 2.35rem">
+          <svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M8 16l5 5 11-11" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+      </a>
+      <nav class="erp-sidebar__nav" aria-label="تنقل">
+        <a href="/" class="erp-side-link nav-link" data-nav="home" title="الرئيسية"></a>
+        <a href="/analyze" class="erp-side-link nav-link" data-nav="analyze" title="تحليل"></a>
+        <a href="/convert" class="erp-side-link nav-link" data-nav="convert" title="PDF إلى Excel"></a>
+        <a href="/reports" class="erp-side-link nav-link" data-nav="reports" title="التقارير"></a>
+        <a href="/settings" class="erp-side-link nav-link" data-nav="settings" title="لوحة التحكم"></a>
+        <a href="/help" class="erp-side-link nav-link" data-nav="help" title="مساعدة"></a>
+      </nav>
+    </aside>
+
+    <div class="erp-content min-h-0">
+      <header class="erp-topbar">
+        <button
+          type="button"
+          id="navMenuBtn"
+          class="nav-toggle-btn nav-burger-only"
+          aria-controls="mobileNavDrawer"
+          aria-expanded="false"
+          aria-label="فتح القائمة"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" />
+          </svg>
+        </button>
+        <div class="min-w-0 flex flex-col">
+          <span class="erp-topbar__title truncate">المحاسبة</span>
+          <span class="text-[0.65rem] font-extrabold text-slate-500 dark:text-slate-400 truncate"
+            >الحسابات والقيود <span class="opacity-50">|</span> <span dir="ltr">Accounting</span></span
+          >
+        </div>
+        <div class="flex items-center gap-2 shrink-0 ms-auto">
+          <div id="authArea"></div>
+          <button type="button" id="themeToggle" class="theme-toggle-btn" title="الوضع الليلي/النهاري"></button>
+        </div>
+      </header>
+
+      <div id="mobileNavDrawer" class="mobile-nav-drawer md:hidden" role="navigation" aria-label="قائمة الجوال">
+        <a href="/" data-nav="home">الرئيسية</a>
+        <a href="/analyze" data-nav="analyze">تحليل</a>
+        <a href="/convert" data-nav="convert">PDF إلى Excel</a>
+        <a href="/reports" data-nav="reports">التقارير</a>
+        <a href="/settings" data-nav="settings">لوحة التحكم</a>
+        <a href="/help" data-nav="help">مساعدة</a>
+      </div>
+
+      <main class="erp-main space-y-4">
+        <section class="erp-card">
+          <h1 class="text-lg font-extrabold mb-2">إدارة الحسابات</h1>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <input id="accCode" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="كود الحساب" />
+            <input id="accName" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم الحساب" />
+            <select id="accType" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
+              <option value="asset">أصل</option>
+              <option value="liability">التزام</option>
+              <option value="equity">حقوق ملكية</option>
+              <option value="revenue">إيراد</option>
+              <option value="expense">مصروف</option>
+            </select>
+            <button id="accCreateBtn" class="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2">
+              إضافة حساب
+            </button>
+          </div>
+          <div id="accountsHost" class="mt-3 text-sm"></div>
+        </section>
+
+        <section class="erp-card">
+          <h2 class="text-lg font-extrabold mb-2">العملاء والموردون</h2>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
+            <input id="cpName" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم الطرف" />
+            <input id="cpCode" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الكود (اختياري)" />
+            <select id="cpType" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
+              <option value="customer">عميل</option>
+              <option value="supplier">مورد</option>
+            </select>
+            <input id="cpPhone" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الجوال (اختياري)" />
+            <button id="cpCreateBtn" class="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-4 py-2">
+              إضافة طرف
+            </button>
+          </div>
+          <div id="counterpartiesHost" class="mt-3 text-sm"></div>
+        </section>
+
+        <section class="erp-card">
+          <h2 class="text-lg font-extrabold mb-2">إنشاء فاتورة (بيع/شراء)</h2>
+          <div class="grid grid-cols-1 md:grid-cols-6 gap-2 mb-2">
+            <select id="invType" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
+              <option value="sale">مبيعات</option>
+              <option value="purchase">مشتريات</option>
+            </select>
+            <input id="invNo" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="رقم الفاتورة" />
+            <input id="invDate" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
+            <select id="invCounterparty" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
+            <select id="invOffsetAccount" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
+            <input id="invDesc" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="بيان" />
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-2 mb-2">
+            <select id="lineAccount" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
+            <input id="lineDesc" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="وصف البند" />
+            <input id="lineQty" type="number" step="0.01" value="1" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الكمية" />
+            <input id="linePrice" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="سعر الوحدة" />
+            <button id="addInvLineBtn" class="rounded-xl border font-extrabold px-4 py-2">إضافة بند</button>
+          </div>
+          <div id="invLinesHost" class="text-sm mb-2"></div>
+          <button id="createInvBtn" class="rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-extrabold px-4 py-2">
+            إنشاء الفاتورة
+          </button>
+          <div id="invoicesHost" class="mt-3 text-sm"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/app.js?v=14"></script>
+    <script>
+      (function () {
+        let accounts = [];
+        let counterparties = [];
+        let draftLines = [];
+
+        function esc(s) {
+          return String(s == null ? "" : s);
+        }
+
+        function fillSelect(el, rows, labelFn) {
+          if (!el) return;
+          el.innerHTML = rows.map((r) => `<option value="${esc(r.id)}">${labelFn(r)}</option>`).join("");
+        }
+
+        function renderAccounts() {
+          const host = document.getElementById("accountsHost");
+          host.innerHTML = accounts.length
+            ? `<div class="grid gap-1">${accounts
+                .map((a) => `<div class="rounded-lg border px-3 py-2">${esc(a.code)} — ${esc(a.name)} <span class="opacity-60">(${esc(a.account_type)})</span></div>`)
+                .join("")}</div>`
+            : `<div class="opacity-70">لا توجد حسابات بعد</div>`;
+          fillSelect(
+            document.getElementById("lineAccount"),
+            accounts,
+            (a) => `${a.code} - ${a.name}`
+          );
+          fillSelect(
+            document.getElementById("invOffsetAccount"),
+            accounts,
+            (a) => `${a.code} - ${a.name}`
+          );
+        }
+
+        function renderCounterparties() {
+          const host = document.getElementById("counterpartiesHost");
+          host.innerHTML = counterparties.length
+            ? `<div class="grid gap-1">${counterparties
+                .map((c) => `<div class="rounded-lg border px-3 py-2">${esc(c.name)} <span class="opacity-60">(${c.party_type === "customer" ? "عميل" : "مورد"})</span></div>`)
+                .join("")}</div>`
+            : `<div class="opacity-70">لا يوجد عملاء/موردون بعد</div>`;
+          fillSelect(
+            document.getElementById("invCounterparty"),
+            counterparties,
+            (c) => `${c.name} (${c.party_type === "customer" ? "عميل" : "مورد"})`
+          );
+        }
+
+        function renderDraftLines() {
+          const host = document.getElementById("invLinesHost");
+          const total = draftLines.reduce((s, x) => s + Number(x.amount || 0), 0).toFixed(2);
+          host.innerHTML = draftLines.length
+            ? `<div class="rounded-lg border overflow-hidden">
+                <table class="w-full text-sm">
+                  <thead class="bg-slate-100 dark:bg-slate-800">
+                    <tr><th class="px-2 py-1">الحساب</th><th class="px-2 py-1">الوصف</th><th class="px-2 py-1">المبلغ</th><th class="px-2 py-1">حذف</th></tr>
+                  </thead>
+                  <tbody>
+                    ${draftLines
+                      .map(
+                        (x, i) =>
+                          `<tr class="border-t"><td class="px-2 py-1">${esc(x.account_label)}</td><td class="px-2 py-1">${esc(x.description)}</td><td class="px-2 py-1">${esc(x.amount)}</td><td class="px-2 py-1"><button class="px-2 py-1 border rounded" data-del="${i}">✕</button></td></tr>`
+                      )
+                      .join("")}
+                  </tbody>
+                </table>
+              </div>
+              <div class="mt-1 font-extrabold">الإجمالي: ${total}</div>`
+            : `<div class="opacity-70">لم يتم إضافة بنود بعد</div>`;
+          host.querySelectorAll("[data-del]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const idx = Number(btn.getAttribute("data-del"));
+              draftLines.splice(idx, 1);
+              renderDraftLines();
+            });
+          });
+        }
+
+        async function loadAll() {
+          const [accRes, cpRes, invRes] = await Promise.all([
+            apiGet("/accounting/accounts"),
+            apiGet("/accounting/counterparties"),
+            apiGet("/accounting/invoices?limit=50"),
+          ]);
+          accounts = accRes.items || [];
+          counterparties = cpRes.items || [];
+          renderAccounts();
+          renderCounterparties();
+          const host = document.getElementById("invoicesHost");
+          const invoices = invRes.items || [];
+          host.innerHTML = invoices.length
+            ? `<div class="grid gap-2">${invoices
+                .map(
+                  (inv) =>
+                    `<div class="rounded-lg border px-3 py-2">
+                       <div class="font-extrabold">${esc(inv.invoice_no)} - ${inv.invoice_type === "sale" ? "مبيعات" : "مشتريات"} - ${esc(inv.total_amount)}</div>
+                       <div class="text-xs opacity-70">${esc(inv.invoice_date)} | ${esc(inv.counterparty_name || "")} | ${esc(inv.status)}</div>
+                       ${
+                         inv.status !== "posted"
+                           ? `<button class="mt-2 px-3 py-1 rounded border font-extrabold" data-post="${esc(inv.id)}">ترحيل</button>`
+                           : `<span class="mt-2 inline-block text-emerald-600 font-extrabold">تم الترحيل</span>`
+                       }
+                     </div>`
+                )
+                .join("")}</div>`
+            : `<div class="opacity-70">لا توجد فواتير حتى الآن</div>`;
+          host.querySelectorAll("[data-post]").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              try {
+                await apiPostJson(`/accounting/invoices/${btn.getAttribute("data-post")}/post`, {});
+                showToast("تم ترحيل الفاتورة محاسبيًا ✔️", "#10b981");
+                await loadAll();
+              } catch (e) {
+                showToast(e.message || "تعذر ترحيل الفاتورة", "#ef4444");
+              }
+            });
+          });
+        }
+
+        function wireActions() {
+          document.getElementById("accCreateBtn")?.addEventListener("click", async () => {
+            try {
+              await apiPostJson("/accounting/accounts", {
+                code: document.getElementById("accCode").value || "",
+                name: document.getElementById("accName").value || "",
+                account_type: document.getElementById("accType").value || "asset",
+              });
+              showToast("تم إضافة الحساب ✔️", "#10b981");
+              await loadAll();
+            } catch (e) {
+              showToast(e.message || "تعذر إضافة الحساب", "#ef4444");
+            }
+          });
+
+          document.getElementById("cpCreateBtn")?.addEventListener("click", async () => {
+            try {
+              await apiPostJson("/accounting/counterparties", {
+                name: document.getElementById("cpName").value || "",
+                code: document.getElementById("cpCode").value || "",
+                party_type: document.getElementById("cpType").value || "customer",
+                phone: document.getElementById("cpPhone").value || "",
+              });
+              showToast("تم إضافة الطرف ✔️", "#10b981");
+              await loadAll();
+            } catch (e) {
+              showToast(e.message || "تعذر إضافة الطرف", "#ef4444");
+            }
+          });
+
+          document.getElementById("addInvLineBtn")?.addEventListener("click", () => {
+            const accountId = document.getElementById("lineAccount").value || "";
+            const accountLabel = document.getElementById("lineAccount").selectedOptions?.[0]?.textContent || "";
+            const description = document.getElementById("lineDesc").value || "";
+            const qty = Number(document.getElementById("lineQty").value || 0);
+            const unitPrice = Number(document.getElementById("linePrice").value || 0);
+            const amount = Number((qty * unitPrice).toFixed(2));
+            if (!accountId || amount <= 0) {
+              showToast("أدخل حساباً ومبلغاً صحيحاً", "#ef4444");
+              return;
+            }
+            draftLines.push({ account_id: accountId, account_label: accountLabel, description, qty, unit_price: unitPrice, amount });
+            renderDraftLines();
+          });
+
+          document.getElementById("createInvBtn")?.addEventListener("click", async () => {
+            try {
+              if (!draftLines.length) {
+                showToast("أضف بنداً واحداً على الأقل", "#ef4444");
+                return;
+              }
+              await apiPostJson("/accounting/invoices", {
+                invoice_type: document.getElementById("invType").value || "sale",
+                invoice_no: document.getElementById("invNo").value || "",
+                invoice_date: document.getElementById("invDate").value || "",
+                counterparty_id: document.getElementById("invCounterparty").value || "",
+                offset_account_id: document.getElementById("invOffsetAccount").value || "",
+                description: document.getElementById("invDesc").value || "",
+                lines: draftLines.map((x) => ({
+                  account_id: x.account_id,
+                  description: x.description,
+                  qty: x.qty,
+                  unit_price: x.unit_price,
+                  amount: x.amount,
+                })),
+              });
+              draftLines = [];
+              renderDraftLines();
+              showToast("تم إنشاء الفاتورة ✔️", "#10b981");
+              await loadAll();
+            } catch (e) {
+              showToast(e.message || "تعذر إنشاء الفاتورة", "#ef4444");
+            }
+          });
+        }
+
+        (async function init() {
+          await initAuthUI();
+          try {
+            const d = new Date();
+            document.getElementById("invDate").value = d.toISOString().slice(0, 10);
+          } catch (e) {}
+          wireActions();
+          renderDraftLines();
+          try {
+            await loadAll();
+          } catch (e) {
+            showToast(e.message || "تعذر تحميل البيانات المحاسبية", "#ef4444");
+          }
+        })();
+      })();
+    </script>
+  </body>
+</html>

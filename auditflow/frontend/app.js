@@ -824,6 +824,7 @@ function initNavAndTheme() {
   let key = "home";
   if (path.startsWith("/analyze")) key = "analyze";
   else if (path.startsWith("/convert")) key = "convert";
+  else if (path.startsWith("/accounting")) key = "accounting";
   else if (path.startsWith("/reports")) key = "reports";
   else if (path.startsWith("/report")) key = "reports";
   else if (path.startsWith("/settings")) key = "settings";
@@ -837,12 +838,27 @@ function initNavAndTheme() {
 
   const sidebar = document.querySelector(".erp-sidebar__nav");
   const mobileDrawer = document.getElementById("mobileNavDrawer");
+  const coreLinks = [
+    { href: "/accounting", nav: "accounting", title: "المحاسبة", text: "المحاسبة" },
+  ];
   const legalLinks = [
     { href: "/terms", nav: "terms", title: "شروط الاستخدام", text: "شروط الاستخدام" },
     { href: "/privacy", nav: "privacy", title: "سياسة الخصوصية", text: "سياسة الخصوصية" },
     { href: "/user-agreement", nav: "agreement", title: "اتفاقية المستخدم", text: "اتفاقية المستخدم" },
   ];
   if (sidebar) {
+    coreLinks.forEach((x) => {
+      if (!sidebar.querySelector(`a[data-nav="${x.nav}"]`)) {
+        const a = document.createElement("a");
+        a.href = x.href;
+        a.className = "erp-side-link nav-link";
+        a.setAttribute("data-nav", x.nav);
+        a.setAttribute("title", x.title);
+        a.innerHTML =
+          '<svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7h18M6 3v4m12-4v4M5 11h14a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2z"/><path stroke-linecap="round" stroke-linejoin="round" d="M8 15h3m5 0h-3"/></svg>';
+        sidebar.insertBefore(a, sidebar.querySelector('a[data-nav="settings"]') || null);
+      }
+    });
     legalLinks.forEach((x) => {
       if (!sidebar.querySelector(`a[data-nav="${x.nav}"]`)) {
         const a = document.createElement("a");
@@ -855,6 +871,15 @@ function initNavAndTheme() {
     });
   }
   if (mobileDrawer) {
+    coreLinks.forEach((x) => {
+      if (!mobileDrawer.querySelector(`a[data-nav="${x.nav}"]`)) {
+        const a = document.createElement("a");
+        a.href = x.href;
+        a.setAttribute("data-nav", x.nav);
+        a.textContent = x.text;
+        mobileDrawer.insertBefore(a, mobileDrawer.querySelector('a[data-nav="settings"]') || null);
+      }
+    });
     legalLinks.forEach((x) => {
       if (!mobileDrawer.querySelector(`a[data-nav="${x.nav}"]`)) {
         const a = document.createElement("a");

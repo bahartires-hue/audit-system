@@ -39,7 +39,7 @@ import pdfplumber
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, create_engine, text
+from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, text
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 try:
@@ -149,6 +149,86 @@ class UserSession(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
     expires_at = Column(DateTime, nullable=False)
+
+
+class Account(Base):
+    __tablename__ = "accounts"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    code = Column(String, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    account_type = Column(String, nullable=False, index=True)
+    parent_id = Column(String, ForeignKey("accounts.id"), nullable=True, index=True)
+    is_active = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class JournalEntry(Base):
+    __tablename__ = "journal_entries"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    entry_date = Column(DateTime, nullable=False, index=True)
+    reference = Column(String, nullable=True, index=True)
+    doc_type = Column(String, nullable=True, index=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class JournalLine(Base):
+    __tablename__ = "journal_lines"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    entry_id = Column(String, ForeignKey("journal_entries.id"), nullable=False, index=True)
+    account_id = Column(String, ForeignKey("accounts.id"), nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    debit = Column(Float, nullable=False, default=0.0)
+    credit = Column(Float, nullable=False, default=0.0)
+
+
+class Counterparty(Base):
+    __tablename__ = "counterparties"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    code = Column(String, nullable=True, index=True)
+    name = Column(String, nullable=False, index=True)
+    party_type = Column(String, nullable=False, index=True)  # customer | supplier
+    phone = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    address = Column(Text, nullable=True)
+    is_active = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class AccountingInvoice(Base):
+    __tablename__ = "accounting_invoices"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    invoice_type = Column(String, nullable=False, index=True)  # sale | purchase
+    invoice_no = Column(String, nullable=False, index=True)
+    invoice_date = Column(DateTime, nullable=False, index=True)
+    counterparty_id = Column(String, ForeignKey("counterparties.id"), nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    total_amount = Column(Float, nullable=False, default=0.0)
+    status = Column(String, nullable=False, default="draft", index=True)
+    offset_account_id = Column(String, ForeignKey("accounts.id"), nullable=False, index=True)
+    journal_entry_id = Column(String, ForeignKey("journal_entries.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class AccountingInvoiceLine(Base):
+    __tablename__ = "accounting_invoice_lines"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    invoice_id = Column(String, ForeignKey("accounting_invoices.id"), nullable=False, index=True)
+    account_id = Column(String, ForeignKey("accounts.id"), nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    qty = Column(Float, nullable=False, default=1.0)
+    unit_price = Column(Float, nullable=False, default=0.0)
+    amount = Column(Float, nullable=False, default=0.0)
 
 
 Base.metadata.create_all(bind=engine)
@@ -3436,6 +3516,22 @@ def ui_settings(request: Request):
         db.close()
 
 
+@app.get("/accounting", response_class=HTMLResponse)
+def ui_accounting(request: Request):
+    db = db_session()
+    try:
+        _ = require_user(db, request)
+        page = BASE_DIR / "frontend" / "accounting.html"
+        if page.is_file():
+            return FileResponse(page)
+        return HTMLResponse("<h1>Accounting page missing: frontend/accounting.html</h1>", status_code=503)
+    except HTTPException as e:
+        reason = quote(str(getattr(e, "detail", "") or "يرجى تسجيل الدخول أولاً"))
+        return RedirectResponse(url=f"/login?reason={reason}", status_code=302)
+    finally:
+        db.close()
+
+
 @app.get("/login", response_class=HTMLResponse)
 def ui_login(request: Request):
     db = db_session()
@@ -3627,6 +3723,307 @@ async def auth_change_password(request: Request):
         db.commit()
         log_event(db, "auth.change_password", user.id)
         return {"ok": True}
+    finally:
+        db.close()
+
+
+def _parse_iso_date(s: str) -> dt.datetime:
+    try:
+        return dt.datetime.strptime((s or "").strip(), "%Y-%m-%d")
+    except Exception:
+        raise HTTPException(400, "التاريخ يجب أن يكون بصيغة YYYY-MM-DD")
+
+
+@app.get("/accounting/accounts")
+def accounting_accounts(request: Request):
+    db = db_session()
+    try:
+        user = require_user(db, request)
+        rows = db.query(Account).filter(Account.user_id == user.id).order_by(Account.code.asc()).all()
+        return {
+            "items": [
+                {
+                    "id": x.id,
+                    "code": x.code,
+                    "name": x.name,
+                    "account_type": x.account_type,
+                    "parent_id": x.parent_id,
+                    "is_active": bool(int(x.is_active or 0)),
+                }
+                for x in rows
+            ]
+        }
+    finally:
+        db.close()
+
+
+@app.post("/accounting/accounts")
+async def accounting_accounts_create(request: Request):
+    require_csrf(request)
+    payload = await request.json()
+    db = db_session()
+    try:
+        user = require_user(db, request)
+        code = str((payload or {}).get("code", "")).strip()
+        name = str((payload or {}).get("name", "")).strip()
+        account_type = str((payload or {}).get("account_type", "")).strip().lower()
+        parent_id = str((payload or {}).get("parent_id", "")).strip() or None
+        if not code or not name or not account_type:
+            raise HTTPException(400, "بيانات الحساب غير مكتملة")
+        exists = db.query(Account).filter(Account.user_id == user.id, Account.code == code).first()
+        if exists:
+            raise HTTPException(400, "كود الحساب مستخدم مسبقاً")
+        if parent_id:
+            parent = db.query(Account).filter(Account.user_id == user.id, Account.id == parent_id).first()
+            if not parent:
+                raise HTTPException(400, "الحساب الأب غير موجود")
+        rec = Account(
+            id=uuid.uuid4().hex,
+            user_id=user.id,
+            code=code,
+            name=name,
+            account_type=account_type,
+            parent_id=parent_id,
+            is_active=1,
+        )
+        db.add(rec)
+        db.commit()
+        log_event(db, "account.created", user.id, {"account_id": rec.id, "code": rec.code})
+        return {"id": rec.id, "code": rec.code, "name": rec.name, "account_type": rec.account_type, "parent_id": rec.parent_id}
+    finally:
+        db.close()
+
+
+@app.get("/accounting/counterparties")
+def accounting_counterparties(request: Request, party_type: str = Query("")):
+    db = db_session()
+    try:
+        user = require_user(db, request)
+        q = db.query(Counterparty).filter(Counterparty.user_id == user.id)
+        pt = (party_type or "").strip().lower()
+        if pt in ("customer", "supplier"):
+            q = q.filter(Counterparty.party_type == pt)
+        rows = q.order_by(Counterparty.name.asc()).all()
+        return {
+            "items": [
+                {
+                    "id": r.id,
+                    "code": r.code or "",
+                    "name": r.name,
+                    "party_type": r.party_type,
+                    "phone": r.phone or "",
+                    "email": r.email or "",
+                    "address": r.address or "",
+                }
+                for r in rows
+            ]
+        }
+    finally:
+        db.close()
+
+
+@app.post("/accounting/counterparties")
+async def accounting_counterparties_create(request: Request):
+    require_csrf(request)
+    payload = await request.json()
+    db = db_session()
+    try:
+        user = require_user(db, request)
+        party_type = str((payload or {}).get("party_type", "")).strip().lower()
+        if party_type not in ("customer", "supplier"):
+            raise HTTPException(400, "party_type يجب أن يكون customer أو supplier")
+        name = str((payload or {}).get("name", "")).strip()
+        if not name:
+            raise HTTPException(400, "اسم الطرف مطلوب")
+        rec = Counterparty(
+            id=uuid.uuid4().hex,
+            user_id=user.id,
+            code=str((payload or {}).get("code", "")).strip() or None,
+            name=name,
+            party_type=party_type,
+            phone=str((payload or {}).get("phone", "")).strip() or None,
+            email=str((payload or {}).get("email", "")).strip() or None,
+            address=str((payload or {}).get("address", "")).strip() or None,
+            is_active=1,
+        )
+        db.add(rec)
+        db.commit()
+        log_event(db, "counterparty.created", user.id, {"counterparty_id": rec.id, "party_type": rec.party_type})
+        return {"id": rec.id, "name": rec.name, "party_type": rec.party_type}
+    finally:
+        db.close()
+
+
+@app.get("/accounting/invoices")
+def accounting_invoices(request: Request, invoice_type: str = Query(""), limit: int = Query(100)):
+    db = db_session()
+    try:
+        user = require_user(db, request)
+        q = db.query(AccountingInvoice).filter(AccountingInvoice.user_id == user.id)
+        it = (invoice_type or "").strip().lower()
+        if it in ("sale", "purchase"):
+            q = q.filter(AccountingInvoice.invoice_type == it)
+        rows = q.order_by(AccountingInvoice.invoice_date.desc(), AccountingInvoice.created_at.desc()).limit(max(1, min(limit, 500))).all()
+        cp_ids = {r.counterparty_id for r in rows}
+        cp_map = {}
+        if cp_ids:
+            cps = db.query(Counterparty).filter(Counterparty.user_id == user.id, Counterparty.id.in_(list(cp_ids))).all()
+            cp_map = {c.id: c.name for c in cps}
+        return {
+            "items": [
+                {
+                    "id": r.id,
+                    "invoice_type": r.invoice_type,
+                    "invoice_no": r.invoice_no,
+                    "invoice_date": r.invoice_date.strftime("%Y-%m-%d"),
+                    "counterparty_id": r.counterparty_id,
+                    "counterparty_name": cp_map.get(r.counterparty_id, ""),
+                    "description": r.description or "",
+                    "total_amount": round(float(r.total_amount or 0.0), 2),
+                    "status": r.status,
+                    "offset_account_id": r.offset_account_id,
+                    "journal_entry_id": r.journal_entry_id or "",
+                }
+                for r in rows
+            ]
+        }
+    finally:
+        db.close()
+
+
+@app.post("/accounting/invoices")
+async def accounting_invoices_create(request: Request):
+    require_csrf(request)
+    payload = await request.json()
+    db = db_session()
+    try:
+        user = require_user(db, request)
+        invoice_type = str((payload or {}).get("invoice_type", "")).strip().lower()
+        if invoice_type not in ("sale", "purchase"):
+            raise HTTPException(400, "invoice_type يجب أن يكون sale أو purchase")
+        invoice_no = str((payload or {}).get("invoice_no", "")).strip()
+        if not invoice_no:
+            raise HTTPException(400, "رقم الفاتورة مطلوب")
+        invoice_date = _parse_iso_date(str((payload or {}).get("invoice_date", "")))
+        counterparty_id = str((payload or {}).get("counterparty_id", "")).strip()
+        offset_account_id = str((payload or {}).get("offset_account_id", "")).strip()
+        description = str((payload or {}).get("description", "")).strip()
+        cp = db.query(Counterparty).filter(Counterparty.user_id == user.id, Counterparty.id == counterparty_id).first()
+        if not cp:
+            raise HTTPException(400, "العميل/المورد غير موجود")
+        if invoice_type == "sale" and cp.party_type != "customer":
+            raise HTTPException(400, "فاتورة البيع تتطلب customer")
+        if invoice_type == "purchase" and cp.party_type != "supplier":
+            raise HTTPException(400, "فاتورة الشراء تتطلب supplier")
+        dupe = db.query(AccountingInvoice).filter(AccountingInvoice.user_id == user.id, AccountingInvoice.invoice_type == invoice_type, AccountingInvoice.invoice_no == invoice_no).first()
+        if dupe:
+            raise HTTPException(400, "رقم الفاتورة مستخدم مسبقاً")
+        lines_raw = (payload or {}).get("lines") or []
+        if not isinstance(lines_raw, list):
+            raise HTTPException(400, "lines يجب أن تكون قائمة")
+        lines: List[Dict[str, Any]] = []
+        total = 0.0
+        account_ids = {offset_account_id}
+        for ln in lines_raw:
+            if not isinstance(ln, dict):
+                continue
+            aid = str(ln.get("account_id", "")).strip()
+            qty = abs(float(ln.get("qty", 0) or 0))
+            unit_price = abs(float(ln.get("unit_price", 0) or 0))
+            amount = abs(float(ln.get("amount", 0) or 0))
+            if amount <= 0:
+                amount = round(qty * unit_price, 2)
+            if not aid or amount <= 0:
+                continue
+            account_ids.add(aid)
+            lines.append(
+                {
+                    "account_id": aid,
+                    "description": str(ln.get("description", "")).strip(),
+                    "qty": round(qty if qty > 0 else 1.0, 4),
+                    "unit_price": round(unit_price if unit_price > 0 else amount, 4),
+                    "amount": round(amount, 2),
+                }
+            )
+            total += amount
+        total = round(total, 2)
+        if not lines or total <= 0:
+            raise HTTPException(400, "الفاتورة تحتاج بنوداً صالحة")
+        accs = db.query(Account).filter(Account.user_id == user.id, Account.id.in_(list(account_ids))).all()
+        if len(accs) != len(account_ids):
+            raise HTTPException(400, "يوجد حساب غير صالح بالفاتورة")
+        inv = AccountingInvoice(
+            id=uuid.uuid4().hex,
+            user_id=user.id,
+            invoice_type=invoice_type,
+            invoice_no=invoice_no,
+            invoice_date=invoice_date,
+            counterparty_id=counterparty_id,
+            description=description,
+            total_amount=total,
+            status="draft",
+            offset_account_id=offset_account_id,
+        )
+        db.add(inv)
+        db.flush()
+        for ln in lines:
+            db.add(
+                AccountingInvoiceLine(
+                    invoice_id=inv.id,
+                    account_id=ln["account_id"],
+                    description=ln["description"],
+                    qty=ln["qty"],
+                    unit_price=ln["unit_price"],
+                    amount=ln["amount"],
+                )
+            )
+        db.commit()
+        log_event(db, "invoice.created", user.id, {"invoice_id": inv.id, "invoice_type": inv.invoice_type})
+        return {"id": inv.id, "status": inv.status, "total_amount": round(float(inv.total_amount or 0.0), 2)}
+    finally:
+        db.close()
+
+
+@app.post("/accounting/invoices/{invoice_id}/post")
+def accounting_invoices_post(invoice_id: str, request: Request):
+    db = db_session()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        inv = db.query(AccountingInvoice).filter(AccountingInvoice.user_id == user.id, AccountingInvoice.id == invoice_id).first()
+        if not inv:
+            raise HTTPException(404, "الفاتورة غير موجودة")
+        if inv.status == "posted":
+            return {"id": inv.id, "status": inv.status, "journal_entry_id": inv.journal_entry_id or ""}
+        lines = db.query(AccountingInvoiceLine).filter(AccountingInvoiceLine.invoice_id == inv.id).order_by(AccountingInvoiceLine.id.asc()).all()
+        if not lines:
+            raise HTTPException(400, "لا يمكن ترحيل فاتورة بدون بنود")
+        total = round(sum(float(x.amount or 0.0) for x in lines), 2)
+        if total <= 0:
+            raise HTTPException(400, "إجمالي الفاتورة غير صالح")
+        je = JournalEntry(
+            id=uuid.uuid4().hex,
+            user_id=user.id,
+            entry_date=inv.invoice_date,
+            reference=inv.invoice_no,
+            doc_type="فاتورة مبيعات" if inv.invoice_type == "sale" else "فاتورة مشتريات",
+            description=inv.description or "",
+        )
+        db.add(je)
+        db.flush()
+        if inv.invoice_type == "sale":
+            db.add(JournalLine(entry_id=je.id, account_id=inv.offset_account_id, description=f"ذمم - {inv.invoice_no}", debit=total, credit=0.0))
+            for ln in lines:
+                db.add(JournalLine(entry_id=je.id, account_id=ln.account_id, description=ln.description or f"مبيعات - {inv.invoice_no}", debit=0.0, credit=round(float(ln.amount or 0.0), 2)))
+        else:
+            for ln in lines:
+                db.add(JournalLine(entry_id=je.id, account_id=ln.account_id, description=ln.description or f"مشتريات - {inv.invoice_no}", debit=round(float(ln.amount or 0.0), 2), credit=0.0))
+            db.add(JournalLine(entry_id=je.id, account_id=inv.offset_account_id, description=f"ذمم دائنة - {inv.invoice_no}", debit=0.0, credit=total))
+        inv.status = "posted"
+        inv.journal_entry_id = je.id
+        db.commit()
+        log_event(db, "invoice.posted", user.id, {"invoice_id": inv.id, "journal_entry_id": je.id})
+        return {"id": inv.id, "status": inv.status, "journal_entry_id": inv.journal_entry_id}
     finally:
         db.close()
 
