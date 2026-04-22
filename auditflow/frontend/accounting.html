@@ -24,6 +24,52 @@
       body {
         font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
       }
+      .ops-ribbon {
+        display: flex;
+        gap: 2px;
+        overflow-x: auto;
+        padding: 0.25rem;
+        border: 1px solid #8f3d6e;
+        border-radius: 10px;
+        background: #b53b82;
+      }
+      .ops-tab {
+        border: 1px solid #7a2f58;
+        border-radius: 7px;
+        padding: 0.5rem 0.85rem;
+        font-size: 0.82rem;
+        font-weight: 800;
+        white-space: nowrap;
+        color: #1f2937;
+        background: #f9fafb;
+      }
+      .ops-tab.is-active {
+        box-shadow: inset 0 0 0 2px #1f2937;
+      }
+      .ops-tab--cyan {
+        background: #bff4ff;
+      }
+      .ops-tab--lime {
+        background: #dfffbe;
+      }
+      .ops-tab--mint {
+        background: #ccffe9;
+      }
+      .ops-tab--sand {
+        background: #fff0bf;
+      }
+      .ops-tab--rose {
+        background: #ffd7e8;
+      }
+      .ops-tab--slate {
+        background: #d7e4ff;
+      }
+      .ops-tab--yellow {
+        background: #fff9c4;
+      }
+      .ops-tab--fuchsia {
+        background: #f8b4d9;
+      }
     </style>
   </head>
   <body class="erp-shell bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
@@ -83,6 +129,19 @@
       </div>
 
       <main class="erp-main space-y-4">
+        <section class="erp-card">
+          <div class="ops-ribbon" aria-label="شريط العمليات">
+            <button class="ops-tab ops-tab--slate">🧾 المخزن والأصناف</button>
+            <button class="ops-tab ops-tab--cyan">🛒 المشتريات والموردين</button>
+            <button class="ops-tab ops-tab--lime">💰 المصروفات والعهد</button>
+            <button class="ops-tab ops-tab--mint">📚 الحسابات والسندات</button>
+            <button class="ops-tab ops-tab--sand">📊 تقارير الحسابات</button>
+            <button class="ops-tab ops-tab--rose">🚚 تقارير المخزون</button>
+            <button class="ops-tab ops-tab--yellow">⚙️ نظام الإدارة</button>
+            <button class="ops-tab ops-tab--fuchsia is-active">🛍️ المتجر</button>
+          </div>
+        </section>
+
         <section class="erp-card">
           <h1 class="text-lg font-extrabold mb-2">إدارة الحسابات</h1>
           <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
