@@ -167,7 +167,7 @@ def ui_trade_sales(request: Request):
 
 @app.get("/trade/pos", response_class=HTMLResponse)
 def ui_trade_pos(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_pos.html")
+    return RedirectResponse(url="/trade/sales", status_code=302)
 
 
 @app.get("/trade/inventory", response_class=HTMLResponse)
