@@ -138,14 +138,14 @@
       <main class="erp-main space-y-4">
         <section class="erp-card">
           <div class="ops-ribbon" aria-label="شريط العمليات">
-            <button type="button" class="ops-tab ops-tab--slate" data-module-tab="inventory">🧾 المخزن والأصناف</button>
-            <button type="button" class="ops-tab ops-tab--cyan" data-module-tab="purchases">🛒 المشتريات والموردين</button>
-            <button type="button" class="ops-tab ops-tab--lime" data-module-tab="expenses">💰 المصروفات والعهد</button>
-            <button type="button" class="ops-tab ops-tab--mint is-active" data-module-tab="accounting">📚 الحسابات والسندات</button>
-            <button type="button" class="ops-tab ops-tab--sand" data-module-tab="reports">📊 تقارير الحسابات</button>
-            <button type="button" class="ops-tab ops-tab--rose" data-module-tab="stock_reports">🚚 تقارير المخزون</button>
-            <button type="button" class="ops-tab ops-tab--yellow" data-module-tab="admin">⚙️ نظام الإدارة</button>
-            <button type="button" class="ops-tab ops-tab--fuchsia" data-module-tab="store">🛍️ المتجر</button>
+            <button type="button" class="ops-tab ops-tab--slate" data-module-tab="sales">🧾 المبيعات</button>
+            <button type="button" class="ops-tab ops-tab--cyan" data-module-tab="customers">👥 العملاء</button>
+            <button type="button" class="ops-tab ops-tab--lime" data-module-tab="inventory">📦 المخزون</button>
+            <button type="button" class="ops-tab ops-tab--mint is-active" data-module-tab="accounting">📚 الحسابات</button>
+            <button type="button" class="ops-tab ops-tab--sand" data-module-tab="reports">📊 التقارير</button>
+            <button type="button" class="ops-tab ops-tab--rose" data-module-tab="hr">🧑‍💼 الموارد البشرية</button>
+            <button type="button" class="ops-tab ops-tab--yellow" data-module-tab="operations">⚙️ التشغيل</button>
+            <button type="button" class="ops-tab ops-tab--fuchsia" data-module-tab="admin">🛠️ الإدارة</button>
           </div>
         </section>
 
@@ -168,7 +168,7 @@
           <div id="accountsHost" class="mt-3 text-sm"></div>
         </section>
 
-        <section class="erp-card module-pane is-open" data-module-pane="accounting purchases">
+        <section class="erp-card module-pane is-open" data-module-pane="customers accounting">
           <h2 class="text-lg font-extrabold mb-2">العملاء والموردون</h2>
           <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
             <input id="cpName" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم الطرف" />
@@ -185,7 +185,7 @@
           <div id="counterpartiesHost" class="mt-3 text-sm"></div>
         </section>
 
-        <section class="erp-card module-pane is-open" data-module-pane="accounting purchases">
+        <section class="erp-card module-pane is-open" data-module-pane="sales inventory accounting">
           <h2 class="text-lg font-extrabold mb-2">إنشاء فاتورة (بيع/شراء)</h2>
           <div class="grid grid-cols-1 md:grid-cols-6 gap-2 mb-2">
             <select id="invType" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
@@ -212,6 +212,46 @@
           <div id="invoicesHost" class="mt-3 text-sm"></div>
         </section>
 
+        <section class="erp-card module-pane is-open" data-module-pane="sales">
+          <h2 class="text-lg font-extrabold mb-2">إدارة المبيعات</h2>
+          <div id="salesSummaryHost" class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2"></div>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-2 mb-2">
+            <input id="salesSearch" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="بحث برقم الفاتورة أو العميل" />
+            <select id="salesStatusFilter" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
+              <option value="">كل الحالات</option>
+              <option value="draft">مسودة</option>
+              <option value="posted">مرحّل</option>
+              <option value="partially_paid">مسدد جزئيًا</option>
+              <option value="paid">مسدد</option>
+            </select>
+            <input id="salesDateFrom" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
+            <input id="salesDateTo" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
+            <button id="salesRefreshBtn" class="rounded-xl border font-extrabold px-4 py-2">تحديث المبيعات</button>
+          </div>
+          <div id="salesInvoicesHost" class="mt-2 text-sm"></div>
+          <div id="salesPagerHost" class="mt-2 text-sm"></div>
+        </section>
+
+        <section class="erp-card module-pane is-open" data-module-pane="inventory">
+          <h2 class="text-lg font-extrabold mb-2">إدارة المشتريات</h2>
+          <div id="purchaseSummaryHost" class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2"></div>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-2 mb-2">
+            <input id="purchaseSearch" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="بحث برقم الفاتورة أو المورد" />
+            <select id="purchaseStatusFilter" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
+              <option value="">كل الحالات</option>
+              <option value="draft">مسودة</option>
+              <option value="posted">مرحّل</option>
+              <option value="partially_paid">مسدد جزئيًا</option>
+              <option value="paid">مسدد</option>
+            </select>
+            <input id="purchaseDateFrom" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
+            <input id="purchaseDateTo" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
+            <button id="purchaseRefreshBtn" class="rounded-xl border font-extrabold px-4 py-2">تحديث المشتريات</button>
+          </div>
+          <div id="purchaseInvoicesHost" class="mt-2 text-sm"></div>
+          <div id="purchasePagerHost" class="mt-2 text-sm"></div>
+        </section>
+
         <section class="erp-card module-pane is-open" data-module-pane="accounting">
           <h2 class="text-lg font-extrabold mb-2">سند قبض / صرف</h2>
           <div class="grid grid-cols-1 md:grid-cols-7 gap-2">
@@ -229,7 +269,7 @@
           <div id="vouchersHost" class="mt-3 text-sm"></div>
         </section>
 
-        <section class="erp-card module-pane is-open" data-module-pane="accounting admin">
+        <section class="erp-card module-pane is-open" data-module-pane="accounting admin operations">
           <h2 class="text-lg font-extrabold mb-2">الفترات المحاسبية</h2>
           <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
             <input id="periodName" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم الفترة" />
@@ -240,7 +280,7 @@
           <div id="periodsHost" class="mt-3 text-sm"></div>
         </section>
 
-        <section class="erp-card module-pane is-open" data-module-pane="reports accounting">
+        <section class="erp-card module-pane is-open" data-module-pane="reports accounting sales customers inventory">
           <h2 class="text-lg font-extrabold mb-2">التقارير المحاسبية</h2>
           <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
             <input id="reportFrom" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
@@ -252,11 +292,11 @@
           <div id="ledgerHost" class="text-sm"></div>
         </section>
 
-        <section class="erp-card module-pane" data-module-pane="inventory stock_reports expenses store">
+        <section class="erp-card module-pane" data-module-pane="inventory hr operations admin">
           <h2 class="text-lg font-extrabold mb-2">هذه الوحدة قيد التجهيز</h2>
           <div class="rounded-xl border px-4 py-4 text-sm opacity-80">
-            اخترت وحدة من الشريط العلوي، وتم تجهيز واجهة التبويبات بنفس نمط النظام المرجعي.
-            سنربط وظائفها التفصيلية (نماذج + تقارير + API) في المرحلة التالية.
+            تم تجهيز هيكل الوحدات الرئيسية بالنمط المرجعي (مبيعات، عملاء، مخزون، حسابات، تقارير، موارد بشرية، تشغيل، إدارة).
+            الخطوة التالية: ربط كل وحدة بنماذجها وتقاريرها التفصيلية كما في النظام المرجعي.
           </div>
         </section>
       </main>
@@ -268,6 +308,13 @@
         let accounts = [];
         let counterparties = [];
         let draftLines = [];
+        let invoicesCache = [];
+        let salesFiltered = [];
+        let salesPage = 1;
+        const SALES_PAGE_SIZE = 10;
+        let purchasesFiltered = [];
+        let purchasesPage = 1;
+        const PURCHASES_PAGE_SIZE = 10;
 
         function esc(s) {
           return String(s == null ? "" : s);
@@ -344,6 +391,329 @@
             : `<div class="opacity-70">${emptyText}</div>`;
         }
 
+        function renderInvoicesList(hostId, invoices) {
+          const host = document.getElementById(hostId);
+          if (!host) return;
+          host.innerHTML = invoices.length
+            ? `<div class="grid gap-2">${invoices
+                .map(
+                  (inv) =>
+                    `<div class="rounded-lg border px-3 py-2">
+                       <div class="font-extrabold">${esc(inv.invoice_no)} - ${inv.invoice_type === "sale" ? "مبيعات" : "مشتريات"} - ${esc(inv.total_amount)}</div>
+                       <div class="text-xs opacity-70">${esc(inv.invoice_date)} | ${esc(inv.counterparty_name || "")} | ${esc(inv.status)} | المتبقي: ${esc(inv.due_amount)}</div>
+                       ${
+                         inv.status === "draft"
+                           ? `<button class="mt-2 px-3 py-1 rounded border font-extrabold" data-post="${esc(inv.id)}">ترحيل</button>`
+                           : inv.due_amount > 0
+                             ? `<button class="mt-2 px-3 py-1 rounded border font-extrabold" data-pay="${esc(inv.id)}">سداد</button>`
+                             : `<span class="mt-2 inline-block text-emerald-600 font-extrabold">مكتمل السداد</span>`
+                       }
+                     </div>`
+                )
+                .join("")}</div>`
+            : `<div class="opacity-70">لا توجد فواتير مطابقة</div>`;
+          host.querySelectorAll("[data-post]").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              try {
+                await apiPostJson(`/accounting/invoices/${btn.getAttribute("data-post")}/post`, {});
+                showToast("تم ترحيل الفاتورة محاسبيًا ✔️", "#10b981");
+                await loadAll();
+              } catch (e) {
+                showToast(e.message || "تعذر ترحيل الفاتورة", "#ef4444");
+              }
+            });
+          });
+          host.querySelectorAll("[data-pay]").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              try {
+                const amount = prompt("مبلغ السداد؟", "0");
+                if (!amount || Number(amount) <= 0) return;
+                await apiPostJson(`/accounting/invoices/${btn.getAttribute("data-pay")}/payments`, {
+                  payment_date: document.getElementById("vDate").value || new Date().toISOString().slice(0, 10),
+                  cash_account_id: document.getElementById("vCashAccount").value || "",
+                  amount: Number(amount),
+                });
+                showToast("تم تسجيل السداد ✔️", "#10b981");
+                await loadAll();
+              } catch (e) {
+                showToast(e.message || "تعذر تسجيل السداد", "#ef4444");
+              }
+            });
+          });
+        }
+
+        function applySalesFilters() {
+          const q = (document.getElementById("salesSearch")?.value || "").trim().toLowerCase();
+          const st = (document.getElementById("salesStatusFilter")?.value || "").trim();
+          const df = (document.getElementById("salesDateFrom")?.value || "").trim();
+          const dt = (document.getElementById("salesDateTo")?.value || "").trim();
+          let rows = (invoicesCache || []).filter((x) => x.invoice_type === "sale");
+          if (q) {
+            rows = rows.filter((x) => `${x.invoice_no || ""} ${x.counterparty_name || ""}`.toLowerCase().includes(q));
+          }
+          if (st) rows = rows.filter((x) => (x.status || "") === st);
+          if (df) rows = rows.filter((x) => (x.invoice_date || "") >= df);
+          if (dt) rows = rows.filter((x) => (x.invoice_date || "") <= dt);
+          salesFiltered = rows;
+          salesPage = 1;
+          renderSalesSummary(rows);
+          renderSalesTablePage();
+        }
+
+        function renderSalesSummary(rows) {
+          const host = document.getElementById("salesSummaryHost");
+          if (!host) return;
+          const count = rows.length;
+          const total = rows.reduce((s, x) => s + Number(x.total_amount || 0), 0);
+          const paid = rows.reduce((s, x) => s + Number(x.paid_amount || 0), 0);
+          const due = rows.reduce((s, x) => s + Number(x.due_amount || 0), 0);
+          host.innerHTML = [
+            { k: "عدد الفواتير", v: count },
+            { k: "إجمالي المبيعات", v: total.toFixed(2) },
+            { k: "المحصّل", v: paid.toFixed(2) },
+            { k: "المتبقي", v: due.toFixed(2) },
+          ]
+            .map(
+              (x) =>
+                `<div class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"><div class="text-xs opacity-70">${x.k}</div><div class="text-lg font-extrabold">${esc(x.v)}</div></div>`
+            )
+            .join("");
+        }
+
+        function renderSalesTablePage() {
+          const host = document.getElementById("salesInvoicesHost");
+          const pager = document.getElementById("salesPagerHost");
+          if (!host || !pager) return;
+          const total = salesFiltered.length;
+          const pages = Math.max(1, Math.ceil(total / SALES_PAGE_SIZE));
+          if (salesPage < 1) salesPage = 1;
+          if (salesPage > pages) salesPage = pages;
+          const start = (salesPage - 1) * SALES_PAGE_SIZE;
+          const rows = salesFiltered.slice(start, start + SALES_PAGE_SIZE);
+          host.innerHTML = rows.length
+            ? `<div class="rounded-lg border overflow-auto">
+                <table class="w-full text-sm">
+                  <thead class="bg-slate-100 dark:bg-slate-800">
+                    <tr>
+                      <th class="px-2 py-2">رقم الفاتورة</th>
+                      <th class="px-2 py-2">التاريخ</th>
+                      <th class="px-2 py-2">العميل</th>
+                      <th class="px-2 py-2">الإجمالي</th>
+                      <th class="px-2 py-2">المحصّل</th>
+                      <th class="px-2 py-2">المتبقي</th>
+                      <th class="px-2 py-2">الحالة</th>
+                      <th class="px-2 py-2">الإجراء</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${rows
+                      .map((inv) => {
+                        const action =
+                          inv.status === "draft"
+                            ? `<button class="px-2 py-1 rounded border font-extrabold" data-post="${esc(inv.id)}">ترحيل</button>`
+                            : Number(inv.due_amount || 0) > 0
+                              ? `<button class="px-2 py-1 rounded border font-extrabold" data-pay="${esc(inv.id)}">سداد</button>`
+                              : `<span class="text-emerald-600 font-extrabold">مكتمل</span>`;
+                        return `<tr class="border-t">
+                          <td class="px-2 py-2">${esc(inv.invoice_no)}</td>
+                          <td class="px-2 py-2">${esc(inv.invoice_date)}</td>
+                          <td class="px-2 py-2">${esc(inv.counterparty_name || "")}</td>
+                          <td class="px-2 py-2">${esc(Number(inv.total_amount || 0).toFixed(2))}</td>
+                          <td class="px-2 py-2">${esc(Number(inv.paid_amount || 0).toFixed(2))}</td>
+                          <td class="px-2 py-2">${esc(Number(inv.due_amount || 0).toFixed(2))}</td>
+                          <td class="px-2 py-2">${esc(inv.status || "")}</td>
+                          <td class="px-2 py-2">${action}</td>
+                        </tr>`;
+                      })
+                      .join("")}
+                  </tbody>
+                </table>
+              </div>`
+            : `<div class="opacity-70">لا توجد فواتير مطابقة</div>`;
+          pager.innerHTML =
+            total > SALES_PAGE_SIZE
+              ? `<div class="flex items-center justify-between">
+                  <span>عرض ${start + 1} - ${Math.min(start + SALES_PAGE_SIZE, total)} من ${total}</span>
+                  <div class="flex gap-2">
+                    <button class="px-3 py-1 rounded border" ${salesPage <= 1 ? "disabled" : ""} id="salesPrevBtn">السابق</button>
+                    <button class="px-3 py-1 rounded border" ${salesPage >= pages ? "disabled" : ""} id="salesNextBtn">التالي</button>
+                  </div>
+                </div>`
+              : "";
+          document.getElementById("salesPrevBtn")?.addEventListener("click", () => {
+            salesPage -= 1;
+            renderSalesTablePage();
+          });
+          document.getElementById("salesNextBtn")?.addEventListener("click", () => {
+            salesPage += 1;
+            renderSalesTablePage();
+          });
+          host.querySelectorAll("[data-post]").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              try {
+                await apiPostJson(`/accounting/invoices/${btn.getAttribute("data-post")}/post`, {});
+                showToast("تم ترحيل الفاتورة محاسبيًا ✔️", "#10b981");
+                await loadAll();
+              } catch (e) {
+                showToast(e.message || "تعذر ترحيل الفاتورة", "#ef4444");
+              }
+            });
+          });
+          host.querySelectorAll("[data-pay]").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              try {
+                const amount = prompt("مبلغ السداد؟", "0");
+                if (!amount || Number(amount) <= 0) return;
+                await apiPostJson(`/accounting/invoices/${btn.getAttribute("data-pay")}/payments`, {
+                  payment_date: document.getElementById("vDate").value || new Date().toISOString().slice(0, 10),
+                  cash_account_id: document.getElementById("vCashAccount").value || "",
+                  amount: Number(amount),
+                });
+                showToast("تم تسجيل السداد ✔️", "#10b981");
+                await loadAll();
+              } catch (e) {
+                showToast(e.message || "تعذر تسجيل السداد", "#ef4444");
+              }
+            });
+          });
+        }
+
+        function applyPurchasesFilters() {
+          const q = (document.getElementById("purchaseSearch")?.value || "").trim().toLowerCase();
+          const st = (document.getElementById("purchaseStatusFilter")?.value || "").trim();
+          const df = (document.getElementById("purchaseDateFrom")?.value || "").trim();
+          const dt = (document.getElementById("purchaseDateTo")?.value || "").trim();
+          let rows = (invoicesCache || []).filter((x) => x.invoice_type === "purchase");
+          if (q) {
+            rows = rows.filter((x) => `${x.invoice_no || ""} ${x.counterparty_name || ""}`.toLowerCase().includes(q));
+          }
+          if (st) rows = rows.filter((x) => (x.status || "") === st);
+          if (df) rows = rows.filter((x) => (x.invoice_date || "") >= df);
+          if (dt) rows = rows.filter((x) => (x.invoice_date || "") <= dt);
+          purchasesFiltered = rows;
+          purchasesPage = 1;
+          renderPurchasesSummary(rows);
+          renderPurchasesTablePage();
+        }
+
+        function renderPurchasesSummary(rows) {
+          const host = document.getElementById("purchaseSummaryHost");
+          if (!host) return;
+          const count = rows.length;
+          const total = rows.reduce((s, x) => s + Number(x.total_amount || 0), 0);
+          const paid = rows.reduce((s, x) => s + Number(x.paid_amount || 0), 0);
+          const due = rows.reduce((s, x) => s + Number(x.due_amount || 0), 0);
+          host.innerHTML = [
+            { k: "عدد الفواتير", v: count },
+            { k: "إجمالي المشتريات", v: total.toFixed(2) },
+            { k: "المدفوع", v: paid.toFixed(2) },
+            { k: "المستحق", v: due.toFixed(2) },
+          ]
+            .map(
+              (x) =>
+                `<div class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"><div class="text-xs opacity-70">${x.k}</div><div class="text-lg font-extrabold">${esc(x.v)}</div></div>`
+            )
+            .join("");
+        }
+
+        function renderPurchasesTablePage() {
+          const host = document.getElementById("purchaseInvoicesHost");
+          const pager = document.getElementById("purchasePagerHost");
+          if (!host || !pager) return;
+          const total = purchasesFiltered.length;
+          const pages = Math.max(1, Math.ceil(total / PURCHASES_PAGE_SIZE));
+          if (purchasesPage < 1) purchasesPage = 1;
+          if (purchasesPage > pages) purchasesPage = pages;
+          const start = (purchasesPage - 1) * PURCHASES_PAGE_SIZE;
+          const rows = purchasesFiltered.slice(start, start + PURCHASES_PAGE_SIZE);
+          host.innerHTML = rows.length
+            ? `<div class="rounded-lg border overflow-auto">
+                <table class="w-full text-sm">
+                  <thead class="bg-slate-100 dark:bg-slate-800">
+                    <tr>
+                      <th class="px-2 py-2">رقم الفاتورة</th>
+                      <th class="px-2 py-2">التاريخ</th>
+                      <th class="px-2 py-2">المورد</th>
+                      <th class="px-2 py-2">الإجمالي</th>
+                      <th class="px-2 py-2">المدفوع</th>
+                      <th class="px-2 py-2">المستحق</th>
+                      <th class="px-2 py-2">الحالة</th>
+                      <th class="px-2 py-2">الإجراء</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${rows
+                      .map((inv) => {
+                        const action =
+                          inv.status === "draft"
+                            ? `<button class="px-2 py-1 rounded border font-extrabold" data-post="${esc(inv.id)}">ترحيل</button>`
+                            : Number(inv.due_amount || 0) > 0
+                              ? `<button class="px-2 py-1 rounded border font-extrabold" data-pay="${esc(inv.id)}">سداد</button>`
+                              : `<span class="text-emerald-600 font-extrabold">مكتمل</span>`;
+                        return `<tr class="border-t">
+                          <td class="px-2 py-2">${esc(inv.invoice_no)}</td>
+                          <td class="px-2 py-2">${esc(inv.invoice_date)}</td>
+                          <td class="px-2 py-2">${esc(inv.counterparty_name || "")}</td>
+                          <td class="px-2 py-2">${esc(Number(inv.total_amount || 0).toFixed(2))}</td>
+                          <td class="px-2 py-2">${esc(Number(inv.paid_amount || 0).toFixed(2))}</td>
+                          <td class="px-2 py-2">${esc(Number(inv.due_amount || 0).toFixed(2))}</td>
+                          <td class="px-2 py-2">${esc(inv.status || "")}</td>
+                          <td class="px-2 py-2">${action}</td>
+                        </tr>`;
+                      })
+                      .join("")}
+                  </tbody>
+                </table>
+              </div>`
+            : `<div class="opacity-70">لا توجد فواتير مشتريات مطابقة</div>`;
+          pager.innerHTML =
+            total > PURCHASES_PAGE_SIZE
+              ? `<div class="flex items-center justify-between">
+                  <span>عرض ${start + 1} - ${Math.min(start + PURCHASES_PAGE_SIZE, total)} من ${total}</span>
+                  <div class="flex gap-2">
+                    <button class="px-3 py-1 rounded border" ${purchasesPage <= 1 ? "disabled" : ""} id="purchasePrevBtn">السابق</button>
+                    <button class="px-3 py-1 rounded border" ${purchasesPage >= pages ? "disabled" : ""} id="purchaseNextBtn">التالي</button>
+                  </div>
+                </div>`
+              : "";
+          document.getElementById("purchasePrevBtn")?.addEventListener("click", () => {
+            purchasesPage -= 1;
+            renderPurchasesTablePage();
+          });
+          document.getElementById("purchaseNextBtn")?.addEventListener("click", () => {
+            purchasesPage += 1;
+            renderPurchasesTablePage();
+          });
+          host.querySelectorAll("[data-post]").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              try {
+                await apiPostJson(`/accounting/invoices/${btn.getAttribute("data-post")}/post`, {});
+                showToast("تم ترحيل الفاتورة محاسبيًا ✔️", "#10b981");
+                await loadAll();
+              } catch (e) {
+                showToast(e.message || "تعذر ترحيل الفاتورة", "#ef4444");
+              }
+            });
+          });
+          host.querySelectorAll("[data-pay]").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              try {
+                const amount = prompt("مبلغ السداد؟", "0");
+                if (!amount || Number(amount) <= 0) return;
+                await apiPostJson(`/accounting/invoices/${btn.getAttribute("data-pay")}/payments`, {
+                  payment_date: document.getElementById("vDate").value || new Date().toISOString().slice(0, 10),
+                  cash_account_id: document.getElementById("vCashAccount").value || "",
+                  amount: Number(amount),
+                });
+                showToast("تم تسجيل السداد ✔️", "#10b981");
+                await loadAll();
+              } catch (e) {
+                showToast(e.message || "تعذر تسجيل السداد", "#ef4444");
+              }
+            });
+          });
+        }
+
         async function loadReports() {
           const from = document.getElementById("reportFrom").value || "";
           const to = document.getElementById("reportTo").value || "";
@@ -389,54 +759,12 @@
           ]);
           accounts = accRes.items || [];
           counterparties = cpRes.items || [];
+          invoicesCache = invRes.items || [];
           renderAccounts();
           renderCounterparties();
-          const host = document.getElementById("invoicesHost");
-          const invoices = invRes.items || [];
-          host.innerHTML = invoices.length
-            ? `<div class="grid gap-2">${invoices
-                .map(
-                  (inv) =>
-                    `<div class="rounded-lg border px-3 py-2">
-                       <div class="font-extrabold">${esc(inv.invoice_no)} - ${inv.invoice_type === "sale" ? "مبيعات" : "مشتريات"} - ${esc(inv.total_amount)}</div>
-                       <div class="text-xs opacity-70">${esc(inv.invoice_date)} | ${esc(inv.counterparty_name || "")} | ${esc(inv.status)} | المتبقي: ${esc(inv.due_amount)}</div>
-                       ${
-                         inv.status !== "posted"
-                           ? `<button class="mt-2 px-3 py-1 rounded border font-extrabold" data-post="${esc(inv.id)}">ترحيل</button>`
-                           : `<button class="mt-2 px-3 py-1 rounded border font-extrabold" data-pay="${esc(inv.id)}">سداد</button>`
-                       }
-                     </div>`
-                )
-                .join("")}</div>`
-            : `<div class="opacity-70">لا توجد فواتير حتى الآن</div>`;
-          host.querySelectorAll("[data-post]").forEach((btn) => {
-            btn.addEventListener("click", async () => {
-              try {
-                await apiPostJson(`/accounting/invoices/${btn.getAttribute("data-post")}/post`, {});
-                showToast("تم ترحيل الفاتورة محاسبيًا ✔️", "#10b981");
-                await loadAll();
-              } catch (e) {
-                showToast(e.message || "تعذر ترحيل الفاتورة", "#ef4444");
-              }
-            });
-          });
-          host.querySelectorAll("[data-pay]").forEach((btn) => {
-            btn.addEventListener("click", async () => {
-              try {
-                const amount = prompt("مبلغ السداد؟", "0");
-                if (!amount || Number(amount) <= 0) return;
-                await apiPostJson(`/accounting/invoices/${btn.getAttribute("data-pay")}/payments`, {
-                  payment_date: document.getElementById("vDate").value || new Date().toISOString().slice(0, 10),
-                  cash_account_id: document.getElementById("vCashAccount").value || "",
-                  amount: Number(amount),
-                });
-                showToast("تم تسجيل السداد ✔️", "#10b981");
-                await loadAll();
-              } catch (e) {
-                showToast(e.message || "تعذر تسجيل السداد", "#ef4444");
-              }
-            });
-          });
+          renderInvoicesList("invoicesHost", invoicesCache);
+          applySalesFilters();
+          applyPurchasesFilters();
           renderSimpleRows(
             "vouchersHost",
             (voucherRes.items || []).map((v) => `${v.voucher_no} - ${v.voucher_type === "receipt" ? "قبض" : "صرف"} - ${v.amount} (${v.voucher_date})`),
@@ -560,6 +888,16 @@
               showToast(e.message || "تعذر تحميل التقارير", "#ef4444");
             }
           });
+          document.getElementById("salesRefreshBtn")?.addEventListener("click", () => applySalesFilters());
+          document.getElementById("salesSearch")?.addEventListener("input", () => applySalesFilters());
+          document.getElementById("salesStatusFilter")?.addEventListener("change", () => applySalesFilters());
+          document.getElementById("salesDateFrom")?.addEventListener("change", () => applySalesFilters());
+          document.getElementById("salesDateTo")?.addEventListener("change", () => applySalesFilters());
+          document.getElementById("purchaseRefreshBtn")?.addEventListener("click", () => applyPurchasesFilters());
+          document.getElementById("purchaseSearch")?.addEventListener("input", () => applyPurchasesFilters());
+          document.getElementById("purchaseStatusFilter")?.addEventListener("change", () => applyPurchasesFilters());
+          document.getElementById("purchaseDateFrom")?.addEventListener("change", () => applyPurchasesFilters());
+          document.getElementById("purchaseDateTo")?.addEventListener("change", () => applyPurchasesFilters());
 
           document.getElementById("createInvBtn")?.addEventListener("click", async () => {
             try {
