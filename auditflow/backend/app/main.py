@@ -163,6 +163,11 @@ def ui_trade_sales(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "trade_sales.html")
 
 
+@app.get("/trade/pos", response_class=HTMLResponse)
+def ui_trade_pos(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "trade_pos.html")
+
+
 @app.get("/trade/inventory", response_class=HTMLResponse)
 def ui_trade_inventory(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "trade_inventory.html")

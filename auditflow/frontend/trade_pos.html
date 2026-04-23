@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>نقطة البيع | POS</title>
+    <link rel="stylesheet" href="/static/tailwind.css?v=9" />
+    <link rel="stylesheet" href="/static/dark.css?v=9" />
+  </head>
+  <body class="bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
+    <div class="max-w-7xl mx-auto p-4 space-y-4">
+      <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-extrabold">نقطة البيع المتقدمة (POS)</h1>
+        <div id="authArea"></div>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <a class="px-3 py-2 rounded-xl border font-bold" href="/trade">الرئيسية</a>
+        <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/pos">الكاشير</a>
+        <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/items">الأصناف</a>
+        <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/purchases">المشتريات</a>
+        <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/sales">المبيعات</a>
+        <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/inventory">المخزون</a>
+        <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/reports">التقارير</a>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <section class="rounded-xl border p-4 bg-white dark:bg-slate-950 lg:col-span-2">
+          <h2 class="font-extrabold mb-2">بحث وإضافة للسلة</h2>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
+            <input id="itemSearch" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950 md:col-span-2" placeholder="بحث بالكود أو الاسم أو الماركة" />
+            <select id="itemSelect" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950 md:col-span-2"></select>
+            <button id="searchBtn" class="rounded-xl border font-extrabold px-4 py-2">بحث</button>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-2 mt-2">
+            <input id="lineQty" type="number" step="0.01" value="1" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الكمية" />
+            <input id="linePrice" type="number" step="0.01" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="سعر البيع" />
+            <input id="lineTax" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الضريبة" />
+            <button id="addToCartBtn" class="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2">إضافة للسلة</button>
+            <button id="clearCartBtn" class="rounded-xl border font-extrabold px-4 py-2">تفريغ السلة</button>
+          </div>
+          <div id="cartHost" class="mt-3 text-sm"></div>
+        </section>
+
+        <section class="rounded-xl border p-4 bg-white dark:bg-slate-950">
+          <h2 class="font-extrabold mb-2">إتمام البيع</h2>
+          <div class="space-y-2">
+            <input id="saleNo" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="رقم الفاتورة" />
+            <input id="saleCustomer" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم العميل" />
+            <input id="saleDate" type="date" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
+            <select id="paymentType" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
+              <option value="cash">نقد</option>
+              <option value="transfer">تحويل</option>
+              <option value="credit">آجل</option>
+            </select>
+            <input id="saleDiscount" type="number" step="0.01" value="0" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="خصم الفاتورة" />
+            <input id="sellerName" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم البائع" />
+            <input id="branchName" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الفرع" />
+          </div>
+          <div id="totalsHost" class="mt-3 text-sm"></div>
+          <button id="checkoutBtn" class="mt-3 w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-extrabold px-4 py-2">إتمام البيع وطباعة الفاتورة</button>
+        </section>
+      </div>
+    </div>
+    <script src="/static/app.js?v=14"></script>
+    <script>
+      (function () {
+        let items = [];
+        let cart = [];
+        function esc(s) { return String(s == null ? "" : s); }
+        function money(v) { return Number(v || 0).toFixed(2); }
+        async function loadItems(q = "") {
+          const d = await apiGet(`/trade/items?q=${encodeURIComponent(q)}`);
+          items = d.items || [];
+          const sel = document.getElementById("itemSelect");
+          sel.innerHTML = items.map((x) => `<option value="${esc(x.id)}">${esc(x.code)} - ${esc(x.name)} | متاح: ${esc(x.quantity)} | سعر: ${esc(x.default_sale_price)}</option>`).join("");
+          const first = items[0];
+          if (first) document.getElementById("linePrice").value = Number(first.default_sale_price || 0).toFixed(2);
+        }
+        function currentItem() {
+          const id = document.getElementById("itemSelect").value || "";
+          return items.find((x) => x.id === id) || null;
+        }
+        function renderCart() {
+          const host = document.getElementById("cartHost");
+          const discount = Number(document.getElementById("saleDiscount").value || 0);
+          const sub = cart.reduce((s, x) => s + Number(x.qty) * Number(x.sale_price), 0);
+          const tax = cart.reduce((s, x) => s + Number(x.tax_amount), 0);
+          const gross = sub + tax;
+          const net = Math.max(0, gross - discount);
+          document.getElementById("totalsHost").innerHTML = `<div class="grid gap-1"><div>الإجمالي قبل الخصم: <b>${money(gross)}</b></div><div>الخصم: <b>${money(discount)}</b></div><div>الإجمالي النهائي: <b>${money(net)}</b></div></div>`;
+          host.innerHTML = cart.length
+            ? `<div class="rounded-lg border overflow-auto"><table class="w-full text-sm"><thead class="bg-slate-100 dark:bg-slate-800"><tr><th class="px-2 py-2">الصنف</th><th class="px-2 py-2">الكمية</th><th class="px-2 py-2">السعر</th><th class="px-2 py-2">الضريبة</th><th class="px-2 py-2">الإجمالي</th><th class="px-2 py-2">حذف</th></tr></thead><tbody>${cart.map((x,i)=>`<tr class="border-t"><td class="px-2 py-2">${esc(x.item_label)}</td><td class="px-2 py-2">${esc(x.qty)}</td><td class="px-2 py-2">${money(x.sale_price)}</td><td class="px-2 py-2">${money(x.tax_amount)}</td><td class="px-2 py-2">${money(Number(x.qty)*Number(x.sale_price)+Number(x.tax_amount))}</td><td class="px-2 py-2"><button class="px-2 py-1 rounded border" data-del="${i}">✕</button></td></tr>`).join("")}</tbody></table></div>`
+            : `<div class="opacity-70">السلة فارغة</div>`;
+          host.querySelectorAll("[data-del]").forEach((btn) => btn.addEventListener("click", () => { cart.splice(Number(btn.getAttribute("data-del")), 1); renderCart(); }));
+        }
+        function openPrintInvoice(data) {
+          const lines = data.lines || [];
+          const html = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>فاتورة ${data.invoice_no}</title><style>body{font-family:Arial;padding:16px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:6px;text-align:right}</style></head><body>
+            <h2>فاتورة بيع</h2>
+            <div>رقم الفاتورة: <b>${data.invoice_no}</b></div>
+            <div>التاريخ: <b>${data.sale_date}</b></div>
+            <div>العميل: <b>${data.customer_name}</b></div>
+            <div>طريقة الدفع: <b>${data.payment_type}</b></div>
+            <hr />
+            <table><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الضريبة</th><th>الإجمالي</th></tr></thead><tbody>
+            ${lines.map((x)=>`<tr><td>${x.item_name}</td><td>${x.qty}</td><td>${Number(x.sale_price).toFixed(2)}</td><td>${Number(x.tax_amount).toFixed(2)}</td><td>${Number(x.line_total).toFixed(2)}</td></tr>`).join("")}
+            </tbody></table>
+            <h3>الإجمالي النهائي: ${Number(data.total_amount || 0).toFixed(2)}</h3>
+          </body></html>`;
+          const w = window.open("", "_blank");
+          if (!w) return;
+          w.document.open();
+          w.document.write(html);
+          w.document.close();
+          w.focus();
+          w.print();
+        }
+        async function checkout() {
+          if (!cart.length) { showToast("السلة فارغة", "#ef4444"); return; }
+          const payload = {
+            invoice_no: document.getElementById("saleNo").value || `POS-${Date.now()}`,
+            customer_name: document.getElementById("saleCustomer").value || "عميل نقدي",
+            sale_date: document.getElementById("saleDate").value || new Date().toISOString().slice(0,10),
+            payment_type: document.getElementById("paymentType").value || "cash",
+            discount: Number(document.getElementById("saleDiscount").value || 0),
+            seller_name: document.getElementById("sellerName").value || "",
+            branch_name: document.getElementById("branchName").value || "",
+            lines: cart.map((x) => ({ item_id: x.item_id, qty: Number(x.qty), sale_price: Number(x.sale_price), tax_amount: Number(x.tax_amount) })),
+          };
+          const res = await apiPostJson("/trade/sales", payload);
+          const details = await apiGet(`/trade/sales/${encodeURIComponent(res.id)}`);
+          openPrintInvoice(details);
+          cart = [];
+          renderCart();
+          showToast("تمت عملية البيع بنجاح ✔️", "#10b981");
+          await loadItems(document.getElementById("itemSearch").value || "");
+        }
+        document.getElementById("searchBtn").addEventListener("click", () => loadItems(document.getElementById("itemSearch").value || ""));
+        document.getElementById("itemSelect").addEventListener("change", () => {
+          const it = currentItem();
+          if (it) document.getElementById("linePrice").value = Number(it.default_sale_price || 0).toFixed(2);
+        });
+        document.getElementById("addToCartBtn").addEventListener("click", () => {
+          const it = currentItem();
+          if (!it) return;
+          const qty = Number(document.getElementById("lineQty").value || 0);
+          const price = Number(document.getElementById("linePrice").value || 0);
+          const tax = Number(document.getElementById("lineTax").value || 0);
+          if (qty <= 0 || price < 0 || tax < 0) { showToast("تحقق من بيانات السطر", "#ef4444"); return; }
+          cart.push({ item_id: it.id, item_label: `${it.code} - ${it.name}`, qty, sale_price: price, tax_amount: tax });
+          renderCart();
+        });
+        document.getElementById("clearCartBtn").addEventListener("click", () => { cart = []; renderCart(); });
+        document.getElementById("checkoutBtn").addEventListener("click", async () => {
+          try { await checkout(); } catch (e) { showToast(e.message || "فشل إتمام البيع", "#ef4444"); }
+        });
+        (async function init() {
+          await initAuthUI();
+          document.getElementById("saleDate").value = new Date().toISOString().slice(0,10);
+          await loadItems("");
+          renderCart();
+        })();
+      })();
+    </script>
+  </body>
+</html>

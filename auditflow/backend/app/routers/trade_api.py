@@ -416,6 +416,48 @@ def list_sales(request: Request, limit: int = Query(200, ge=1, le=1000)):
         db.close()
 
 
+@router.get("/sales/{sale_id}")
+def sale_details(sale_id: str, request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        sale = db.query(Sale).filter(Sale.user_id == user.id, Sale.id == sale_id).first()
+        if not sale:
+            raise HTTPException(404, "فاتورة البيع غير موجودة")
+        lines = (
+            db.query(SaleLine, Item)
+            .join(Item, Item.id == SaleLine.item_id)
+            .filter(SaleLine.sale_id == sale.id)
+            .order_by(SaleLine.id.asc())
+            .all()
+        )
+        return {
+            "id": sale.id,
+            "invoice_no": sale.invoice_no,
+            "customer_name": sale.customer_name,
+            "sale_date": sale.sale_date.strftime("%Y-%m-%d"),
+            "payment_type": sale.payment_type,
+            "discount": round(float(sale.discount or 0.0), 2),
+            "total_amount": round(float(sale.total_amount or 0.0), 2),
+            "seller_name": sale.seller_name or "",
+            "branch_name": sale.branch_name or "",
+            "lines": [
+                {
+                    "item_id": item.id,
+                    "item_code": item.code,
+                    "item_name": item.name,
+                    "qty": round(float(ln.qty or 0.0), 4),
+                    "sale_price": round(float(ln.sale_price or 0.0), 2),
+                    "tax_amount": round(float(ln.tax_amount or 0.0), 2),
+                    "line_total": round(float(ln.sale_price or 0.0) * float(ln.qty or 0.0) + float(ln.tax_amount or 0.0), 2),
+                }
+                for ln, item in lines
+            ],
+        }
+    finally:
+        db.close()
+
+
 @router.get("/inventory")
 def inventory_report(request: Request):
     db = SessionLocal()
