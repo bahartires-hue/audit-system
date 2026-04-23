@@ -150,6 +150,15 @@ def _parse_date(v: str, field_name: str) -> dt.datetime:
         raise HTTPException(400, f"{field_name} يجب أن يكون بصيغة YYYY-MM-DD")
 
 
+def _fmt_date(v: Any) -> str:
+    if isinstance(v, dt.datetime):
+        return v.strftime("%Y-%m-%d")
+    if isinstance(v, dt.date):
+        return v.strftime("%Y-%m-%d")
+    s = str(v or "").strip()
+    return s[:10] if s else ""
+
+
 def _available_qty(db: Any, user_id: str, item_id: str) -> float:
     rows = (
         db.query(StockMovement)
@@ -435,7 +444,7 @@ def list_purchases(request: Request, limit: int = Query(200, ge=1, le=1000)):
                     "id": x.id,
                     "invoice_no": x.invoice_no,
                     "supplier_name": x.supplier_name,
-                    "purchase_date": x.purchase_date.strftime("%Y-%m-%d"),
+                    "purchase_date": _fmt_date(x.purchase_date),
                     "payment_type": x.payment_type or "cash",
                     "tax_amount": round(float(x.tax_amount or 0.0), 2),
                     "discount": round(float(x.discount or 0.0), 2),
@@ -546,7 +555,7 @@ def list_sales(request: Request, limit: int = Query(200, ge=1, le=1000)):
                     "id": x.id,
                     "invoice_no": x.invoice_no,
                     "customer_name": x.customer_name,
-                    "sale_date": x.sale_date.strftime("%Y-%m-%d"),
+                    "sale_date": _fmt_date(x.sale_date),
                     "payment_type": x.payment_type,
                     "paid_amount": round(float(x.paid_amount or 0.0), 2),
                     "due_amount": round(float(x.due_amount or 0.0), 2),
@@ -577,7 +586,7 @@ def list_suspended_sales(request: Request, limit: int = Query(200, ge=1, le=1000
                     "id": x.id,
                     "invoice_no": x.invoice_no,
                     "customer_name": x.customer_name,
-                    "sale_date": x.sale_date.strftime("%Y-%m-%d"),
+                    "sale_date": _fmt_date(x.sale_date),
                     "payment_type": x.payment_type,
                     "discount": round(float(x.discount or 0.0), 2),
                     "paid_amount": round(float(x.paid_amount or 0.0), 2),
@@ -708,7 +717,7 @@ def sale_details(sale_id: str, request: Request):
             "id": sale.id,
             "invoice_no": sale.invoice_no,
             "customer_name": sale.customer_name,
-            "sale_date": sale.sale_date.strftime("%Y-%m-%d"),
+            "sale_date": _fmt_date(sale.sale_date),
             "payment_type": sale.payment_type,
             "discount": round(float(sale.discount or 0.0), 2),
             "paid_amount": round(float(sale.paid_amount or 0.0), 2),
