@@ -23,12 +23,12 @@ def _migrate_postgresql() -> None:
         "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS tags_json JSON DEFAULT '[]'::json",
         "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS notes TEXT",
         "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS archived INTEGER DEFAULT 0",
-        "ALTER TABLE accounting_invoices ADD COLUMN IF NOT EXISTS subtotal_amount DOUBLE PRECISION DEFAULT 0",
-        "ALTER TABLE accounting_invoices ADD COLUMN IF NOT EXISTS tax_amount DOUBLE PRECISION DEFAULT 0",
-        "ALTER TABLE accounting_invoices ADD COLUMN IF NOT EXISTS paid_amount DOUBLE PRECISION DEFAULT 0",
-        "ALTER TABLE accounting_invoice_lines ADD COLUMN IF NOT EXISTS tax_rate DOUBLE PRECISION DEFAULT 0",
-        "ALTER TABLE accounting_invoice_lines ADD COLUMN IF NOT EXISTS net_amount DOUBLE PRECISION DEFAULT 0",
-        "ALTER TABLE accounting_invoice_lines ADD COLUMN IF NOT EXISTS tax_amount DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE IF EXISTS accounting_invoices ADD COLUMN IF NOT EXISTS subtotal_amount DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE IF EXISTS accounting_invoices ADD COLUMN IF NOT EXISTS tax_amount DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE IF EXISTS accounting_invoices ADD COLUMN IF NOT EXISTS paid_amount DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE IF EXISTS accounting_invoice_lines ADD COLUMN IF NOT EXISTS tax_rate DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE IF EXISTS accounting_invoice_lines ADD COLUMN IF NOT EXISTS net_amount DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE IF EXISTS accounting_invoice_lines ADD COLUMN IF NOT EXISTS tax_amount DOUBLE PRECISION DEFAULT 0",
     ]
     with engine.begin() as conn:
         for sql in stmts:

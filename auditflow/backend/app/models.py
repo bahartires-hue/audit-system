@@ -106,118 +106,98 @@ class AnalysisReport(Base):
     archived = Column(Integer, nullable=False, default=0)
 
 
-class Account(Base):
-    __tablename__ = "accounts"
+class Item(Base):
+    __tablename__ = "items"
 
     id = Column(String, primary_key=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
     code = Column(String, nullable=False, index=True)
-    name = Column(String, nullable=False)
-    account_type = Column(String, nullable=False, index=True)
-    parent_id = Column(String, ForeignKey("accounts.id"), nullable=True, index=True)
-    is_active = Column(Integer, nullable=False, default=1)
-    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
-
-
-class JournalEntry(Base):
-    __tablename__ = "journal_entries"
-
-    id = Column(String, primary_key=True)
-    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-    entry_date = Column(DateTime, nullable=False, index=True)
-    reference = Column(String, nullable=True, index=True)
-    doc_type = Column(String, nullable=True, index=True)
-    description = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
-
-
-class JournalLine(Base):
-    __tablename__ = "journal_lines"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    entry_id = Column(String, ForeignKey("journal_entries.id"), nullable=False, index=True)
-    account_id = Column(String, ForeignKey("accounts.id"), nullable=False, index=True)
-    description = Column(Text, nullable=True)
-    debit = Column(Float, nullable=False, default=0.0)
-    credit = Column(Float, nullable=False, default=0.0)
-
-
-class Counterparty(Base):
-    __tablename__ = "counterparties"
-
-    id = Column(String, primary_key=True)
-    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-    code = Column(String, nullable=True, index=True)
     name = Column(String, nullable=False, index=True)
-    party_type = Column(String, nullable=False, index=True)  # customer | supplier
-    phone = Column(String, nullable=True)
-    email = Column(String, nullable=True)
-    address = Column(Text, nullable=True)
-    is_active = Column(Integer, nullable=False, default=1)
+    category = Column(String, nullable=False, default="rim", index=True)  # rim | set | accessory
+    brand = Column(String, nullable=True, index=True)
+    size = Column(String, nullable=True, index=True)
+    pcd = Column(String, nullable=True)
+    color = Column(String, nullable=True)
+    item_condition = Column(String, nullable=True, index=True)
+    location = Column(String, nullable=True, index=True)
+    is_set = Column(Integer, nullable=False, default=0, index=True)
+    quantity = Column(Float, nullable=False, default=0.0)
+    default_sale_price = Column(Float, nullable=False, default=0.0)
+    last_cost = Column(Float, nullable=False, default=0.0)
+    notes = Column(Text, nullable=True)
+    image_url = Column(String, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
 
-class AccountingInvoice(Base):
-    __tablename__ = "accounting_invoices"
+class Purchase(Base):
+    __tablename__ = "purchases"
 
     id = Column(String, primary_key=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-    invoice_type = Column(String, nullable=False, index=True)  # sale | purchase
     invoice_no = Column(String, nullable=False, index=True)
-    invoice_date = Column(DateTime, nullable=False, index=True)
-    counterparty_id = Column(String, ForeignKey("counterparties.id"), nullable=False, index=True)
-    description = Column(Text, nullable=True)
-    subtotal_amount = Column(Float, nullable=False, default=0.0)
-    tax_amount = Column(Float, nullable=False, default=0.0)
+    supplier_name = Column(String, nullable=False, index=True)
+    purchase_date = Column(DateTime, nullable=False, index=True)
     total_amount = Column(Float, nullable=False, default=0.0)
-    paid_amount = Column(Float, nullable=False, default=0.0)
-    status = Column(String, nullable=False, default="draft", index=True)  # draft | posted
-    offset_account_id = Column(String, ForeignKey("accounts.id"), nullable=False, index=True)
-    journal_entry_id = Column(String, ForeignKey("journal_entries.id"), nullable=True, index=True)
+    notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
 
-class AccountingInvoiceLine(Base):
-    __tablename__ = "accounting_invoice_lines"
+class PurchaseLine(Base):
+    __tablename__ = "purchase_lines"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    invoice_id = Column(String, ForeignKey("accounting_invoices.id"), nullable=False, index=True)
-    account_id = Column(String, ForeignKey("accounts.id"), nullable=False, index=True)
-    description = Column(Text, nullable=True)
+    purchase_id = Column(String, ForeignKey("purchases.id"), nullable=False, index=True)
+    item_id = Column(String, ForeignKey("items.id"), nullable=False, index=True)
     qty = Column(Float, nullable=False, default=1.0)
-    unit_price = Column(Float, nullable=False, default=0.0)
-    tax_rate = Column(Float, nullable=False, default=0.0)
-    net_amount = Column(Float, nullable=False, default=0.0)
-    tax_amount = Column(Float, nullable=False, default=0.0)
-    amount = Column(Float, nullable=False, default=0.0)
+    unit_cost = Column(Float, nullable=False, default=0.0)
+    extra_cost = Column(Float, nullable=False, default=0.0)
+    total_cost = Column(Float, nullable=False, default=0.0)
 
 
-class AccountingPeriod(Base):
-    __tablename__ = "accounting_periods"
+class Sale(Base):
+    __tablename__ = "sales"
 
     id = Column(String, primary_key=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-    name = Column(String, nullable=False)
-    start_date = Column(DateTime, nullable=False, index=True)
-    end_date = Column(DateTime, nullable=False, index=True)
-    is_closed = Column(Integer, nullable=False, default=0, index=True)
+    invoice_no = Column(String, nullable=False, index=True)
+    customer_name = Column(String, nullable=False, index=True)
+    sale_date = Column(DateTime, nullable=False, index=True)
+    payment_type = Column(String, nullable=False, default="cash", index=True)  # cash | transfer | credit
+    discount = Column(Float, nullable=False, default=0.0)
+    total_amount = Column(Float, nullable=False, default=0.0)
+    notes = Column(Text, nullable=True)
+    seller_name = Column(String, nullable=True, index=True)
+    branch_name = Column(String, nullable=True, index=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
 
-class PaymentVoucher(Base):
-    __tablename__ = "payment_vouchers"
+class SaleLine(Base):
+    __tablename__ = "sale_lines"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    sale_id = Column(String, ForeignKey("sales.id"), nullable=False, index=True)
+    item_id = Column(String, ForeignKey("items.id"), nullable=False, index=True)
+    qty = Column(Float, nullable=False, default=1.0)
+    sale_price = Column(Float, nullable=False, default=0.0)
+    tax_amount = Column(Float, nullable=False, default=0.0)
+    cost_price = Column(Float, nullable=False, default=0.0)
+    profit = Column(Float, nullable=False, default=0.0)
+
+
+class StockMovement(Base):
+    __tablename__ = "stock_movements"
 
     id = Column(String, primary_key=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-    voucher_type = Column(String, nullable=False, index=True)  # receipt | payment
-    voucher_no = Column(String, nullable=False, index=True)
-    voucher_date = Column(DateTime, nullable=False, index=True)
-    counterparty_id = Column(String, ForeignKey("counterparties.id"), nullable=True, index=True)
-    account_id = Column(String, ForeignKey("accounts.id"), nullable=False, index=True)
-    cash_account_id = Column(String, ForeignKey("accounts.id"), nullable=False, index=True)
-    amount = Column(Float, nullable=False, default=0.0)
-    description = Column(Text, nullable=True)
-    journal_entry_id = Column(String, ForeignKey("journal_entries.id"), nullable=True, index=True)
+    item_id = Column(String, ForeignKey("items.id"), nullable=False, index=True)
+    movement_type = Column(String, nullable=False, index=True)  # purchase | sale | sale_return | purchase_return | adjust
+    qty_in = Column(Float, nullable=False, default=0.0)
+    qty_out = Column(Float, nullable=False, default=0.0)
+    unit_cost = Column(Float, nullable=False, default=0.0)
+    reference_type = Column(String, nullable=True, index=True)  # purchase | sale | adjust
+    reference_id = Column(String, nullable=True, index=True)
+    movement_date = Column(DateTime, nullable=False, index=True)
+    notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
 

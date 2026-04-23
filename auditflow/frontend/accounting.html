@@ -3,122 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <script>
-      (function () {
-        try {
-          var t = localStorage.getItem("auditflow-theme");
-          var d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
-          document.documentElement.classList.toggle("dark", d);
-        } catch (e) {}
-      })();
-    </script>
-    <title>المحاسبة | OptimalMatch</title>
-    <link rel="icon" href="/static/favicon.svg?v=9" type="image/svg+xml" />
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
-      rel="stylesheet"
-    />
+    <title>نظام تجارة الجنوط | OptimalMatch</title>
     <link rel="stylesheet" href="/static/tailwind.css?v=9" />
     <link rel="stylesheet" href="/static/dark.css?v=9" />
-    <style>
-      body {
-        font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-      }
-      .ops-ribbon {
-        display: flex;
-        gap: 2px;
-        overflow-x: auto;
-        padding: 0.25rem;
-        border: 1px solid #8f3d6e;
-        border-radius: 10px;
-        background: #b53b82;
-      }
-      .ops-tab {
-        border: 1px solid #7a2f58;
-        border-radius: 7px;
-        padding: 0.5rem 0.85rem;
-        font-size: 0.82rem;
-        font-weight: 800;
-        white-space: nowrap;
-        color: #1f2937;
-        background: #f9fafb;
-        cursor: pointer;
-      }
-      .ops-tab.is-active {
-        box-shadow: inset 0 0 0 2px #1f2937;
-      }
-      .ops-tab--cyan {
-        background: #bff4ff;
-      }
-      .ops-tab--lime {
-        background: #dfffbe;
-      }
-      .ops-tab--mint {
-        background: #ccffe9;
-      }
-      .ops-tab--sand {
-        background: #fff0bf;
-      }
-      .ops-tab--rose {
-        background: #ffd7e8;
-      }
-      .ops-tab--slate {
-        background: #d7e4ff;
-      }
-      .ops-tab--yellow {
-        background: #fff9c4;
-      }
-      .ops-tab--fuchsia {
-        background: #f8b4d9;
-      }
-      .module-pane {
-        display: none;
-      }
-      .module-pane.is-open {
-        display: block;
-      }
-    </style>
   </head>
   <body class="erp-shell bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
     <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
-
-    <aside class="erp-sidebar" aria-label="القائمة الرئيسية">
-      <a href="/" class="erp-sidebar__brand app-brand flex-col items-center gap-1" aria-label="التطابق الأمثل OptimalMatch">
-        <span class="app-brand__mark" style="width: 2.35rem; height: 2.35rem">
-          <svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path d="M8 16l5 5 11-11" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </span>
-      </a>
-      <nav class="erp-sidebar__nav" aria-label="تنقل">
-        <a href="/" class="erp-side-link nav-link" data-nav="home" title="الرئيسية"></a>
-        <a href="/analyze" class="erp-side-link nav-link" data-nav="analyze" title="تحليل"></a>
-        <a href="/convert" class="erp-side-link nav-link" data-nav="convert" title="PDF إلى Excel"></a>
-        <a href="/reports" class="erp-side-link nav-link" data-nav="reports" title="التقارير"></a>
-        <a href="/settings" class="erp-side-link nav-link" data-nav="settings" title="لوحة التحكم"></a>
-        <a href="/help" class="erp-side-link nav-link" data-nav="help" title="مساعدة"></a>
-      </nav>
-    </aside>
-
     <div class="erp-content min-h-0">
       <header class="erp-topbar">
-        <button
-          type="button"
-          id="navMenuBtn"
-          class="nav-toggle-btn nav-burger-only"
-          aria-controls="mobileNavDrawer"
-          aria-expanded="false"
-          aria-label="فتح القائمة"
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" />
-          </svg>
-        </button>
         <div class="min-w-0 flex flex-col">
-          <span class="erp-topbar__title truncate">المحاسبة</span>
-          <span class="text-[0.65rem] font-extrabold text-slate-500 dark:text-slate-400 truncate"
-            >الحسابات والقيود <span class="opacity-50">|</span> <span dir="ltr">Accounting</span></span
-          >
+          <span class="erp-topbar__title truncate">نظام تجارة الجنوط المستخدمة</span>
+          <span class="text-xs opacity-70">MVP: أصناف + مشتريات + مبيعات + مخزون + تقارير</span>
         </div>
         <div class="flex items-center gap-2 shrink-0 ms-auto">
           <div id="authArea"></div>
@@ -126,188 +21,81 @@
         </div>
       </header>
 
-      <div id="mobileNavDrawer" class="mobile-nav-drawer md:hidden" role="navigation" aria-label="قائمة الجوال">
-        <a href="/" data-nav="home">الرئيسية</a>
-        <a href="/analyze" data-nav="analyze">تحليل</a>
-        <a href="/convert" data-nav="convert">PDF إلى Excel</a>
-        <a href="/reports" data-nav="reports">التقارير</a>
-        <a href="/settings" data-nav="settings">لوحة التحكم</a>
-        <a href="/help" data-nav="help">مساعدة</a>
-      </div>
-
       <main class="erp-main space-y-4">
         <section class="erp-card">
-          <div class="ops-ribbon" aria-label="شريط العمليات">
-            <button type="button" class="ops-tab ops-tab--slate" data-module-tab="sales">🧾 المبيعات</button>
-            <button type="button" class="ops-tab ops-tab--cyan" data-module-tab="customers">👥 العملاء</button>
-            <button type="button" class="ops-tab ops-tab--lime" data-module-tab="inventory">📦 المخزون</button>
-            <button type="button" class="ops-tab ops-tab--mint is-active" data-module-tab="accounting">📚 الحسابات</button>
-            <button type="button" class="ops-tab ops-tab--sand" data-module-tab="reports">📊 التقارير</button>
-            <button type="button" class="ops-tab ops-tab--rose" data-module-tab="hr">🧑‍💼 الموارد البشرية</button>
-            <button type="button" class="ops-tab ops-tab--yellow" data-module-tab="operations">⚙️ التشغيل</button>
-            <button type="button" class="ops-tab ops-tab--fuchsia" data-module-tab="admin">🛠️ الإدارة</button>
+          <h2 class="text-lg font-extrabold mb-2">الأصناف</h2>
+          <div class="grid grid-cols-1 md:grid-cols-6 gap-2">
+            <input id="itemCode" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="كود الصنف" />
+            <input id="itemName" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم الصنف" />
+            <input id="itemBrand" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الماركة" />
+            <input id="itemSize" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="المقاس" />
+            <select id="itemCategory" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
+              <option value="rim">جنط</option>
+              <option value="set">طقم</option>
+              <option value="accessory">اكسسوار</option>
+            </select>
+            <button id="createItemBtn" class="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2">إضافة صنف</button>
           </div>
+          <div id="itemsHost" class="mt-3 text-sm"></div>
         </section>
 
-        <section class="erp-card module-pane is-open" data-module-pane="accounting">
-          <h1 class="text-lg font-extrabold mb-2">إدارة الحسابات</h1>
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
-            <input id="accCode" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="كود الحساب" />
-            <input id="accName" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم الحساب" />
-            <select id="accType" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
-              <option value="asset">أصل</option>
-              <option value="liability">التزام</option>
-              <option value="equity">حقوق ملكية</option>
-              <option value="revenue">إيراد</option>
-              <option value="expense">مصروف</option>
-            </select>
-            <button id="accCreateBtn" class="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2">
-              إضافة حساب
-            </button>
+        <section class="erp-card">
+          <h2 class="text-lg font-extrabold mb-2">المشتريات</h2>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-2 mb-2">
+            <input id="purchaseNo" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="رقم فاتورة الشراء" />
+            <input id="purchaseSupplier" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم المورد" />
+            <input id="purchaseDate" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
+            <select id="purchaseItem" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
+            <input id="purchaseQty" type="number" step="0.01" value="1" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الكمية" />
           </div>
-          <div id="accountsHost" class="mt-3 text-sm"></div>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
+            <input id="purchaseUnitCost" type="number" step="0.01" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="تكلفة الشراء" />
+            <input id="purchaseExtra" type="number" step="0.01" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="مصاريف إضافية" />
+            <button id="createPurchaseBtn" class="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-4 py-2">حفظ شراء</button>
+            <button id="refreshPurchasesBtn" class="rounded-xl border font-extrabold px-4 py-2">تحديث</button>
+          </div>
+          <div id="purchasesHost" class="text-sm"></div>
         </section>
 
-        <section class="erp-card module-pane is-open" data-module-pane="customers accounting">
-          <h2 class="text-lg font-extrabold mb-2">العملاء والموردون</h2>
-          <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
-            <input id="cpName" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم الطرف" />
-            <input id="cpCode" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الكود (اختياري)" />
-            <select id="cpType" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
-              <option value="customer">عميل</option>
-              <option value="supplier">مورد</option>
-            </select>
-            <input id="cpPhone" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الجوال (اختياري)" />
-            <button id="cpCreateBtn" class="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-4 py-2">
-              إضافة طرف
-            </button>
-          </div>
-          <div id="counterpartiesHost" class="mt-3 text-sm"></div>
-        </section>
-
-        <section class="erp-card module-pane is-open" data-module-pane="sales inventory accounting">
-          <h2 class="text-lg font-extrabold mb-2">إنشاء فاتورة (بيع/شراء)</h2>
-          <div class="grid grid-cols-1 md:grid-cols-6 gap-2 mb-2">
-            <select id="invType" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
-              <option value="sale">مبيعات</option>
-              <option value="purchase">مشتريات</option>
-            </select>
-            <input id="invNo" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="رقم الفاتورة" />
-            <input id="invDate" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
-            <select id="invCounterparty" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
-            <select id="invOffsetAccount" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
-            <input id="invDesc" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="بيان" />
+        <section class="erp-card">
+          <h2 class="text-lg font-extrabold mb-2">المبيعات</h2>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-2 mb-2">
+            <input id="saleNo" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="رقم فاتورة البيع" />
+            <input id="saleCustomer" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم العميل" />
+            <input id="saleDate" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
+            <select id="saleItem" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
+            <input id="saleQty" type="number" step="0.01" value="1" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الكمية" />
           </div>
           <div class="grid grid-cols-1 md:grid-cols-5 gap-2 mb-2">
-            <select id="lineAccount" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
-            <input id="lineDesc" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="وصف البند" />
-            <input id="lineQty" type="number" step="0.01" value="1" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الكمية" />
-            <input id="linePrice" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="سعر الوحدة" />
-            <button id="addInvLineBtn" class="rounded-xl border font-extrabold px-4 py-2">إضافة بند</button>
-          </div>
-          <div id="invLinesHost" class="text-sm mb-2"></div>
-          <button id="createInvBtn" class="rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-extrabold px-4 py-2">
-            إنشاء الفاتورة
-          </button>
-          <div id="invoicesHost" class="mt-3 text-sm"></div>
-        </section>
-
-        <section class="erp-card module-pane is-open" data-module-pane="sales">
-          <h2 class="text-lg font-extrabold mb-2">إدارة المبيعات</h2>
-          <div id="salesSummaryHost" class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2"></div>
-          <div class="grid grid-cols-1 md:grid-cols-5 gap-2 mb-2">
-            <input id="salesSearch" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="بحث برقم الفاتورة أو العميل" />
-            <select id="salesStatusFilter" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
-              <option value="">كل الحالات</option>
-              <option value="draft">مسودة</option>
-              <option value="posted">مرحّل</option>
-              <option value="partially_paid">مسدد جزئيًا</option>
-              <option value="paid">مسدد</option>
+            <input id="salePrice" type="number" step="0.01" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="سعر البيع" />
+            <input id="saleTax" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الضريبة" />
+            <select id="salePaymentType" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
+              <option value="cash">نقد</option>
+              <option value="transfer">تحويل</option>
+              <option value="credit">آجل</option>
             </select>
-            <input id="salesDateFrom" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
-            <input id="salesDateTo" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
-            <button id="salesRefreshBtn" class="rounded-xl border font-extrabold px-4 py-2">تحديث المبيعات</button>
+            <button id="createSaleBtn" class="rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-extrabold px-4 py-2">حفظ بيع</button>
+            <button id="refreshSalesBtn" class="rounded-xl border font-extrabold px-4 py-2">تحديث</button>
           </div>
-          <div id="salesInvoicesHost" class="mt-2 text-sm"></div>
-          <div id="salesPagerHost" class="mt-2 text-sm"></div>
+          <div id="salesHost" class="text-sm"></div>
         </section>
 
-        <section class="erp-card module-pane is-open" data-module-pane="inventory">
-          <h2 class="text-lg font-extrabold mb-2">إدارة المشتريات</h2>
-          <div id="purchaseSummaryHost" class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2"></div>
-          <div class="grid grid-cols-1 md:grid-cols-5 gap-2 mb-2">
-            <input id="purchaseSearch" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="بحث برقم الفاتورة أو المورد" />
-            <select id="purchaseStatusFilter" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
-              <option value="">كل الحالات</option>
-              <option value="draft">مسودة</option>
-              <option value="posted">مرحّل</option>
-              <option value="partially_paid">مسدد جزئيًا</option>
-              <option value="paid">مسدد</option>
-            </select>
-            <input id="purchaseDateFrom" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
-            <input id="purchaseDateTo" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
-            <button id="purchaseRefreshBtn" class="rounded-xl border font-extrabold px-4 py-2">تحديث المشتريات</button>
-          </div>
-          <div id="purchaseInvoicesHost" class="mt-2 text-sm"></div>
-          <div id="purchasePagerHost" class="mt-2 text-sm"></div>
+        <section class="erp-card">
+          <h2 class="text-lg font-extrabold mb-2">المخزون الحالي</h2>
+          <button id="refreshInventoryBtn" class="rounded-xl border font-extrabold px-4 py-2 mb-2">تحديث المخزون</button>
+          <div id="inventoryHost" class="text-sm"></div>
         </section>
 
-        <section class="erp-card module-pane is-open" data-module-pane="accounting">
-          <h2 class="text-lg font-extrabold mb-2">سند قبض / صرف</h2>
-          <div class="grid grid-cols-1 md:grid-cols-7 gap-2">
-            <select id="vType" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
-              <option value="receipt">سند قبض</option>
-              <option value="payment">سند صرف</option>
-            </select>
-            <input id="vNo" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="رقم السند" />
-            <input id="vDate" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
-            <select id="vAccount" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
-            <select id="vCashAccount" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
-            <input id="vAmount" type="number" step="0.01" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="المبلغ" />
-            <button id="createVoucherBtn" class="rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-extrabold px-4 py-2">حفظ السند</button>
-          </div>
-          <div id="vouchersHost" class="mt-3 text-sm"></div>
-        </section>
-
-        <section class="erp-card module-pane is-open" data-module-pane="accounting admin operations">
-          <h2 class="text-lg font-extrabold mb-2">الفترات المحاسبية</h2>
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
-            <input id="periodName" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم الفترة" />
-            <input id="periodStart" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
-            <input id="periodEnd" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
-            <button id="createPeriodBtn" class="rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold px-4 py-2">إضافة فترة</button>
-          </div>
-          <div id="periodsHost" class="mt-3 text-sm"></div>
-        </section>
-
-        <section class="erp-card module-pane is-open" data-module-pane="reports accounting sales customers inventory">
-          <h2 class="text-lg font-extrabold mb-2">التقارير المحاسبية</h2>
+        <section class="erp-card">
+          <h2 class="text-lg font-extrabold mb-2">تقارير الربح وحركة الصنف</h2>
           <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
             <input id="reportFrom" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
             <input id="reportTo" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
-            <select id="ledgerAccount" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
-            <button id="runReportsBtn" class="rounded-xl border font-extrabold px-4 py-2">تحديث التقارير</button>
+            <select id="movementItem" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
+            <button id="runReportsBtn" class="rounded-xl border font-extrabold px-4 py-2">تشغيل التقارير</button>
           </div>
-          <div id="trialBalanceHost" class="text-sm mb-3"></div>
-          <div id="ledgerHost" class="text-sm"></div>
-          <hr class="my-4 border-slate-200 dark:border-slate-700" />
-          <h3 class="text-base font-extrabold mb-2">تقرير حركة مبيعات الصنف</h3>
-          <div id="salesMovementTotalsHost" class="grid grid-cols-1 md:grid-cols-5 gap-2 mb-2"></div>
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
-            <input id="salesMovementQuery" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="بحث بالصنف أو كود الحساب" />
-            <input id="salesMovementFrom" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
-            <input id="salesMovementTo" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
-            <button id="runSalesMovementBtn" class="rounded-xl border font-extrabold px-4 py-2">تحديث تقرير المبيعات</button>
-          </div>
-          <div id="salesMovementHost" class="text-sm"></div>
-        </section>
-
-        <section class="erp-card module-pane" data-module-pane="inventory hr operations admin">
-          <h2 class="text-lg font-extrabold mb-2">هذه الوحدة قيد التجهيز</h2>
-          <div class="rounded-xl border px-4 py-4 text-sm opacity-80">
-            تم تجهيز هيكل الوحدات الرئيسية بالنمط المرجعي (مبيعات، عملاء، مخزون، حسابات، تقارير، موارد بشرية، تشغيل، إدارة).
-            الخطوة التالية: ربط كل وحدة بنماذجها وتقاريرها التفصيلية كما في النظام المرجعي.
-          </div>
+          <div id="profitHost" class="text-sm mb-3"></div>
+          <div id="movementHost" class="text-sm"></div>
         </section>
       </main>
     </div>
@@ -315,778 +103,113 @@
     <script src="/static/app.js?v=14"></script>
     <script>
       (function () {
-        let accounts = [];
-        let counterparties = [];
-        let draftLines = [];
-        let invoicesCache = [];
-        let salesFiltered = [];
-        let salesPage = 1;
-        const SALES_PAGE_SIZE = 10;
-        let purchasesFiltered = [];
-        let purchasesPage = 1;
-        const PURCHASES_PAGE_SIZE = 10;
-
-        function esc(s) {
-          return String(s == null ? "" : s);
-        }
-
-        function fillSelect(el, rows, labelFn) {
-          if (!el) return;
-          el.innerHTML = rows.map((r) => `<option value="${esc(r.id)}">${labelFn(r)}</option>`).join("");
-        }
-
-        function renderAccounts() {
-          const host = document.getElementById("accountsHost");
-          host.innerHTML = accounts.length
-            ? `<div class="grid gap-1">${accounts
-                .map(
-                  (a) =>
-                    `<div class="rounded-lg border px-3 py-2 flex items-center justify-between gap-2">
-                       <div>${esc(a.code)} — ${esc(a.name)} <span class="opacity-60">(${esc(a.account_type)})</span></div>
-                       <div class="flex items-center gap-1">
-                         <button class="px-2 py-1 rounded border text-xs font-extrabold" data-acc-edit="${esc(a.id)}">تعديل</button>
-                         <button class="px-2 py-1 rounded border text-xs font-extrabold text-rose-600" data-acc-del="${esc(a.id)}">حذف</button>
-                       </div>
-                     </div>`
-                )
-                .join("")}</div>`
-            : `<div class="opacity-70">لا توجد حسابات بعد</div>`;
-          const asLabel = (a) => `${a.code} - ${a.name}`;
-          fillSelect(document.getElementById("lineAccount"), accounts, asLabel);
-          fillSelect(document.getElementById("invOffsetAccount"), accounts, asLabel);
-          fillSelect(document.getElementById("ledgerAccount"), accounts, asLabel);
-          fillSelect(document.getElementById("vAccount"), accounts, asLabel);
-          fillSelect(document.getElementById("vCashAccount"), accounts, asLabel);
-          host.querySelectorAll("[data-acc-edit]").forEach((btn) => {
-            btn.addEventListener("click", async () => {
-              const id = btn.getAttribute("data-acc-edit");
-              const rec = accounts.find((x) => x.id === id);
-              if (!rec) return;
-              const code = prompt("كود الحساب", rec.code || "");
-              if (!code) return;
-              const name = prompt("اسم الحساب", rec.name || "");
-              if (!name) return;
-              const accountType = prompt("نوع الحساب (asset/liability/equity/revenue/expense)", rec.account_type || "asset");
-              if (!accountType) return;
-              try {
-                await apiPatchJson(`/accounting/accounts/${encodeURIComponent(id)}`, {
-                  code,
-                  name,
-                  account_type: accountType,
-                  parent_id: rec.parent_id || null,
-                  is_active: !!rec.is_active,
-                });
-                showToast("تم تعديل الحساب ✔️", "#10b981");
-                await loadAll();
-              } catch (e) {
-                showToast(e.message || "تعذر تعديل الحساب", "#ef4444");
-              }
-            });
-          });
-          host.querySelectorAll("[data-acc-del]").forEach((btn) => {
-            btn.addEventListener("click", async () => {
-              const id = btn.getAttribute("data-acc-del");
-              if (!id) return;
-              if (!confirm("هل تريد حذف الحساب؟")) return;
-              try {
-                await apiDelete(`/accounting/accounts/${encodeURIComponent(id)}`);
-                showToast("تم حذف الحساب ✔️", "#10b981");
-                await loadAll();
-              } catch (e) {
-                showToast(e.message || "تعذر حذف الحساب", "#ef4444");
-              }
-            });
+        let items = [];
+        function esc(s) { return String(s == null ? "" : s); }
+        function fillItems() {
+          const opts = items.map((x) => `<option value="${esc(x.id)}">${esc(x.code)} - ${esc(x.name)}</option>`).join("");
+          ["purchaseItem", "saleItem", "movementItem"].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = opts;
           });
         }
-
-        function renderCounterparties() {
-          const host = document.getElementById("counterpartiesHost");
-          host.innerHTML = counterparties.length
-            ? `<div class="grid gap-1">${counterparties
-                .map((c) => `<div class="rounded-lg border px-3 py-2">${esc(c.name)} <span class="opacity-60">(${c.party_type === "customer" ? "عميل" : "مورد"})</span></div>`)
-                .join("")}</div>`
-            : `<div class="opacity-70">لا يوجد عملاء/موردون بعد</div>`;
-          fillSelect(
-            document.getElementById("invCounterparty"),
-            counterparties,
-            (c) => `${c.name} (${c.party_type === "customer" ? "عميل" : "مورد"})`
-          );
+        function renderItems() {
+          const host = document.getElementById("itemsHost");
+          host.innerHTML = items.length
+            ? `<div class="grid gap-1">${items.map((x) => `<div class="rounded-lg border px-3 py-2">${esc(x.code)} — ${esc(x.name)} | ${esc(x.brand || "")} ${esc(x.size || "")} | الكمية: ${esc(x.quantity)}</div>`).join("")}</div>`
+            : `<div class="opacity-70">لا توجد أصناف</div>`;
+          fillItems();
         }
-
-        function renderDraftLines() {
-          const host = document.getElementById("invLinesHost");
-          const total = draftLines.reduce((s, x) => s + Number(x.amount || 0), 0).toFixed(2);
-          host.innerHTML = draftLines.length
-            ? `<div class="rounded-lg border overflow-hidden">
-                <table class="w-full text-sm">
-                  <thead class="bg-slate-100 dark:bg-slate-800">
-                    <tr><th class="px-2 py-1">الحساب</th><th class="px-2 py-1">الوصف</th><th class="px-2 py-1">المبلغ</th><th class="px-2 py-1">حذف</th></tr>
-                  </thead>
-                  <tbody>
-                    ${draftLines
-                      .map(
-                        (x, i) =>
-                          `<tr class="border-t"><td class="px-2 py-1">${esc(x.account_label)}</td><td class="px-2 py-1">${esc(x.description)}</td><td class="px-2 py-1">${esc(x.amount)}</td><td class="px-2 py-1"><button class="px-2 py-1 border rounded" data-del="${i}">✕</button></td></tr>`
-                      )
-                      .join("")}
-                  </tbody>
-                </table>
-              </div>
-              <div class="mt-1 font-extrabold">الإجمالي: ${total}</div>`
-            : `<div class="opacity-70">لم يتم إضافة بنود بعد</div>`;
-          host.querySelectorAll("[data-del]").forEach((btn) => {
-            btn.addEventListener("click", () => {
-              const idx = Number(btn.getAttribute("data-del"));
-              draftLines.splice(idx, 1);
-              renderDraftLines();
-            });
-          });
+        async function loadItems() {
+          const d = await apiGet("/trade/items");
+          items = d.items || [];
+          renderItems();
         }
-
-        function renderSimpleRows(hostId, rows, emptyText) {
-          const host = document.getElementById(hostId);
+        async function loadPurchases() {
+          const d = await apiGet("/trade/purchases?limit=100");
+          const host = document.getElementById("purchasesHost");
+          const rows = d.items || [];
+          host.innerHTML = rows.length ? `<div class="grid gap-1">${rows.map((x) => `<div class="rounded-lg border px-3 py-2">${esc(x.purchase_date)} | ${esc(x.invoice_no)} | ${esc(x.supplier_name)} | ${esc(x.total_amount)}</div>`).join("")}</div>` : `<div class="opacity-70">لا توجد مشتريات</div>`;
+        }
+        async function loadSales() {
+          const d = await apiGet("/trade/sales?limit=100");
+          const host = document.getElementById("salesHost");
+          const rows = d.items || [];
+          host.innerHTML = rows.length ? `<div class="grid gap-1">${rows.map((x) => `<div class="rounded-lg border px-3 py-2">${esc(x.sale_date)} | ${esc(x.invoice_no)} | ${esc(x.customer_name)} | ${esc(x.total_amount)} (${esc(x.payment_type)})</div>`).join("")}</div>` : `<div class="opacity-70">لا توجد مبيعات</div>`;
+        }
+        async function loadInventory() {
+          const d = await apiGet("/trade/inventory");
+          const host = document.getElementById("inventoryHost");
+          const rows = d.items || [];
           host.innerHTML = rows.length
-            ? `<div class="grid gap-1">${rows.map((x) => `<div class="rounded-lg border px-3 py-2">${x}</div>`).join("")}</div>`
-            : `<div class="opacity-70">${emptyText}</div>`;
+            ? `<div class="rounded-lg border overflow-auto"><table class="w-full text-sm"><thead class="bg-slate-100 dark:bg-slate-800"><tr><th class="px-2 py-2">الكود</th><th class="px-2 py-2">الصنف</th><th class="px-2 py-2">الكمية</th><th class="px-2 py-2">تكلفة الوحدة</th><th class="px-2 py-2">سعر البيع</th><th class="px-2 py-2">قيمة المخزون</th></tr></thead><tbody>${rows.map((x) => `<tr class="border-t"><td class="px-2 py-2">${esc(x.code)}</td><td class="px-2 py-2">${esc(x.name)}</td><td class="px-2 py-2">${esc(x.quantity)}</td><td class="px-2 py-2">${esc(x.cost_price)}</td><td class="px-2 py-2">${esc(x.sale_price)}</td><td class="px-2 py-2">${esc(x.stock_value)}</td></tr>`).join("")}</tbody></table></div>`
+            : `<div class="opacity-70">لا يوجد مخزون</div>`;
         }
-
-        function renderInvoicesList(hostId, invoices) {
-          const host = document.getElementById(hostId);
-          if (!host) return;
-          host.innerHTML = invoices.length
-            ? `<div class="grid gap-2">${invoices
-                .map(
-                  (inv) =>
-                    `<div class="rounded-lg border px-3 py-2">
-                       <div class="font-extrabold">${esc(inv.invoice_no)} - ${inv.invoice_type === "sale" ? "مبيعات" : "مشتريات"} - ${esc(inv.total_amount)}</div>
-                       <div class="text-xs opacity-70">${esc(inv.invoice_date)} | ${esc(inv.counterparty_name || "")} | ${esc(inv.status)} | المتبقي: ${esc(inv.due_amount)}</div>
-                       ${
-                         inv.status === "draft"
-                           ? `<button class="mt-2 px-3 py-1 rounded border font-extrabold" data-post="${esc(inv.id)}">ترحيل</button>`
-                           : inv.due_amount > 0
-                             ? `<button class="mt-2 px-3 py-1 rounded border font-extrabold" data-pay="${esc(inv.id)}">سداد</button>`
-                             : `<span class="mt-2 inline-block text-emerald-600 font-extrabold">مكتمل السداد</span>`
-                       }
-                     </div>`
-                )
-                .join("")}</div>`
-            : `<div class="opacity-70">لا توجد فواتير مطابقة</div>`;
-          host.querySelectorAll("[data-post]").forEach((btn) => {
-            btn.addEventListener("click", async () => {
-              try {
-                await apiPostJson(`/accounting/invoices/${btn.getAttribute("data-post")}/post`, {});
-                showToast("تم ترحيل الفاتورة محاسبيًا ✔️", "#10b981");
-                await loadAll();
-              } catch (e) {
-                showToast(e.message || "تعذر ترحيل الفاتورة", "#ef4444");
-              }
-            });
-          });
-          host.querySelectorAll("[data-pay]").forEach((btn) => {
-            btn.addEventListener("click", async () => {
-              try {
-                const amount = prompt("مبلغ السداد؟", "0");
-                if (!amount || Number(amount) <= 0) return;
-                await apiPostJson(`/accounting/invoices/${btn.getAttribute("data-pay")}/payments`, {
-                  payment_date: document.getElementById("vDate").value || new Date().toISOString().slice(0, 10),
-                  cash_account_id: document.getElementById("vCashAccount").value || "",
-                  amount: Number(amount),
-                });
-                showToast("تم تسجيل السداد ✔️", "#10b981");
-                await loadAll();
-              } catch (e) {
-                showToast(e.message || "تعذر تسجيل السداد", "#ef4444");
-              }
-            });
-          });
-        }
-
-        function applySalesFilters() {
-          const q = (document.getElementById("salesSearch")?.value || "").trim().toLowerCase();
-          const st = (document.getElementById("salesStatusFilter")?.value || "").trim();
-          const df = (document.getElementById("salesDateFrom")?.value || "").trim();
-          const dt = (document.getElementById("salesDateTo")?.value || "").trim();
-          let rows = (invoicesCache || []).filter((x) => x.invoice_type === "sale");
-          if (q) {
-            rows = rows.filter((x) => `${x.invoice_no || ""} ${x.counterparty_name || ""}`.toLowerCase().includes(q));
-          }
-          if (st) rows = rows.filter((x) => (x.status || "") === st);
-          if (df) rows = rows.filter((x) => (x.invoice_date || "") >= df);
-          if (dt) rows = rows.filter((x) => (x.invoice_date || "") <= dt);
-          salesFiltered = rows;
-          salesPage = 1;
-          renderSalesSummary(rows);
-          renderSalesTablePage();
-        }
-
-        function renderSalesSummary(rows) {
-          const host = document.getElementById("salesSummaryHost");
-          if (!host) return;
-          const count = rows.length;
-          const total = rows.reduce((s, x) => s + Number(x.total_amount || 0), 0);
-          const paid = rows.reduce((s, x) => s + Number(x.paid_amount || 0), 0);
-          const due = rows.reduce((s, x) => s + Number(x.due_amount || 0), 0);
-          host.innerHTML = [
-            { k: "عدد الفواتير", v: count },
-            { k: "إجمالي المبيعات", v: total.toFixed(2) },
-            { k: "المحصّل", v: paid.toFixed(2) },
-            { k: "المتبقي", v: due.toFixed(2) },
-          ]
-            .map(
-              (x) =>
-                `<div class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"><div class="text-xs opacity-70">${x.k}</div><div class="text-lg font-extrabold">${esc(x.v)}</div></div>`
-            )
-            .join("");
-        }
-
-        function renderSalesTablePage() {
-          const host = document.getElementById("salesInvoicesHost");
-          const pager = document.getElementById("salesPagerHost");
-          if (!host || !pager) return;
-          const total = salesFiltered.length;
-          const pages = Math.max(1, Math.ceil(total / SALES_PAGE_SIZE));
-          if (salesPage < 1) salesPage = 1;
-          if (salesPage > pages) salesPage = pages;
-          const start = (salesPage - 1) * SALES_PAGE_SIZE;
-          const rows = salesFiltered.slice(start, start + SALES_PAGE_SIZE);
-          host.innerHTML = rows.length
-            ? `<div class="rounded-lg border overflow-auto">
-                <table class="w-full text-sm">
-                  <thead class="bg-slate-100 dark:bg-slate-800">
-                    <tr>
-                      <th class="px-2 py-2">رقم الفاتورة</th>
-                      <th class="px-2 py-2">التاريخ</th>
-                      <th class="px-2 py-2">العميل</th>
-                      <th class="px-2 py-2">الإجمالي</th>
-                      <th class="px-2 py-2">المحصّل</th>
-                      <th class="px-2 py-2">المتبقي</th>
-                      <th class="px-2 py-2">الحالة</th>
-                      <th class="px-2 py-2">الإجراء</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${rows
-                      .map((inv) => {
-                        const action =
-                          inv.status === "draft"
-                            ? `<button class="px-2 py-1 rounded border font-extrabold" data-post="${esc(inv.id)}">ترحيل</button>`
-                            : Number(inv.due_amount || 0) > 0
-                              ? `<button class="px-2 py-1 rounded border font-extrabold" data-pay="${esc(inv.id)}">سداد</button>`
-                              : `<span class="text-emerald-600 font-extrabold">مكتمل</span>`;
-                        return `<tr class="border-t">
-                          <td class="px-2 py-2">${esc(inv.invoice_no)}</td>
-                          <td class="px-2 py-2">${esc(inv.invoice_date)}</td>
-                          <td class="px-2 py-2">${esc(inv.counterparty_name || "")}</td>
-                          <td class="px-2 py-2">${esc(Number(inv.total_amount || 0).toFixed(2))}</td>
-                          <td class="px-2 py-2">${esc(Number(inv.paid_amount || 0).toFixed(2))}</td>
-                          <td class="px-2 py-2">${esc(Number(inv.due_amount || 0).toFixed(2))}</td>
-                          <td class="px-2 py-2">${esc(inv.status || "")}</td>
-                          <td class="px-2 py-2">${action}</td>
-                        </tr>`;
-                      })
-                      .join("")}
-                  </tbody>
-                </table>
-              </div>`
-            : `<div class="opacity-70">لا توجد فواتير مطابقة</div>`;
-          pager.innerHTML =
-            total > SALES_PAGE_SIZE
-              ? `<div class="flex items-center justify-between">
-                  <span>عرض ${start + 1} - ${Math.min(start + SALES_PAGE_SIZE, total)} من ${total}</span>
-                  <div class="flex gap-2">
-                    <button class="px-3 py-1 rounded border" ${salesPage <= 1 ? "disabled" : ""} id="salesPrevBtn">السابق</button>
-                    <button class="px-3 py-1 rounded border" ${salesPage >= pages ? "disabled" : ""} id="salesNextBtn">التالي</button>
-                  </div>
-                </div>`
-              : "";
-          document.getElementById("salesPrevBtn")?.addEventListener("click", () => {
-            salesPage -= 1;
-            renderSalesTablePage();
-          });
-          document.getElementById("salesNextBtn")?.addEventListener("click", () => {
-            salesPage += 1;
-            renderSalesTablePage();
-          });
-          host.querySelectorAll("[data-post]").forEach((btn) => {
-            btn.addEventListener("click", async () => {
-              try {
-                await apiPostJson(`/accounting/invoices/${btn.getAttribute("data-post")}/post`, {});
-                showToast("تم ترحيل الفاتورة محاسبيًا ✔️", "#10b981");
-                await loadAll();
-              } catch (e) {
-                showToast(e.message || "تعذر ترحيل الفاتورة", "#ef4444");
-              }
-            });
-          });
-          host.querySelectorAll("[data-pay]").forEach((btn) => {
-            btn.addEventListener("click", async () => {
-              try {
-                const amount = prompt("مبلغ السداد؟", "0");
-                if (!amount || Number(amount) <= 0) return;
-                await apiPostJson(`/accounting/invoices/${btn.getAttribute("data-pay")}/payments`, {
-                  payment_date: document.getElementById("vDate").value || new Date().toISOString().slice(0, 10),
-                  cash_account_id: document.getElementById("vCashAccount").value || "",
-                  amount: Number(amount),
-                });
-                showToast("تم تسجيل السداد ✔️", "#10b981");
-                await loadAll();
-              } catch (e) {
-                showToast(e.message || "تعذر تسجيل السداد", "#ef4444");
-              }
-            });
-          });
-        }
-
-        function applyPurchasesFilters() {
-          const q = (document.getElementById("purchaseSearch")?.value || "").trim().toLowerCase();
-          const st = (document.getElementById("purchaseStatusFilter")?.value || "").trim();
-          const df = (document.getElementById("purchaseDateFrom")?.value || "").trim();
-          const dt = (document.getElementById("purchaseDateTo")?.value || "").trim();
-          let rows = (invoicesCache || []).filter((x) => x.invoice_type === "purchase");
-          if (q) {
-            rows = rows.filter((x) => `${x.invoice_no || ""} ${x.counterparty_name || ""}`.toLowerCase().includes(q));
-          }
-          if (st) rows = rows.filter((x) => (x.status || "") === st);
-          if (df) rows = rows.filter((x) => (x.invoice_date || "") >= df);
-          if (dt) rows = rows.filter((x) => (x.invoice_date || "") <= dt);
-          purchasesFiltered = rows;
-          purchasesPage = 1;
-          renderPurchasesSummary(rows);
-          renderPurchasesTablePage();
-        }
-
-        function renderPurchasesSummary(rows) {
-          const host = document.getElementById("purchaseSummaryHost");
-          if (!host) return;
-          const count = rows.length;
-          const total = rows.reduce((s, x) => s + Number(x.total_amount || 0), 0);
-          const paid = rows.reduce((s, x) => s + Number(x.paid_amount || 0), 0);
-          const due = rows.reduce((s, x) => s + Number(x.due_amount || 0), 0);
-          host.innerHTML = [
-            { k: "عدد الفواتير", v: count },
-            { k: "إجمالي المشتريات", v: total.toFixed(2) },
-            { k: "المدفوع", v: paid.toFixed(2) },
-            { k: "المستحق", v: due.toFixed(2) },
-          ]
-            .map(
-              (x) =>
-                `<div class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"><div class="text-xs opacity-70">${x.k}</div><div class="text-lg font-extrabold">${esc(x.v)}</div></div>`
-            )
-            .join("");
-        }
-
-        function renderPurchasesTablePage() {
-          const host = document.getElementById("purchaseInvoicesHost");
-          const pager = document.getElementById("purchasePagerHost");
-          if (!host || !pager) return;
-          const total = purchasesFiltered.length;
-          const pages = Math.max(1, Math.ceil(total / PURCHASES_PAGE_SIZE));
-          if (purchasesPage < 1) purchasesPage = 1;
-          if (purchasesPage > pages) purchasesPage = pages;
-          const start = (purchasesPage - 1) * PURCHASES_PAGE_SIZE;
-          const rows = purchasesFiltered.slice(start, start + PURCHASES_PAGE_SIZE);
-          host.innerHTML = rows.length
-            ? `<div class="rounded-lg border overflow-auto">
-                <table class="w-full text-sm">
-                  <thead class="bg-slate-100 dark:bg-slate-800">
-                    <tr>
-                      <th class="px-2 py-2">رقم الفاتورة</th>
-                      <th class="px-2 py-2">التاريخ</th>
-                      <th class="px-2 py-2">المورد</th>
-                      <th class="px-2 py-2">الإجمالي</th>
-                      <th class="px-2 py-2">المدفوع</th>
-                      <th class="px-2 py-2">المستحق</th>
-                      <th class="px-2 py-2">الحالة</th>
-                      <th class="px-2 py-2">الإجراء</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${rows
-                      .map((inv) => {
-                        const action =
-                          inv.status === "draft"
-                            ? `<button class="px-2 py-1 rounded border font-extrabold" data-post="${esc(inv.id)}">ترحيل</button>`
-                            : Number(inv.due_amount || 0) > 0
-                              ? `<button class="px-2 py-1 rounded border font-extrabold" data-pay="${esc(inv.id)}">سداد</button>`
-                              : `<span class="text-emerald-600 font-extrabold">مكتمل</span>`;
-                        return `<tr class="border-t">
-                          <td class="px-2 py-2">${esc(inv.invoice_no)}</td>
-                          <td class="px-2 py-2">${esc(inv.invoice_date)}</td>
-                          <td class="px-2 py-2">${esc(inv.counterparty_name || "")}</td>
-                          <td class="px-2 py-2">${esc(Number(inv.total_amount || 0).toFixed(2))}</td>
-                          <td class="px-2 py-2">${esc(Number(inv.paid_amount || 0).toFixed(2))}</td>
-                          <td class="px-2 py-2">${esc(Number(inv.due_amount || 0).toFixed(2))}</td>
-                          <td class="px-2 py-2">${esc(inv.status || "")}</td>
-                          <td class="px-2 py-2">${action}</td>
-                        </tr>`;
-                      })
-                      .join("")}
-                  </tbody>
-                </table>
-              </div>`
-            : `<div class="opacity-70">لا توجد فواتير مشتريات مطابقة</div>`;
-          pager.innerHTML =
-            total > PURCHASES_PAGE_SIZE
-              ? `<div class="flex items-center justify-between">
-                  <span>عرض ${start + 1} - ${Math.min(start + PURCHASES_PAGE_SIZE, total)} من ${total}</span>
-                  <div class="flex gap-2">
-                    <button class="px-3 py-1 rounded border" ${purchasesPage <= 1 ? "disabled" : ""} id="purchasePrevBtn">السابق</button>
-                    <button class="px-3 py-1 rounded border" ${purchasesPage >= pages ? "disabled" : ""} id="purchaseNextBtn">التالي</button>
-                  </div>
-                </div>`
-              : "";
-          document.getElementById("purchasePrevBtn")?.addEventListener("click", () => {
-            purchasesPage -= 1;
-            renderPurchasesTablePage();
-          });
-          document.getElementById("purchaseNextBtn")?.addEventListener("click", () => {
-            purchasesPage += 1;
-            renderPurchasesTablePage();
-          });
-          host.querySelectorAll("[data-post]").forEach((btn) => {
-            btn.addEventListener("click", async () => {
-              try {
-                await apiPostJson(`/accounting/invoices/${btn.getAttribute("data-post")}/post`, {});
-                showToast("تم ترحيل الفاتورة محاسبيًا ✔️", "#10b981");
-                await loadAll();
-              } catch (e) {
-                showToast(e.message || "تعذر ترحيل الفاتورة", "#ef4444");
-              }
-            });
-          });
-          host.querySelectorAll("[data-pay]").forEach((btn) => {
-            btn.addEventListener("click", async () => {
-              try {
-                const amount = prompt("مبلغ السداد؟", "0");
-                if (!amount || Number(amount) <= 0) return;
-                await apiPostJson(`/accounting/invoices/${btn.getAttribute("data-pay")}/payments`, {
-                  payment_date: document.getElementById("vDate").value || new Date().toISOString().slice(0, 10),
-                  cash_account_id: document.getElementById("vCashAccount").value || "",
-                  amount: Number(amount),
-                });
-                showToast("تم تسجيل السداد ✔️", "#10b981");
-                await loadAll();
-              } catch (e) {
-                showToast(e.message || "تعذر تسجيل السداد", "#ef4444");
-              }
-            });
-          });
-        }
-
-        async function loadReports() {
+        async function runReports() {
           const from = document.getElementById("reportFrom").value || "";
           const to = document.getElementById("reportTo").value || "";
-          const accountId = document.getElementById("ledgerAccount").value || "";
-          const qs = `date_from=${encodeURIComponent(from)}&date_to=${encodeURIComponent(to)}`;
-          const [tbRes, ledRes] = await Promise.all([
-            apiGet(`/accounting/trial-balance?${qs}`),
-            accountId ? apiGet(`/accounting/ledger?account_id=${encodeURIComponent(accountId)}&${qs}`) : Promise.resolve({ items: [] }),
-          ]);
-
-          const tbRows = tbRes.items || [];
-          document.getElementById("trialBalanceHost").innerHTML = tbRows.length
-            ? `<div class="rounded-lg border overflow-auto"><table class="w-full text-sm"><thead class="bg-slate-100 dark:bg-slate-800"><tr>
-                <th class="px-2 py-1">الكود</th><th class="px-2 py-1">الحساب</th><th class="px-2 py-1">مدين</th><th class="px-2 py-1">دائن</th><th class="px-2 py-1">رصيد مدين</th><th class="px-2 py-1">رصيد دائن</th>
-              </tr></thead><tbody>${tbRows
-                .map(
-                  (r) =>
-                    `<tr class="border-t"><td class="px-2 py-1">${esc(r.code)}</td><td class="px-2 py-1">${esc(r.name)}</td><td class="px-2 py-1">${esc(r.total_debit)}</td><td class="px-2 py-1">${esc(r.total_credit)}</td><td class="px-2 py-1">${esc(r.balance_debit)}</td><td class="px-2 py-1">${esc(r.balance_credit)}</td></tr>`
-                )
-                .join("")}</tbody></table></div>`
-            : `<div class="opacity-70">لا توجد بيانات ميزان مراجعة</div>`;
-
-          const ledRows = ledRes.items || [];
-          document.getElementById("ledgerHost").innerHTML = ledRows.length
-            ? `<div class="rounded-lg border overflow-auto"><table class="w-full text-sm"><thead class="bg-slate-100 dark:bg-slate-800"><tr>
-                <th class="px-2 py-1">التاريخ</th><th class="px-2 py-1">مرجع</th><th class="px-2 py-1">بيان</th><th class="px-2 py-1">مدين</th><th class="px-2 py-1">دائن</th><th class="px-2 py-1">الرصيد</th>
-              </tr></thead><tbody>${ledRows
-                .map(
-                  (r) =>
-                    `<tr class="border-t"><td class="px-2 py-1">${esc(r.entry_date)}</td><td class="px-2 py-1">${esc(r.reference)}</td><td class="px-2 py-1">${esc(r.description)}</td><td class="px-2 py-1">${esc(r.debit)}</td><td class="px-2 py-1">${esc(r.credit)}</td><td class="px-2 py-1">${esc(r.running_balance)}</td></tr>`
-                )
-                .join("")}</tbody></table></div>`
-            : `<div class="opacity-70">لا توجد بيانات دفتر أستاذ للحساب المحدد</div>`;
+          const itemId = document.getElementById("movementItem").value || "";
+          const p = await apiGet(`/trade/reports/profit?date_from=${encodeURIComponent(from)}&date_to=${encodeURIComponent(to)}`);
+          const t = p.totals || {};
+          document.getElementById("profitHost").innerHTML = `<div class="grid grid-cols-1 md:grid-cols-4 gap-2"><div class="rounded-xl border px-3 py-2">صافي المبيعات: <b>${esc(t.net_sales || 0)}</b></div><div class="rounded-xl border px-3 py-2">إجمالي التكلفة: <b>${esc(t.cost_total || 0)}</b></div><div class="rounded-xl border px-3 py-2">الربح: <b>${esc(t.profit || 0)}</b></div><div class="rounded-xl border px-3 py-2">هامش الربح%: <b>${esc(t.profit_margin_pct || 0)}</b></div></div>`;
+          if (!itemId) return;
+          const m = await apiGet(`/trade/reports/item-movement?item_id=${encodeURIComponent(itemId)}&date_from=${encodeURIComponent(from)}&date_to=${encodeURIComponent(to)}`);
+          const rows = m.items || [];
+          const s = m.summary || {};
+          document.getElementById("movementHost").innerHTML = `<div class="mb-2">رصيد أول: <b>${esc(s.opening_qty || 0)}</b> | وارد: <b>${esc(s.qty_in || 0)}</b> | صادر: <b>${esc(s.qty_out || 0)}</b> | رصيد: <b>${esc(s.balance_qty || 0)}</b></div>${rows.length ? `<div class="rounded-lg border overflow-auto"><table class="w-full text-sm"><thead class="bg-slate-100 dark:bg-slate-800"><tr><th class="px-2 py-2">التاريخ</th><th class="px-2 py-2">النوع</th><th class="px-2 py-2">وارد</th><th class="px-2 py-2">صادر</th><th class="px-2 py-2">التكلفة</th></tr></thead><tbody>${rows.map((x) => `<tr class="border-t"><td class="px-2 py-2">${esc(x.date)}</td><td class="px-2 py-2">${esc(x.movement_type)}</td><td class="px-2 py-2">${esc(x.qty_in)}</td><td class="px-2 py-2">${esc(x.qty_out)}</td><td class="px-2 py-2">${esc(x.unit_cost)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="opacity-70">لا توجد حركة للصنف</div>`}`;
         }
-
-        async function loadSalesMovementReport() {
-          const from = document.getElementById("salesMovementFrom").value || "";
-          const to = document.getElementById("salesMovementTo").value || "";
-          const query = (document.getElementById("salesMovementQuery").value || "").trim();
-          const qs = `date_from=${encodeURIComponent(from)}&date_to=${encodeURIComponent(to)}&item_query=${encodeURIComponent(query)}&limit=5000`;
-          const data = await apiGet(`/accounting/reports/sales-movement?${qs}`);
-          const rows = data.items || [];
-          const t = data.totals || {};
-          const totalsHost = document.getElementById("salesMovementTotalsHost");
-          if (totalsHost) {
-            const cards = [
-              ["إجمالي الكمية", Number(t.qty || 0).toFixed(4)],
-              ["صافي المبيعات", Number(t.net_sales || 0).toFixed(2)],
-              ["إجمالي الضريبة", Number(t.tax_amount || 0).toFixed(2)],
-              ["إجمالي التكلفة", Number(t.cost_total || 0).toFixed(2)],
-              ["إجمالي الربح", `${Number(t.profit || 0).toFixed(2)} (${Number(t.profit_margin_pct || 0).toFixed(2)}%)`],
-            ];
-            totalsHost.innerHTML = cards
-              .map(
-                (x) =>
-                  `<div class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"><div class="text-xs opacity-70">${x[0]}</div><div class="text-lg font-extrabold">${esc(x[1])}</div></div>`
-              )
-              .join("");
-          }
-          const host = document.getElementById("salesMovementHost");
-          if (!host) return;
-          host.innerHTML = rows.length
-            ? `<div class="rounded-lg border overflow-auto">
-                <table class="w-full text-sm">
-                  <thead class="bg-slate-100 dark:bg-slate-800">
-                    <tr>
-                      <th class="px-2 py-2">التاريخ</th>
-                      <th class="px-2 py-2">رقم الفاتورة</th>
-                      <th class="px-2 py-2">العميل</th>
-                      <th class="px-2 py-2">الصنف</th>
-                      <th class="px-2 py-2">كود الحساب</th>
-                      <th class="px-2 py-2">الكمية</th>
-                      <th class="px-2 py-2">سعر البيع</th>
-                      <th class="px-2 py-2">تكلفة الوحدة</th>
-                      <th class="px-2 py-2">صافي البيع</th>
-                      <th class="px-2 py-2">الضريبة</th>
-                      <th class="px-2 py-2">إجمالي التكلفة</th>
-                      <th class="px-2 py-2">الربح</th>
-                      <th class="px-2 py-2">هامش الربح %</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${rows
-                      .map(
-                        (r) => `<tr class="border-t">
-                          <td class="px-2 py-2">${esc(r.invoice_date)}</td>
-                          <td class="px-2 py-2">${esc(r.invoice_no)}</td>
-                          <td class="px-2 py-2">${esc(r.customer_name)}</td>
-                          <td class="px-2 py-2">${esc(r.item_name)}</td>
-                          <td class="px-2 py-2">${esc(r.account_code)}</td>
-                          <td class="px-2 py-2">${esc(r.qty)}</td>
-                          <td class="px-2 py-2">${esc(r.sale_unit_price)}</td>
-                          <td class="px-2 py-2">${esc(r.cost_unit_price)}</td>
-                          <td class="px-2 py-2">${esc(r.net_sales)}</td>
-                          <td class="px-2 py-2">${esc(r.tax_amount)}</td>
-                          <td class="px-2 py-2">${esc(r.cost_total)}</td>
-                          <td class="px-2 py-2">${esc(r.profit)}</td>
-                          <td class="px-2 py-2">${esc(r.profit_margin_pct)}</td>
-                        </tr>`
-                      )
-                      .join("")}
-                  </tbody>
-                </table>
-              </div>`
-            : `<div class="opacity-70">لا توجد حركة مبيعات ضمن الفلتر الحالي</div>`;
+        function wire() {
+          document.getElementById("createItemBtn").addEventListener("click", async () => {
+            try {
+              await apiPostJson("/trade/items", {
+                code: document.getElementById("itemCode").value || "",
+                name: document.getElementById("itemName").value || "",
+                brand: document.getElementById("itemBrand").value || "",
+                size: document.getElementById("itemSize").value || "",
+                category: document.getElementById("itemCategory").value || "rim",
+              });
+              showToast("تم إضافة الصنف ✔️", "#10b981");
+              await loadItems();
+            } catch (e) { showToast(e.message || "تعذر إضافة الصنف", "#ef4444"); }
+          });
+          document.getElementById("createPurchaseBtn").addEventListener("click", async () => {
+            try {
+              await apiPostJson("/trade/purchases", {
+                invoice_no: document.getElementById("purchaseNo").value || "",
+                supplier_name: document.getElementById("purchaseSupplier").value || "",
+                purchase_date: document.getElementById("purchaseDate").value || "",
+                lines: [{ item_id: document.getElementById("purchaseItem").value || "", qty: Number(document.getElementById("purchaseQty").value || 0), unit_cost: Number(document.getElementById("purchaseUnitCost").value || 0), extra_cost: Number(document.getElementById("purchaseExtra").value || 0) }],
+              });
+              showToast("تم حفظ الشراء ✔️", "#10b981");
+              await Promise.all([loadPurchases(), loadInventory(), loadItems()]);
+            } catch (e) { showToast(e.message || "تعذر حفظ الشراء", "#ef4444"); }
+          });
+          document.getElementById("createSaleBtn").addEventListener("click", async () => {
+            try {
+              await apiPostJson("/trade/sales", {
+                invoice_no: document.getElementById("saleNo").value || "",
+                customer_name: document.getElementById("saleCustomer").value || "",
+                sale_date: document.getElementById("saleDate").value || "",
+                payment_type: document.getElementById("salePaymentType").value || "cash",
+                lines: [{ item_id: document.getElementById("saleItem").value || "", qty: Number(document.getElementById("saleQty").value || 0), sale_price: Number(document.getElementById("salePrice").value || 0), tax_amount: Number(document.getElementById("saleTax").value || 0) }],
+              });
+              showToast("تم حفظ البيع ✔️", "#10b981");
+              await Promise.all([loadSales(), loadInventory(), loadItems()]);
+            } catch (e) { showToast(e.message || "تعذر حفظ البيع", "#ef4444"); }
+          });
+          document.getElementById("refreshPurchasesBtn").addEventListener("click", () => loadPurchases());
+          document.getElementById("refreshSalesBtn").addEventListener("click", () => loadSales());
+          document.getElementById("refreshInventoryBtn").addEventListener("click", () => loadInventory());
+          document.getElementById("runReportsBtn").addEventListener("click", () => runReports());
         }
-
-        async function loadAll() {
-          const [accRes, cpRes, invRes, voucherRes, periodRes] = await Promise.all([
-            apiGet("/accounting/accounts"),
-            apiGet("/accounting/counterparties"),
-            apiGet("/accounting/invoices?limit=50"),
-            apiGet("/accounting/vouchers?limit=50"),
-            apiGet("/accounting/periods"),
-          ]);
-          accounts = accRes.items || [];
-          counterparties = cpRes.items || [];
-          invoicesCache = invRes.items || [];
-          renderAccounts();
-          renderCounterparties();
-          renderInvoicesList("invoicesHost", invoicesCache);
-          applySalesFilters();
-          applyPurchasesFilters();
-          renderSimpleRows(
-            "vouchersHost",
-            (voucherRes.items || []).map((v) => `${v.voucher_no} - ${v.voucher_type === "receipt" ? "قبض" : "صرف"} - ${v.amount} (${v.voucher_date})`),
-            "لا توجد سندات"
-          );
-          document.getElementById("periodsHost").innerHTML = (periodRes.items || []).length
-            ? `<div class="grid gap-1">${periodRes.items
-                .map(
-                  (p) =>
-                    `<div class="rounded-lg border px-3 py-2 flex items-center justify-between">
-                      <span>${esc(p.name)} (${esc(p.start_date)} - ${esc(p.end_date)})</span>
-                      <button class="px-2 py-1 border rounded text-xs font-bold" data-toggle-period="${esc(p.id)}">${p.is_closed ? "فتح" : "إقفال"}</button>
-                    </div>`
-                )
-                .join("")}</div>`
-            : `<div class="opacity-70">لا توجد فترات محاسبية</div>`;
-          document.querySelectorAll("[data-toggle-period]").forEach((btn) => {
-            btn.addEventListener("click", async () => {
-              try {
-                await apiPostJson(`/accounting/periods/${btn.getAttribute("data-toggle-period")}/toggle-close`, {});
-                await loadAll();
-              } catch (e) {
-                showToast(e.message || "تعذر تحديث الفترة", "#ef4444");
-              }
-            });
-          });
-          await loadReports();
-        }
-
-        function wireActions() {
-          document.querySelectorAll("[data-module-tab]").forEach((btn) => {
-            btn.addEventListener("click", () => {
-              const active = btn.getAttribute("data-module-tab") || "";
-              document.querySelectorAll("[data-module-tab]").forEach((x) => x.classList.toggle("is-active", x === btn));
-              document.querySelectorAll("[data-module-pane]").forEach((pane) => {
-                const keys = String(pane.getAttribute("data-module-pane") || "").split(/\s+/).filter(Boolean);
-                pane.classList.toggle("is-open", keys.includes(active));
-              });
-            });
-          });
-
-          document.getElementById("accCreateBtn")?.addEventListener("click", async () => {
-            try {
-              await apiPostJson("/accounting/accounts", {
-                code: document.getElementById("accCode").value || "",
-                name: document.getElementById("accName").value || "",
-                account_type: document.getElementById("accType").value || "asset",
-              });
-              showToast("تم إضافة الحساب ✔️", "#10b981");
-              await loadAll();
-            } catch (e) {
-              showToast(e.message || "تعذر إضافة الحساب", "#ef4444");
-            }
-          });
-
-          document.getElementById("cpCreateBtn")?.addEventListener("click", async () => {
-            try {
-              await apiPostJson("/accounting/counterparties", {
-                name: document.getElementById("cpName").value || "",
-                code: document.getElementById("cpCode").value || "",
-                party_type: document.getElementById("cpType").value || "customer",
-                phone: document.getElementById("cpPhone").value || "",
-              });
-              showToast("تم إضافة الطرف ✔️", "#10b981");
-              await loadAll();
-            } catch (e) {
-              showToast(e.message || "تعذر إضافة الطرف", "#ef4444");
-            }
-          });
-
-          document.getElementById("addInvLineBtn")?.addEventListener("click", () => {
-            const accountId = document.getElementById("lineAccount").value || "";
-            const accountLabel = document.getElementById("lineAccount").selectedOptions?.[0]?.textContent || "";
-            const description = document.getElementById("lineDesc").value || "";
-            const qty = Number(document.getElementById("lineQty").value || 0);
-            const unitPrice = Number(document.getElementById("linePrice").value || 0);
-            const amount = Number((qty * unitPrice).toFixed(2));
-            if (!accountId || amount <= 0) {
-              showToast("أدخل حساباً ومبلغاً صحيحاً", "#ef4444");
-              return;
-            }
-            draftLines.push({ account_id: accountId, account_label: accountLabel, description, qty, unit_price: unitPrice, amount });
-            renderDraftLines();
-          });
-
-          document.getElementById("createVoucherBtn")?.addEventListener("click", async () => {
-            try {
-              await apiPostJson("/accounting/vouchers", {
-                voucher_type: document.getElementById("vType").value || "receipt",
-                voucher_no: document.getElementById("vNo").value || "",
-                voucher_date: document.getElementById("vDate").value || "",
-                account_id: document.getElementById("vAccount").value || "",
-                cash_account_id: document.getElementById("vCashAccount").value || "",
-                amount: Number(document.getElementById("vAmount").value || 0),
-              });
-              showToast("تم حفظ السند ✔️", "#10b981");
-              await loadAll();
-            } catch (e) {
-              showToast(e.message || "تعذر حفظ السند", "#ef4444");
-            }
-          });
-
-          document.getElementById("createPeriodBtn")?.addEventListener("click", async () => {
-            try {
-              await apiPostJson("/accounting/periods", {
-                name: document.getElementById("periodName").value || "",
-                start_date: document.getElementById("periodStart").value || "",
-                end_date: document.getElementById("periodEnd").value || "",
-              });
-              showToast("تمت إضافة الفترة ✔️", "#10b981");
-              await loadAll();
-            } catch (e) {
-              showToast(e.message || "تعذر إضافة الفترة", "#ef4444");
-            }
-          });
-
-          document.getElementById("runReportsBtn")?.addEventListener("click", async () => {
-            try {
-              await loadReports();
-            } catch (e) {
-              showToast(e.message || "تعذر تحميل التقارير", "#ef4444");
-            }
-          });
-          document.getElementById("runSalesMovementBtn")?.addEventListener("click", async () => {
-            try {
-              await loadSalesMovementReport();
-            } catch (e) {
-              showToast(e.message || "تعذر تحميل تقرير حركة المبيعات", "#ef4444");
-            }
-          });
-          document.getElementById("salesRefreshBtn")?.addEventListener("click", () => applySalesFilters());
-          document.getElementById("salesSearch")?.addEventListener("input", () => applySalesFilters());
-          document.getElementById("salesStatusFilter")?.addEventListener("change", () => applySalesFilters());
-          document.getElementById("salesDateFrom")?.addEventListener("change", () => applySalesFilters());
-          document.getElementById("salesDateTo")?.addEventListener("change", () => applySalesFilters());
-          document.getElementById("purchaseRefreshBtn")?.addEventListener("click", () => applyPurchasesFilters());
-          document.getElementById("purchaseSearch")?.addEventListener("input", () => applyPurchasesFilters());
-          document.getElementById("purchaseStatusFilter")?.addEventListener("change", () => applyPurchasesFilters());
-          document.getElementById("purchaseDateFrom")?.addEventListener("change", () => applyPurchasesFilters());
-          document.getElementById("purchaseDateTo")?.addEventListener("change", () => applyPurchasesFilters());
-
-          document.getElementById("createInvBtn")?.addEventListener("click", async () => {
-            try {
-              if (!draftLines.length) {
-                showToast("أضف بنداً واحداً على الأقل", "#ef4444");
-                return;
-              }
-              await apiPostJson("/accounting/invoices", {
-                invoice_type: document.getElementById("invType").value || "sale",
-                invoice_no: document.getElementById("invNo").value || "",
-                invoice_date: document.getElementById("invDate").value || "",
-                counterparty_id: document.getElementById("invCounterparty").value || "",
-                offset_account_id: document.getElementById("invOffsetAccount").value || "",
-                description: document.getElementById("invDesc").value || "",
-                lines: draftLines.map((x) => ({
-                  account_id: x.account_id,
-                  description: x.description,
-                  qty: x.qty,
-                  unit_price: x.unit_price,
-                  amount: x.amount,
-                })),
-              });
-              draftLines = [];
-              renderDraftLines();
-              showToast("تم إنشاء الفاتورة ✔️", "#10b981");
-              await loadAll();
-            } catch (e) {
-              showToast(e.message || "تعذر إنشاء الفاتورة", "#ef4444");
-            }
-          });
-        }
-
         (async function init() {
           await initAuthUI();
-          try {
-            const d = new Date();
-            document.getElementById("invDate").value = d.toISOString().slice(0, 10);
-            document.getElementById("vDate").value = d.toISOString().slice(0, 10);
-            document.getElementById("reportFrom").value = `${d.getFullYear()}-01-01`;
-            document.getElementById("reportTo").value = d.toISOString().slice(0, 10);
-            document.getElementById("salesMovementFrom").value = `${d.getFullYear()}-01-01`;
-            document.getElementById("salesMovementTo").value = d.toISOString().slice(0, 10);
-          } catch (e) {}
-          wireActions();
-          renderDraftLines();
-          try {
-            await loadAll();
-            await loadSalesMovementReport();
-          } catch (e) {
-            showToast(e.message || "تعذر تحميل البيانات المحاسبية", "#ef4444");
-          }
+          const d = new Date().toISOString().slice(0, 10);
+          ["purchaseDate", "saleDate", "reportTo"].forEach((id) => { const el = document.getElementById(id); if (el) el.value = d; });
+          const y = new Date().getFullYear() + "-01-01";
+          document.getElementById("reportFrom").value = y;
+          wire();
+          await Promise.all([loadItems(), loadPurchases(), loadSales(), loadInventory()]);
+          await runReports();
         })();
       })();
     </script>
