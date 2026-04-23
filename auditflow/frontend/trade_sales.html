@@ -72,6 +72,7 @@
       <div id="host"></div>
     </section>
   </div>
+  <div id="toast" class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-50 text-white text-sm font-bold px-4 py-2 rounded-xl shadow-lg"></div>
 
   <script src="/static/app.js?v=14"></script>
   <script>
@@ -214,7 +215,7 @@
       async function loadSales() {
         const d = await apiGet("/api/trade/sales?limit=200");
         salesRows = d.items || [];
-        if (!editingId && !document.getElementById("no").value) {
+        if (!editingId) {
           document.getElementById("no").value = nextInvoiceNo("S-", salesRows);
         }
         renderSales();
@@ -270,6 +271,7 @@
       }
 
       async function removeSale(id) {
+        if (!id) { showToast("معرّف الفاتورة غير صالح", "#ef4444"); return; }
         if (!confirm("تأكيد حذف الفاتورة؟ سيتم إرجاع الكمية للمخزون.")) return;
         try {
           await apiDelete(`/api/trade/sales/${encodeURIComponent(id)}`);
@@ -318,9 +320,9 @@
             printInvoice(details);
             lastPrintedId = savedId;
           }
+          await loadSales();
           resetForm();
           await loadItems();
-          await loadSales();
         } catch (e) {
           showToast(e.message || "فشل الحفظ", "#ef4444");
         }
@@ -340,9 +342,8 @@
       document.getElementById("searchInput").addEventListener("input", renderSales);
       document.getElementById("discount").addEventListener("input", renderCart);
 
-      await Promise.all([loadItems(), loadSettings()]);
+      await Promise.all([loadItems(), loadSettings(), loadSales()]);
       resetForm();
-      await loadSales();
     })();
   </script>
 </body>
