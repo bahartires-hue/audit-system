@@ -6,6 +6,10 @@
     <title>نقطة البيع | POS</title>
     <link rel="stylesheet" href="/static/tailwind.css?v=9" />
     <link rel="stylesheet" href="/static/dark.css?v=9" />
+    <style>
+      .touch-btn { min-height: 56px; }
+      .product-tile { min-height: 110px; }
+    </style>
   </head>
   <body class="bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
     <div class="max-w-7xl mx-auto p-4 space-y-4">
@@ -27,17 +31,22 @@
         <section class="rounded-xl border p-4 bg-white dark:bg-slate-950 lg:col-span-2">
           <h2 class="font-extrabold mb-2">بحث وإضافة للسلة</h2>
           <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
-            <input id="itemSearch" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950 md:col-span-2" placeholder="بحث بالكود أو الاسم أو الماركة" />
-            <select id="itemSelect" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950 md:col-span-2"></select>
-            <button id="searchBtn" class="rounded-xl border font-extrabold px-4 py-2">بحث</button>
+            <input id="itemSearch" class="rounded-xl border px-3 py-3 bg-white dark:bg-slate-950 md:col-span-2 text-base" placeholder="بحث بالكود أو الاسم أو الماركة" />
+            <select id="itemSelect" class="rounded-xl border px-3 py-3 bg-white dark:bg-slate-950 md:col-span-2 text-base"></select>
+            <button id="searchBtn" class="touch-btn rounded-xl border font-extrabold px-4 py-3 text-base">بحث</button>
           </div>
           <div class="grid grid-cols-1 md:grid-cols-5 gap-2 mt-2">
-            <input id="lineQty" type="number" step="0.01" value="1" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الكمية" />
-            <input id="linePrice" type="number" step="0.01" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="سعر البيع" />
-            <input id="lineTax" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الضريبة" />
-            <button id="addToCartBtn" class="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2">إضافة للسلة</button>
-            <button id="clearCartBtn" class="rounded-xl border font-extrabold px-4 py-2">تفريغ السلة</button>
+            <div class="grid grid-cols-3 gap-1">
+              <button id="qtyMinusBtn" class="touch-btn rounded-xl border font-extrabold text-xl">-</button>
+              <input id="lineQty" type="number" step="0.01" value="1" class="rounded-xl border px-3 py-3 bg-white dark:bg-slate-950 text-center text-lg font-extrabold" placeholder="الكمية" />
+              <button id="qtyPlusBtn" class="touch-btn rounded-xl border font-extrabold text-xl">+</button>
+            </div>
+            <input id="linePrice" type="number" step="0.01" class="rounded-xl border px-3 py-3 bg-white dark:bg-slate-950 text-base" placeholder="سعر البيع" />
+            <input id="lineTax" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-3 bg-white dark:bg-slate-950 text-base" placeholder="الضريبة" />
+            <button id="addToCartBtn" class="touch-btn rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-3 text-base">إضافة للسلة</button>
+            <button id="clearCartBtn" class="touch-btn rounded-xl border font-extrabold px-4 py-3 text-base">تفريغ السلة</button>
           </div>
+          <div id="itemsGrid" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2 mt-3"></div>
           <div id="cartHost" class="mt-3 text-sm"></div>
         </section>
 
@@ -47,7 +56,7 @@
             <input id="saleNo" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="رقم الفاتورة" />
             <input id="saleCustomer" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم العميل" />
             <input id="saleDate" type="date" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
-            <select id="paymentType" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
+            <select id="paymentType" class="w-full rounded-xl border px-3 py-3 bg-white dark:bg-slate-950 text-base">
               <option value="cash">نقد</option>
               <option value="transfer">تحويل</option>
               <option value="credit">آجل</option>
@@ -57,7 +66,12 @@
             <input id="branchName" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الفرع" />
           </div>
           <div id="totalsHost" class="mt-3 text-sm"></div>
-          <button id="checkoutBtn" class="mt-3 w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-extrabold px-4 py-2">إتمام البيع وطباعة الفاتورة</button>
+          <div class="grid grid-cols-3 gap-2 mt-3">
+            <button class="touch-btn rounded-xl border font-extrabold" data-pay="cash">نقد</button>
+            <button class="touch-btn rounded-xl border font-extrabold" data-pay="transfer">تحويل</button>
+            <button class="touch-btn rounded-xl border font-extrabold" data-pay="credit">آجل</button>
+          </div>
+          <button id="checkoutBtn" class="touch-btn mt-3 w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-extrabold px-4 py-3 text-base">إتمام البيع وطباعة الفاتورة</button>
         </section>
       </div>
     </div>
@@ -75,6 +89,20 @@
           sel.innerHTML = items.map((x) => `<option value="${esc(x.id)}">${esc(x.code)} - ${esc(x.name)} | متاح: ${esc(x.quantity)} | سعر: ${esc(x.default_sale_price)}</option>`).join("");
           const first = items[0];
           if (first) document.getElementById("linePrice").value = Number(first.default_sale_price || 0).toFixed(2);
+          renderItemsGrid();
+        }
+        function renderItemsGrid() {
+          const host = document.getElementById("itemsGrid");
+          host.innerHTML = items.map((x) => `<button class="product-tile rounded-xl border p-2 text-right bg-slate-50 dark:bg-slate-900" data-pick="${esc(x.id)}"><div class="font-extrabold text-sm">${esc(x.name)}</div><div class="text-xs opacity-70 mt-1">${esc(x.code)} | ${esc(x.brand||"")} ${esc(x.size||"")}</div><div class="text-xs mt-1">متاح: <b>${esc(x.quantity)}</b></div><div class="text-xs">سعر: <b>${esc(Number(x.default_sale_price||0).toFixed(2))}</b></div></button>`).join("");
+          host.querySelectorAll("[data-pick]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const id = btn.getAttribute("data-pick");
+              const sel = document.getElementById("itemSelect");
+              sel.value = id;
+              const it = currentItem();
+              if (it) document.getElementById("linePrice").value = Number(it.default_sale_price || 0).toFixed(2);
+            });
+          });
         }
         function currentItem() {
           const id = document.getElementById("itemSelect").value || "";
@@ -89,8 +117,10 @@
           const net = Math.max(0, gross - discount);
           document.getElementById("totalsHost").innerHTML = `<div class="grid gap-1"><div>الإجمالي قبل الخصم: <b>${money(gross)}</b></div><div>الخصم: <b>${money(discount)}</b></div><div>الإجمالي النهائي: <b>${money(net)}</b></div></div>`;
           host.innerHTML = cart.length
-            ? `<div class="rounded-lg border overflow-auto"><table class="w-full text-sm"><thead class="bg-slate-100 dark:bg-slate-800"><tr><th class="px-2 py-2">الصنف</th><th class="px-2 py-2">الكمية</th><th class="px-2 py-2">السعر</th><th class="px-2 py-2">الضريبة</th><th class="px-2 py-2">الإجمالي</th><th class="px-2 py-2">حذف</th></tr></thead><tbody>${cart.map((x,i)=>`<tr class="border-t"><td class="px-2 py-2">${esc(x.item_label)}</td><td class="px-2 py-2">${esc(x.qty)}</td><td class="px-2 py-2">${money(x.sale_price)}</td><td class="px-2 py-2">${money(x.tax_amount)}</td><td class="px-2 py-2">${money(Number(x.qty)*Number(x.sale_price)+Number(x.tax_amount))}</td><td class="px-2 py-2"><button class="px-2 py-1 rounded border" data-del="${i}">✕</button></td></tr>`).join("")}</tbody></table></div>`
+            ? `<div class="rounded-lg border overflow-auto"><table class="w-full text-sm"><thead class="bg-slate-100 dark:bg-slate-800"><tr><th class="px-2 py-2">الصنف</th><th class="px-2 py-2">الكمية</th><th class="px-2 py-2">السعر</th><th class="px-2 py-2">الضريبة</th><th class="px-2 py-2">الإجمالي</th><th class="px-2 py-2">تحكم</th></tr></thead><tbody>${cart.map((x,i)=>`<tr class="border-t"><td class="px-2 py-2">${esc(x.item_label)}</td><td class="px-2 py-2">${esc(x.qty)}</td><td class="px-2 py-2">${money(x.sale_price)}</td><td class="px-2 py-2">${money(x.tax_amount)}</td><td class="px-2 py-2">${money(Number(x.qty)*Number(x.sale_price)+Number(x.tax_amount))}</td><td class="px-2 py-2"><div class="flex gap-1"><button class="px-2 py-1 rounded border" data-minus="${i}">-</button><button class="px-2 py-1 rounded border" data-plus="${i}">+</button><button class="px-2 py-1 rounded border" data-del="${i}">✕</button></div></td></tr>`).join("")}</tbody></table></div>`
             : `<div class="opacity-70">السلة فارغة</div>`;
+          host.querySelectorAll("[data-minus]").forEach((btn) => btn.addEventListener("click", () => { const i=Number(btn.getAttribute("data-minus")); cart[i].qty=Math.max(0.01, Number(cart[i].qty)-1); renderCart(); }));
+          host.querySelectorAll("[data-plus]").forEach((btn) => btn.addEventListener("click", () => { const i=Number(btn.getAttribute("data-plus")); cart[i].qty=Number(cart[i].qty)+1; renderCart(); }));
           host.querySelectorAll("[data-del]").forEach((btn) => btn.addEventListener("click", () => { cart.splice(Number(btn.getAttribute("data-del")), 1); renderCart(); }));
         }
         function openPrintInvoice(data) {
@@ -136,6 +166,19 @@
           await loadItems(document.getElementById("itemSearch").value || "");
         }
         document.getElementById("searchBtn").addEventListener("click", () => loadItems(document.getElementById("itemSearch").value || ""));
+        document.getElementById("qtyMinusBtn").addEventListener("click", () => {
+          const el = document.getElementById("lineQty");
+          el.value = Math.max(0.01, Number(el.value || 0) - 1).toString();
+        });
+        document.getElementById("qtyPlusBtn").addEventListener("click", () => {
+          const el = document.getElementById("lineQty");
+          el.value = (Number(el.value || 0) + 1).toString();
+        });
+        document.querySelectorAll("[data-pay]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            document.getElementById("paymentType").value = btn.getAttribute("data-pay") || "cash";
+          });
+        });
         document.getElementById("itemSelect").addEventListener("change", () => {
           const it = currentItem();
           if (it) document.getElementById("linePrice").value = Number(it.default_sale_price || 0).toFixed(2);
