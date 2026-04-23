@@ -140,7 +140,37 @@ def ui_convert(request: Request):
 
 @app.get("/accounting", response_class=HTMLResponse)
 def ui_accounting(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "accounting.html")
+    return _require_login_page(request, FRONTEND_DIR / "trade_dashboard.html")
+
+
+@app.get("/trade", response_class=HTMLResponse)
+def ui_trade_dashboard(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "trade_dashboard.html")
+
+
+@app.get("/trade/items", response_class=HTMLResponse)
+def ui_trade_items(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "trade_items.html")
+
+
+@app.get("/trade/purchases", response_class=HTMLResponse)
+def ui_trade_purchases(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "trade_purchases.html")
+
+
+@app.get("/trade/sales", response_class=HTMLResponse)
+def ui_trade_sales(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "trade_sales.html")
+
+
+@app.get("/trade/inventory", response_class=HTMLResponse)
+def ui_trade_inventory(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "trade_inventory.html")
+
+
+@app.get("/trade/reports", response_class=HTMLResponse)
+def ui_trade_reports(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "trade_reports.html")
 
 
 @app.get("/settings", response_class=HTMLResponse)

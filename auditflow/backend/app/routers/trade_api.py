@@ -546,3 +546,43 @@ def item_movement_report(
         }
     finally:
         db.close()
+
+
+@router.get("/dashboard-summary")
+def dashboard_summary(request: Request, date_from: str = Query(""), date_to: str = Query("")):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        df = _parse_date(date_from, "date_from") if (date_from or "").strip() else None
+        dt_to = _parse_date(date_to, "date_to") if (date_to or "").strip() else None
+
+        sales_q = db.query(Sale).filter(Sale.user_id == user.id)
+        purchases_q = db.query(Purchase).filter(Purchase.user_id == user.id)
+        if df:
+            sales_q = sales_q.filter(Sale.sale_date >= df)
+            purchases_q = purchases_q.filter(Purchase.purchase_date >= df)
+        if dt_to:
+            sales_q = sales_q.filter(Sale.sale_date <= dt_to)
+            purchases_q = purchases_q.filter(Purchase.purchase_date <= dt_to)
+
+        sales_rows = sales_q.all()
+        purchase_rows = purchases_q.all()
+        items = db.query(Item).filter(Item.user_id == user.id).all()
+
+        total_sales = round(sum(float(x.total_amount or 0.0) for x in sales_rows), 2)
+        total_purchases = round(sum(float(x.total_amount or 0.0) for x in purchase_rows), 2)
+        total_inventory_value = round(
+            sum(round(float(x.quantity or 0.0), 4) * round(float(x.last_cost or 0.0), 4) for x in items),
+            2,
+        )
+        total_items_qty = round(sum(float(x.quantity or 0.0) for x in items), 4)
+        return {
+            "totals": {
+                "sales": total_sales,
+                "purchases": total_purchases,
+                "inventory_value": total_inventory_value,
+                "inventory_qty": total_items_qty,
+            }
+        }
+    finally:
+        db.close()

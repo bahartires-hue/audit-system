@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>التقارير</title><link rel="stylesheet" href="/static/tailwind.css?v=9" /><link rel="stylesheet" href="/static/dark.css?v=9" /></head>
+<body class="bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="max-w-7xl mx-auto p-4 space-y-4">
+<div class="flex flex-wrap gap-2"><a class="px-3 py-2 rounded-xl border font-bold" href="/trade">الرئيسية</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/items">الأصناف</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/purchases">المشتريات</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/sales">المبيعات</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/inventory">المخزون</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/reports">التقارير</a></div>
+<div class="rounded-xl border p-4 bg-white dark:bg-slate-950">
+<h1 class="text-xl font-extrabold mb-2">تقارير الربح وحركة الصنف</h1>
+<div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
+<input id="fromDate" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
+<input id="toDate" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
+<select id="itemId" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
+<button id="runBtn" class="rounded-xl border font-extrabold px-4 py-2">تشغيل</button>
+</div>
+<div id="profitHost" class="mb-3"></div><div id="movementHost"></div></div></div>
+<script src="/static/app.js?v=14"></script>
+<script>
+(async function(){await initAuthUI();function esc(s){return String(s==null?"":s);}
+async function loadItems(){const d=await apiGet("/trade/items");const rows=d.items||[];document.getElementById("itemId").innerHTML=rows.map(x=>`<option value="${esc(x.id)}">${esc(x.code)} - ${esc(x.name)}</option>`).join("");}
+async function run(){const from=document.getElementById("fromDate").value||"";const to=document.getElementById("toDate").value||"";const itemId=document.getElementById("itemId").value||"";const p=await apiGet(`/trade/reports/profit?date_from=${encodeURIComponent(from)}&date_to=${encodeURIComponent(to)}`);const t=p.totals||{};document.getElementById("profitHost").innerHTML=`<div class="grid grid-cols-1 md:grid-cols-4 gap-2"><div class="rounded-xl border px-3 py-2">صافي المبيعات: <b>${esc(t.net_sales||0)}</b></div><div class="rounded-xl border px-3 py-2">إجمالي التكلفة: <b>${esc(t.cost_total||0)}</b></div><div class="rounded-xl border px-3 py-2">الربح: <b>${esc(t.profit||0)}</b></div><div class="rounded-xl border px-3 py-2">هامش الربح%: <b>${esc(t.profit_margin_pct||0)}</b></div></div>`;if(!itemId)return;const m=await apiGet(`/trade/reports/item-movement?item_id=${encodeURIComponent(itemId)}&date_from=${encodeURIComponent(from)}&date_to=${encodeURIComponent(to)}`);const rows=m.items||[];const s=m.summary||{};document.getElementById("movementHost").innerHTML=`<div class="mb-2">رصيد أول: <b>${esc(s.opening_qty||0)}</b> | وارد: <b>${esc(s.qty_in||0)}</b> | صادر: <b>${esc(s.qty_out||0)}</b> | رصيد: <b>${esc(s.balance_qty||0)}</b></div>${rows.length?`<div class="rounded-lg border overflow-auto"><table class="w-full text-sm"><thead class="bg-slate-100 dark:bg-slate-800"><tr><th class="px-2 py-2">التاريخ</th><th class="px-2 py-2">النوع</th><th class="px-2 py-2">وارد</th><th class="px-2 py-2">صادر</th><th class="px-2 py-2">التكلفة</th></tr></thead><tbody>${rows.map(x=>`<tr class="border-t"><td class="px-2 py-2">${esc(x.date)}</td><td class="px-2 py-2">${esc(x.movement_type)}</td><td class="px-2 py-2">${esc(x.qty_in)}</td><td class="px-2 py-2">${esc(x.qty_out)}</td><td class="px-2 py-2">${esc(x.unit_cost)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="opacity-70">لا توجد حركة للصنف</div>`}`;}
+const now=new Date().toISOString().slice(0,10);document.getElementById("toDate").value=now;document.getElementById("fromDate").value=`${new Date().getFullYear()}-01-01`;document.getElementById("runBtn").addEventListener("click",run);await loadItems();await run();})();
+</script></body></html>
