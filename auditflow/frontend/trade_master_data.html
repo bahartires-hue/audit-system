@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>البيانات الأساسية | كاشيركو</title>
+    <link rel="stylesheet" href="/static/tailwind.css?v=9" />
+    <link rel="stylesheet" href="/static/dark.css?v=9" />
+  </head>
+  <body class="bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
+    <div class="max-w-[1500px] mx-auto p-4 space-y-4">
+      <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-extrabold">البيانات الأساسية (Cashierكو)</h1>
+        <div id="authArea"></div>
+      </div>
+
+      <div class="flex flex-wrap gap-2">
+        <a class="px-3 py-2 rounded-xl border font-bold" href="/trade">الرئيسية</a>
+        <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/pos">الكاشير</a>
+        <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/items">الأصناف</a>
+        <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/master-data">البيانات الأساسية</a>
+        <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/settings">الإعدادات</a>
+        <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/purchases">المشتريات</a>
+        <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/sales">المبيعات</a>
+        <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/inventory">المخزون</a>
+        <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/reports">التقارير</a>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3" id="summaryCards"></div>
+
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <section class="rounded-xl border p-4 bg-white dark:bg-slate-950 space-y-2">
+          <h2 class="font-extrabold">الفروع</h2>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <input id="branchCode" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="كود الفرع" />
+            <input id="branchName" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم الفرع" />
+            <input id="branchCity" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="المدينة" />
+            <button id="addBranchBtn" class="rounded-xl border font-extrabold px-4 py-2">إضافة</button>
+          </div>
+          <div id="branchesHost"></div>
+        </section>
+
+        <section class="rounded-xl border p-4 bg-white dark:bg-slate-950 space-y-2">
+          <h2 class="font-extrabold">التصنيفات</h2>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <input id="catCode" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="كود التصنيف" />
+            <input id="catName" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم التصنيف" />
+            <input id="catNotes" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="ملاحظات" />
+            <button id="addCatBtn" class="rounded-xl border font-extrabold px-4 py-2">إضافة</button>
+          </div>
+          <div id="categoriesHost"></div>
+        </section>
+
+        <section class="rounded-xl border p-4 bg-white dark:bg-slate-950 space-y-2">
+          <h2 class="font-extrabold">الموردين</h2>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <input id="supName" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم المورد" />
+            <input id="supPhone" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الجوال" />
+            <input id="supCity" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="المدينة" />
+            <button id="addSupBtn" class="rounded-xl border font-extrabold px-4 py-2">إضافة</button>
+          </div>
+          <div id="suppliersHost"></div>
+        </section>
+
+        <section class="rounded-xl border p-4 bg-white dark:bg-slate-950 space-y-2">
+          <h2 class="font-extrabold">العملاء</h2>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <input id="cusName" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم العميل" />
+            <input id="cusPhone" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الجوال" />
+            <input id="cusCity" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="المدينة" />
+            <button id="addCusBtn" class="rounded-xl border font-extrabold px-4 py-2">إضافة</button>
+          </div>
+          <div id="customersHost"></div>
+        </section>
+      </div>
+
+      <section class="rounded-xl border p-4 bg-white dark:bg-slate-950 space-y-2">
+        <h2 class="font-extrabold">المصروفات اليومية</h2>
+        <div class="grid grid-cols-1 md:grid-cols-6 gap-2">
+          <input id="expDate" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
+          <input id="expType" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="نوع المصروف" />
+          <input id="expAmount" type="number" step="0.01" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="القيمة" />
+          <select id="expPay" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
+            <option value="cash">نقد</option>
+            <option value="transfer">تحويل</option>
+            <option value="network">شبكة</option>
+          </select>
+          <input id="expDesc" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الوصف" />
+          <button id="addExpBtn" class="rounded-xl border font-extrabold px-4 py-2">تسجيل مصروف</button>
+        </div>
+        <div id="expensesHost"></div>
+      </section>
+    </div>
+
+    <script src="/static/app.js?v=14"></script>
+    <script>
+      (async function () {
+        await initAuthUI();
+        function esc(s){return String(s==null?"":s);}
+        function money(n){return Number(n||0).toFixed(2);}
+        function card(title, value) {
+          return `<div class="rounded-xl border p-4 bg-white dark:bg-slate-950"><div class="text-xs opacity-70">${title}</div><div class="text-2xl font-extrabold">${value}</div></div>`;
+        }
+
+        async function loadOverview() {
+          const d = await apiGet("/api/cashierko/dashboard/overview");
+          const t = d.totals || {};
+          document.getElementById("summaryCards").innerHTML = [
+            card("مبيعات اليوم", money(t.sales_today)),
+            card("مبيعات الشهر", money(t.sales_month)),
+            card("مشتريات الشهر", money(t.purchases_month)),
+            card("قيمة المخزون", money(t.inventory_value)),
+          ].join("");
+        }
+
+        async function loadBranches() {
+          const d = await apiGet("/api/cashierko/branches");
+          const rows = d.items || [];
+          document.getElementById("branchesHost").innerHTML = rows.length ? `<div class="grid gap-1">${rows.map((x)=>`<div class="rounded-lg border p-2 flex items-center justify-between"><div>${esc(x.code)} - ${esc(x.name)} (${esc(x.city)})</div><div class="flex gap-1"><button class="rounded border px-2 py-1" data-branch-edit="${x.id}">تعديل</button><button class="rounded border px-2 py-1 text-red-600" data-branch-del="${x.id}">حذف</button></div></div>`).join("")}</div>` : `<div class="opacity-70">لا توجد فروع</div>`;
+          document.querySelectorAll("[data-branch-edit]").forEach((b)=>b.onclick=async()=>{const id=b.getAttribute("data-branch-edit");const name=prompt("اسم الفرع الجديد");if(name!=null){await apiPatchJson(`/api/cashierko/branches/${encodeURIComponent(id)}`,{name});await loadBranches();}});
+          document.querySelectorAll("[data-branch-del]").forEach((b)=>b.onclick=async()=>{const id=b.getAttribute("data-branch-del");if(confirm("حذف الفرع؟")){await apiDelete(`/api/cashierko/branches/${encodeURIComponent(id)}`);await loadBranches();}});
+        }
+
+        async function loadCategories() {
+          const d = await apiGet("/api/cashierko/categories");
+          const rows = d.items || [];
+          document.getElementById("categoriesHost").innerHTML = rows.length ? `<div class="grid gap-1">${rows.map((x)=>`<div class="rounded-lg border p-2 flex items-center justify-between"><div>${esc(x.code)} - ${esc(x.name)}</div><div class="flex gap-1"><button class="rounded border px-2 py-1" data-cat-edit="${x.id}">تعديل</button><button class="rounded border px-2 py-1 text-red-600" data-cat-del="${x.id}">حذف</button></div></div>`).join("")}</div>` : `<div class="opacity-70">لا توجد تصنيفات</div>`;
+          document.querySelectorAll("[data-cat-edit]").forEach((b)=>b.onclick=async()=>{const id=b.getAttribute("data-cat-edit");const name=prompt("اسم التصنيف الجديد");if(name!=null){await apiPatchJson(`/api/cashierko/categories/${encodeURIComponent(id)}`,{name});await loadCategories();}});
+          document.querySelectorAll("[data-cat-del]").forEach((b)=>b.onclick=async()=>{const id=b.getAttribute("data-cat-del");if(confirm("حذف التصنيف؟")){await apiDelete(`/api/cashierko/categories/${encodeURIComponent(id)}`);await loadCategories();}});
+        }
+
+        async function loadSuppliers() {
+          const d = await apiGet("/api/cashierko/suppliers");
+          const rows = d.items || [];
+          document.getElementById("suppliersHost").innerHTML = rows.length ? `<div class="grid gap-1">${rows.map((x)=>`<div class="rounded-lg border p-2 flex items-center justify-between"><div>${esc(x.name)} | ${esc(x.phone)} | مشتريات: ${money(x.total_purchases)}</div><div class="flex gap-1"><button class="rounded border px-2 py-1" data-sup-edit="${x.id}">تعديل</button><button class="rounded border px-2 py-1 text-red-600" data-sup-del="${x.id}">حذف</button></div></div>`).join("")}</div>` : `<div class="opacity-70">لا يوجد موردين</div>`;
+          document.querySelectorAll("[data-sup-edit]").forEach((b)=>b.onclick=async()=>{const id=b.getAttribute("data-sup-edit");const name=prompt("اسم المورد الجديد");if(name!=null){await apiPatchJson(`/api/cashierko/suppliers/${encodeURIComponent(id)}`,{name});await loadSuppliers();}});
+          document.querySelectorAll("[data-sup-del]").forEach((b)=>b.onclick=async()=>{const id=b.getAttribute("data-sup-del");if(confirm("حذف المورد؟")){await apiDelete(`/api/cashierko/suppliers/${encodeURIComponent(id)}`);await loadSuppliers();}});
+        }
+
+        async function loadCustomers() {
+          const d = await apiGet("/api/cashierko/customers");
+          const rows = d.items || [];
+          document.getElementById("customersHost").innerHTML = rows.length ? `<div class="grid gap-1">${rows.map((x)=>`<div class="rounded-lg border p-2 flex items-center justify-between"><div>${esc(x.name)} | ${esc(x.phone)} | مبيعات: ${money(x.total_sales)}</div><div class="flex gap-1"><button class="rounded border px-2 py-1" data-cus-edit="${x.id}">تعديل</button><button class="rounded border px-2 py-1 text-red-600" data-cus-del="${x.id}">حذف</button></div></div>`).join("")}</div>` : `<div class="opacity-70">لا يوجد عملاء</div>`;
+          document.querySelectorAll("[data-cus-edit]").forEach((b)=>b.onclick=async()=>{const id=b.getAttribute("data-cus-edit");const name=prompt("اسم العميل الجديد");if(name!=null){await apiPatchJson(`/api/cashierko/customers/${encodeURIComponent(id)}`,{name});await loadCustomers();}});
+          document.querySelectorAll("[data-cus-del]").forEach((b)=>b.onclick=async()=>{const id=b.getAttribute("data-cus-del");if(confirm("حذف العميل؟")){await apiDelete(`/api/cashierko/customers/${encodeURIComponent(id)}`);await loadCustomers();}});
+        }
+
+        async function loadExpenses() {
+          const d = await apiGet("/api/cashierko/expenses?limit=100");
+          const rows = d.items || [];
+          const total = (d.totals || {}).amount || 0;
+          document.getElementById("expensesHost").innerHTML = rows.length ? `<div class="mb-2 font-bold">إجمالي المصروفات: ${money(total)}</div><div class="grid gap-1">${rows.map((x)=>`<div class="rounded-lg border p-2">${esc(x.expense_date)} | ${esc(x.expense_type)} | ${money(x.amount)} | ${esc(x.payment_type)} | ${esc(x.description)}</div>`).join("")}</div>` : `<div class="opacity-70">لا توجد مصروفات</div>`;
+        }
+
+        document.getElementById("addBranchBtn").onclick = async () => {
+          try {
+            await apiPostJson("/api/cashierko/branches", { code: document.getElementById("branchCode").value || "", name: document.getElementById("branchName").value || "", city: document.getElementById("branchCity").value || "" });
+            showToast("تمت إضافة الفرع ✔️", "#10b981");
+            await loadBranches();
+          } catch (e) { showToast(e.message || "فشل إضافة الفرع", "#ef4444"); }
+        };
+        document.getElementById("addCatBtn").onclick = async () => {
+          try {
+            await apiPostJson("/api/cashierko/categories", { code: document.getElementById("catCode").value || "", name: document.getElementById("catName").value || "", notes: document.getElementById("catNotes").value || "" });
+            showToast("تمت إضافة التصنيف ✔️", "#10b981");
+            await loadCategories();
+          } catch (e) { showToast(e.message || "فشل إضافة التصنيف", "#ef4444"); }
+        };
+        document.getElementById("addSupBtn").onclick = async () => {
+          try {
+            await apiPostJson("/api/cashierko/suppliers", { name: document.getElementById("supName").value || "", phone: document.getElementById("supPhone").value || "", city: document.getElementById("supCity").value || "" });
+            showToast("تمت إضافة المورد ✔️", "#10b981");
+            await loadSuppliers();
+          } catch (e) { showToast(e.message || "فشل إضافة المورد", "#ef4444"); }
+        };
+        document.getElementById("addCusBtn").onclick = async () => {
+          try {
+            await apiPostJson("/api/cashierko/customers", { name: document.getElementById("cusName").value || "", phone: document.getElementById("cusPhone").value || "", city: document.getElementById("cusCity").value || "" });
+            showToast("تمت إضافة العميل ✔️", "#10b981");
+            await loadCustomers();
+          } catch (e) { showToast(e.message || "فشل إضافة العميل", "#ef4444"); }
+        };
+        document.getElementById("addExpBtn").onclick = async () => {
+          try {
+            await apiPostJson("/api/cashierko/expenses", {
+              expense_date: document.getElementById("expDate").value || new Date().toISOString().slice(0,10),
+              expense_type: document.getElementById("expType").value || "",
+              amount: Number(document.getElementById("expAmount").value || 0),
+              payment_type: document.getElementById("expPay").value || "cash",
+              description: document.getElementById("expDesc").value || "",
+            });
+            showToast("تم تسجيل المصروف ✔️", "#10b981");
+            await loadExpenses();
+          } catch (e) { showToast(e.message || "فشل تسجيل المصروف", "#ef4444"); }
+        };
+
+        document.getElementById("expDate").value = new Date().toISOString().slice(0,10);
+        await Promise.all([loadOverview(), loadBranches(), loadCategories(), loadSuppliers(), loadCustomers(), loadExpenses()]);
+      })();
+    </script>
+  </body>
+</html>

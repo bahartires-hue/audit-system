@@ -18,6 +18,27 @@ def _migrate_postgresql() -> None:
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_attempts INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences_json JSON DEFAULT '{}'::json",
+        # items
+        "ALTER TABLE items ADD COLUMN IF NOT EXISTS bolt_pattern VARCHAR",
+        "ALTER TABLE items ADD COLUMN IF NOT EXISTS category_id VARCHAR",
+        "ALTER TABLE items ADD COLUMN IF NOT EXISTS branch_id VARCHAR",
+        "ALTER TABLE items ADD COLUMN IF NOT EXISTS is_unique INTEGER DEFAULT 0",
+        "ALTER TABLE items ADD COLUMN IF NOT EXISTS needs_service INTEGER DEFAULT 0",
+        "ALTER TABLE items ADD COLUMN IF NOT EXISTS min_qty DOUBLE PRECISION DEFAULT 0",
+        # purchases
+        "ALTER TABLE purchases ADD COLUMN IF NOT EXISTS branch_id VARCHAR",
+        "ALTER TABLE purchases ADD COLUMN IF NOT EXISTS supplier_id VARCHAR",
+        "ALTER TABLE purchases ADD COLUMN IF NOT EXISTS payment_type VARCHAR DEFAULT 'cash'",
+        "ALTER TABLE purchases ADD COLUMN IF NOT EXISTS tax_amount DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE purchases ADD COLUMN IF NOT EXISTS discount DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE purchases ADD COLUMN IF NOT EXISTS paid_amount DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE purchases ADD COLUMN IF NOT EXISTS due_amount DOUBLE PRECISION DEFAULT 0",
+        # sales
+        "ALTER TABLE sales ADD COLUMN IF NOT EXISTS branch_id VARCHAR",
+        "ALTER TABLE sales ADD COLUMN IF NOT EXISTS customer_id VARCHAR",
+        "ALTER TABLE sales ADD COLUMN IF NOT EXISTS tax_amount DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE sales ADD COLUMN IF NOT EXISTS paid_amount DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE sales ADD COLUMN IF NOT EXISTS due_amount DOUBLE PRECISION DEFAULT 0",
         # analysis_reports
         "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS user_id VARCHAR",
         "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS tags_json JSON DEFAULT '[]'::json",
@@ -98,6 +119,54 @@ def run_migrations() -> None:
                 conn.execute(text("ALTER TABLE users ADD COLUMN subscription_expires_at DATETIME"))
             if "preferences_json" not in ucols:
                 conn.execute(text("ALTER TABLE users ADD COLUMN preferences_json JSON"))
+
+        r_items = conn.execute(text("PRAGMA table_info(items)"))
+        item_cols = [row[1] for row in r_items.fetchall()]
+        if item_cols:
+            if "bolt_pattern" not in item_cols:
+                conn.execute(text("ALTER TABLE items ADD COLUMN bolt_pattern VARCHAR"))
+            if "category_id" not in item_cols:
+                conn.execute(text("ALTER TABLE items ADD COLUMN category_id VARCHAR"))
+            if "branch_id" not in item_cols:
+                conn.execute(text("ALTER TABLE items ADD COLUMN branch_id VARCHAR"))
+            if "is_unique" not in item_cols:
+                conn.execute(text("ALTER TABLE items ADD COLUMN is_unique INTEGER DEFAULT 0"))
+            if "needs_service" not in item_cols:
+                conn.execute(text("ALTER TABLE items ADD COLUMN needs_service INTEGER DEFAULT 0"))
+            if "min_qty" not in item_cols:
+                conn.execute(text("ALTER TABLE items ADD COLUMN min_qty REAL DEFAULT 0"))
+
+        r_purchase = conn.execute(text("PRAGMA table_info(purchases)"))
+        purchase_cols = [row[1] for row in r_purchase.fetchall()]
+        if purchase_cols:
+            if "branch_id" not in purchase_cols:
+                conn.execute(text("ALTER TABLE purchases ADD COLUMN branch_id VARCHAR"))
+            if "supplier_id" not in purchase_cols:
+                conn.execute(text("ALTER TABLE purchases ADD COLUMN supplier_id VARCHAR"))
+            if "payment_type" not in purchase_cols:
+                conn.execute(text("ALTER TABLE purchases ADD COLUMN payment_type VARCHAR DEFAULT 'cash'"))
+            if "tax_amount" not in purchase_cols:
+                conn.execute(text("ALTER TABLE purchases ADD COLUMN tax_amount REAL DEFAULT 0"))
+            if "discount" not in purchase_cols:
+                conn.execute(text("ALTER TABLE purchases ADD COLUMN discount REAL DEFAULT 0"))
+            if "paid_amount" not in purchase_cols:
+                conn.execute(text("ALTER TABLE purchases ADD COLUMN paid_amount REAL DEFAULT 0"))
+            if "due_amount" not in purchase_cols:
+                conn.execute(text("ALTER TABLE purchases ADD COLUMN due_amount REAL DEFAULT 0"))
+
+        r_sales = conn.execute(text("PRAGMA table_info(sales)"))
+        sale_cols = [row[1] for row in r_sales.fetchall()]
+        if sale_cols:
+            if "branch_id" not in sale_cols:
+                conn.execute(text("ALTER TABLE sales ADD COLUMN branch_id VARCHAR"))
+            if "customer_id" not in sale_cols:
+                conn.execute(text("ALTER TABLE sales ADD COLUMN customer_id VARCHAR"))
+            if "tax_amount" not in sale_cols:
+                conn.execute(text("ALTER TABLE sales ADD COLUMN tax_amount REAL DEFAULT 0"))
+            if "paid_amount" not in sale_cols:
+                conn.execute(text("ALTER TABLE sales ADD COLUMN paid_amount REAL DEFAULT 0"))
+            if "due_amount" not in sale_cols:
+                conn.execute(text("ALTER TABLE sales ADD COLUMN due_amount REAL DEFAULT 0"))
 
         r3 = conn.execute(text("PRAGMA table_info(analysis_reports)"))
         rcols = [row[1] for row in r3.fetchall()]

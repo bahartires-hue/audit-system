@@ -1,14 +1,33 @@
 <!doctype html>
 <html lang="ar" dir="rtl"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>المخزون</title><link rel="stylesheet" href="/static/tailwind.css?v=9" /><link rel="stylesheet" href="/static/dark.css?v=9" /></head>
 <body class="bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
-<div class="max-w-7xl mx-auto p-4 space-y-4">
-<div class="flex flex-wrap gap-2"><a class="px-3 py-2 rounded-xl border font-bold" href="/trade">الرئيسية</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/items">الأصناف</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/purchases">المشتريات</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/sales">المبيعات</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/inventory">المخزون</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/reports">التقارير</a></div>
+<div class="max-w-[1500px] mx-auto p-4 space-y-4">
+<div class="flex flex-wrap gap-2"><a class="px-3 py-2 rounded-xl border font-bold" href="/trade">الرئيسية</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/items">الأصناف</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/master-data">البيانات الأساسية</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/purchases">المشتريات</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/sales">المبيعات</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/inventory">المخزون</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/reports">التقارير</a></div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-2" id="statusCards"></div>
+
+<div class="rounded-xl border p-4 bg-white dark:bg-slate-950">
+<h2 class="text-lg font-extrabold mb-2">تعديل مخزون (جرد/تسوية)</h2>
+<div class="grid grid-cols-1 md:grid-cols-5 gap-2">
+<select id="adjItem" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
+<input id="adjQty" type="number" step="0.01" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الكمية الفعلية بعد الجرد" />
+<input id="adjDate" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
+<input id="adjReason" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="سبب التعديل" />
+<button id="adjBtn" class="rounded-xl border font-extrabold px-4 py-2">حفظ التسوية</button>
+</div>
+</div>
+
 <div class="rounded-xl border p-4 bg-white dark:bg-slate-950">
 <div class="flex items-center justify-between mb-2"><h1 class="text-xl font-extrabold">المخزون الحالي</h1><button id="refreshBtn" class="rounded-xl border font-extrabold px-4 py-2">تحديث</button></div>
 <div id="host"></div></div></div>
 <script src="/static/app.js?v=14"></script>
 <script>
-(async function(){await initAuthUI();function esc(s){return String(s==null?"":s);}
-async function load(){const d=await apiGet("/api/trade/inventory");const rows=d.items||[];document.getElementById("host").innerHTML=rows.length?`<div class="rounded-lg border overflow-auto"><table class="w-full text-sm"><thead class="bg-slate-100 dark:bg-slate-800"><tr><th class="px-2 py-2">الكود</th><th class="px-2 py-2">الصنف</th><th class="px-2 py-2">الكمية</th><th class="px-2 py-2">تكلفة الوحدة</th><th class="px-2 py-2">سعر البيع</th><th class="px-2 py-2">قيمة المخزون</th></tr></thead><tbody>${rows.map(x=>`<tr class="border-t"><td class="px-2 py-2">${esc(x.code)}</td><td class="px-2 py-2">${esc(x.name)}</td><td class="px-2 py-2">${esc(x.quantity)}</td><td class="px-2 py-2">${esc(x.cost_price)}</td><td class="px-2 py-2">${esc(x.sale_price)}</td><td class="px-2 py-2">${esc(x.stock_value)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="opacity-70">لا يوجد مخزون</div>`;}
-document.getElementById("refreshBtn").addEventListener("click",load);await load();})();
+(async function(){await initAuthUI();function esc(s){return String(s==null?"":s);} function money(n){return Number(n||0).toFixed(2);}
+let inventoryRows=[];
+async function load(){const d=await apiGet("/api/trade/inventory");const rows=d.items||[];inventoryRows=rows;document.getElementById("adjItem").innerHTML=rows.map(x=>`<option value="${esc(x.id)}">${esc(x.code)} - ${esc(x.name)} (حالي: ${esc(x.quantity)})</option>`).join("");document.getElementById("host").innerHTML=rows.length?`<div class="rounded-lg border overflow-auto"><table class="w-full text-sm"><thead class="bg-slate-100 dark:bg-slate-800"><tr><th class="px-2 py-2">الكود</th><th class="px-2 py-2">الصنف</th><th class="px-2 py-2">الكمية</th><th class="px-2 py-2">الحد الأدنى</th><th class="px-2 py-2">تكلفة الوحدة</th><th class="px-2 py-2">سعر البيع</th><th class="px-2 py-2">قيمة المخزون</th></tr></thead><tbody>${rows.map(x=>`<tr class="border-t"><td class="px-2 py-2">${esc(x.code)}</td><td class="px-2 py-2">${esc(x.name)}</td><td class="px-2 py-2">${esc(x.quantity)}</td><td class="px-2 py-2">${esc(x.min_qty||0)}</td><td class="px-2 py-2">${money(x.cost_price)}</td><td class="px-2 py-2">${money(x.sale_price)}</td><td class="px-2 py-2">${money(x.stock_value)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="opacity-70">لا يوجد مخزون</div>`;}
+async function loadStatus(){const d=await apiGet("/api/trade/reports/stock-status?slow_days=45");const low=(d.low_stock||[]).length;const out=(d.out_of_stock||[]).length;const slow=(d.slow_moving||[]).length;document.getElementById("statusCards").innerHTML=`<div class="rounded-xl border p-4 bg-white dark:bg-slate-950"><div class="text-xs opacity-70">أصناف ناقصة</div><div class="text-2xl font-extrabold">${esc(low)}</div></div><div class="rounded-xl border p-4 bg-white dark:bg-slate-950"><div class="text-xs opacity-70">أصناف نافدة</div><div class="text-2xl font-extrabold">${esc(out)}</div></div><div class="rounded-xl border p-4 bg-white dark:bg-slate-950"><div class="text-xs opacity-70">أصناف راكدة (45 يوم)</div><div class="text-2xl font-extrabold">${esc(slow)}</div></div>`;}
+document.getElementById("adjBtn").addEventListener("click",async()=>{try{await apiPostJson("/api/trade/inventory/adjust",{item_id:document.getElementById("adjItem").value||"",qty_after:Number(document.getElementById("adjQty").value||0),adjust_date:document.getElementById("adjDate").value||new Date().toISOString().slice(0,10),reason:document.getElementById("adjReason").value||""});showToast("تم حفظ التسوية ✔️","#10b981");await Promise.all([load(),loadStatus()]);}catch(e){showToast(e.message||"فشل التسوية","#ef4444");}});
+document.getElementById("refreshBtn").addEventListener("click",async()=>{await Promise.all([load(),loadStatus()]);});
+document.getElementById("adjDate").value=new Date().toISOString().slice(0,10);
+await Promise.all([load(),loadStatus()]);})();
 </script></body></html>

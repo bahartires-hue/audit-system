@@ -12,6 +12,7 @@
     <div class="flex flex-wrap gap-2">
       <a class="px-3 py-2 rounded-xl border font-bold" href="/trade">الرئيسية</a>
       <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/items">الأصناف</a>
+      <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/transfers">التحويلات</a>
       <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/purchases">المشتريات</a>
       <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/sales">المبيعات</a>
       <a class="px-3 py-2 rounded-xl border font-bold" href="/trade/inventory">المخزون</a>
@@ -86,6 +87,13 @@
       let cart = [];
       let editingId = null;
       let lastPrintedId = null;
+      let appSettings = { shop_name: "كاشيركو", currency: "SAR", print_size: "A4", thermal_header: "شكراً لزيارتكم" };
+      async function loadSettings() {
+        try {
+          const d = await apiGet("/api/cashierko/settings");
+          appSettings = { ...appSettings, ...(d.settings || {}) };
+        } catch (_) {}
+      }
 
       function totals() {
         const discount = Number(document.getElementById("discount").value || 0);
@@ -139,7 +147,8 @@
 
       function printInvoice(d) {
         const lines = d.lines || [];
-        const html = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>فاتورة ${esc(d.invoice_no)}</title><style>body{font-family:Arial;padding:14px}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ddd;padding:6px;text-align:right}</style></head><body><h2>فاتورة بيع</h2><div>رقم الفاتورة: <b>${esc(d.invoice_no)}</b></div><div>التاريخ: <b>${esc(d.sale_date)}</b></div><div>العميل: <b>${esc(d.customer_name)}</b></div><div>الدفع: <b>${esc(paymentLabel(d.payment_type))}</b></div><table><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الضريبة</th><th>الإجمالي</th></tr></thead><tbody>${lines.map((x)=>`<tr><td>${esc(x.item_code)} - ${esc(x.item_name)}</td><td>${esc(x.qty)}</td><td>${money(x.sale_price)}</td><td>${money(x.tax_amount)}</td><td>${money(x.line_total)}</td></tr>`).join("")}</tbody></table><h3>الإجمالي النهائي: ${money(d.total_amount)}</h3></body></html>`;
+        const thermal = String(appSettings.print_size || "A4").toLowerCase() === "80mm";
+        const html = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>فاتورة ${esc(d.invoice_no)}</title><style>body{font-family:Arial;padding:${thermal ? "6px" : "14px"};font-size:${thermal ? "12px" : "14px"}}.invoice{max-width:${thermal ? "280px" : "900px"};margin:0 auto}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ddd;padding:${thermal ? "4px" : "6px"};text-align:right}</style></head><body><div class="invoice"><h2>${esc(appSettings.shop_name || "كاشيركو")}</h2><div>${esc(appSettings.thermal_header || "")}</div><div>رقم الفاتورة: <b>${esc(d.invoice_no)}</b></div><div>التاريخ: <b>${esc(d.sale_date)}</b></div><div>العميل: <b>${esc(d.customer_name)}</b></div><div>الدفع: <b>${esc(paymentLabel(d.payment_type))}</b></div><table><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الضريبة</th><th>الإجمالي</th></tr></thead><tbody>${lines.map((x)=>`<tr><td>${esc(x.item_code)} - ${esc(x.item_name)}</td><td>${esc(x.qty)}</td><td>${money(x.sale_price)}</td><td>${money(x.tax_amount)}</td><td>${money(x.line_total)}</td></tr>`).join("")}</tbody></table><h3>الإجمالي النهائي: ${money(d.total_amount)} ${esc(appSettings.currency || "SAR")}</h3></div></body></html>`;
         const w = window.open("", "_blank");
         if (!w) return;
         w.document.open();
@@ -287,7 +296,7 @@
       document.getElementById("searchInput").addEventListener("input", renderSales);
       document.getElementById("discount").addEventListener("input", renderCart);
 
-      await loadItems();
+      await Promise.all([loadItems(), loadSettings()]);
       resetForm();
       await loadSales();
     })();

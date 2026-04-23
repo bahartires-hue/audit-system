@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>المستخدمين والصلاحيات</title><link rel="stylesheet" href="/static/tailwind.css?v=9" /><link rel="stylesheet" href="/static/dark.css?v=9" /></head>
+<body class="bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="max-w-6xl mx-auto p-4 space-y-4">
+<div class="flex items-center justify-between"><h1 class="text-2xl font-extrabold">إدارة المستخدمين والصلاحيات</h1><div id="authArea"></div></div>
+<div class="flex flex-wrap gap-2"><a class="px-3 py-2 rounded-xl border font-bold" href="/trade">الرئيسية</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/settings">الإعدادات</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/users">المستخدمين</a></div>
+<section class="rounded-xl border p-4 bg-white dark:bg-slate-950">
+<div id="host"></div>
+</section>
+</div>
+<script src="/static/app.js?v=14"></script>
+<script>
+(async function(){await initAuthUI();function esc(s){return String(s==null?"":s);}
+async function load(){try{const me=await apiGet("/api/cashierko/permissions/me");if(!me.permissions||!me.permissions["users.manage"]){document.getElementById("host").innerHTML='<div class="text-red-500 font-bold">ليس لديك صلاحية إدارة المستخدمين</div>';return;}const d=await apiGet("/api/cashierko/users?limit=500");const rows=d.items||[];document.getElementById("host").innerHTML=rows.length?`<div class="rounded-lg border overflow-auto"><table class="w-full text-sm"><thead class="bg-slate-100 dark:bg-slate-800"><tr><th class="px-2 py-2">المستخدم</th><th class="px-2 py-2">البريد</th><th class="px-2 py-2">الدور</th><th class="px-2 py-2">نشط</th><th class="px-2 py-2">حفظ</th></tr></thead><tbody>${rows.map((x)=>`<tr class="border-t"><td class="px-2 py-2">${esc(x.username)}</td><td class="px-2 py-2">${esc(x.email)}</td><td class="px-2 py-2"><select class="rounded border px-2 py-1" data-role="${x.id}"><option ${x.role_name==='user'?'selected':''} value="user">user</option><option ${x.role_name==='cashier'?'selected':''} value="cashier">cashier</option><option ${x.role_name==='inventory'?'selected':''} value="inventory">inventory</option><option ${x.role_name==='accountant'?'selected':''} value="accountant">accountant</option><option ${x.role_name==='manager'?'selected':''} value="manager">manager</option><option ${x.role_name==='admin'?'selected':''} value="admin">admin</option></select></td><td class="px-2 py-2"><input type="checkbox" data-active="${x.id}" ${x.is_active?'checked':''} /></td><td class="px-2 py-2"><button class="rounded border px-3 py-1 font-bold" data-save="${x.id}">حفظ</button></td></tr>`).join("")}</tbody></table></div>`:`<div class="opacity-70">لا يوجد مستخدمون</div>`;document.querySelectorAll("[data-save]").forEach((b)=>b.onclick=async()=>{const id=b.getAttribute("data-save");const role=document.querySelector(`[data-role="${id}"]`).value;const active=document.querySelector(`[data-active="${id}"]`).checked;await apiPatchJson("/api/cashierko/users",{user_id:id,role_name:role,is_active:active});showToast("تم تحديث المستخدم ✔️","#10b981");await load();});}catch(e){showToast(e.message||"فشل تحميل المستخدمين","#ef4444");}}
+await load();})();
+</script>
+</body></html>

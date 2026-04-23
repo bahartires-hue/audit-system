@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>تحويلات الفروع</title><link rel="stylesheet" href="/static/tailwind.css?v=9" /><link rel="stylesheet" href="/static/dark.css?v=9" /></head>
+<body class="bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="max-w-6xl mx-auto p-4 space-y-4">
+<div class="flex items-center justify-between"><h1 class="text-2xl font-extrabold">تحويلات الفروع</h1><div id="authArea"></div></div>
+<div class="flex flex-wrap gap-2"><a class="px-3 py-2 rounded-xl border font-bold" href="/trade">الرئيسية</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/transfers">التحويلات</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/inventory">المخزون</a></div>
+<section class="rounded-xl border p-4 bg-white dark:bg-slate-950 space-y-2">
+<div class="grid grid-cols-1 md:grid-cols-6 gap-2">
+<input id="transferNo" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="رقم التحويل" />
+<input id="transferDate" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
+<select id="fromBranch" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
+<select id="toBranch" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
+<select id="fromItem" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
+<select id="toItem" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
+<input id="transferQty" type="number" step="0.01" value="1" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الكمية" />
+<input id="transferNote" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950 md:col-span-3" placeholder="ملاحظات" />
+<button id="saveTransferBtn" class="rounded-xl border font-extrabold px-4 py-2 md:col-span-2">تنفيذ التحويل</button>
+</div>
+</section>
+<section class="rounded-xl border p-4 bg-white dark:bg-slate-950"><div id="host"></div></section>
+</div>
+<script src="/static/app.js?v=14"></script>
+<script>
+(async function(){await initAuthUI();function esc(s){return String(s==null?"":s);}
+let items=[],branches=[];
+async function loadRef(){const b=await apiGet("/api/cashierko/branches");branches=b.items||[];const i=await apiGet("/api/trade/items");items=i.items||[];const opts=branches.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("");document.getElementById("fromBranch").innerHTML=opts;document.getElementById("toBranch").innerHTML=opts;renderItems();}
+function renderItems(){const fb=document.getElementById("fromBranch").value||"";const tb=document.getElementById("toBranch").value||"";document.getElementById("fromItem").innerHTML=items.filter(x=>(x.branch_id||"")===fb).map(x=>`<option value="${esc(x.id)}">${esc(x.code)} - ${esc(x.name)} (متاح ${esc(x.quantity)})</option>`).join("");document.getElementById("toItem").innerHTML=items.filter(x=>(x.branch_id||"")===tb).map(x=>`<option value="${esc(x.id)}">${esc(x.code)} - ${esc(x.name)}</option>`).join("");}
+async function load(){const d=await apiGet("/api/trade/branch-transfers?limit=200");const rows=d.items||[];document.getElementById("host").innerHTML=rows.length?`<div class="grid gap-1">${rows.map(x=>`<div class="rounded-lg border px-3 py-2">${esc(x.transfer_date)} | ${esc(x.transfer_no)} | من: ${esc(x.from_branch)} -> إلى: ${esc(x.to_branch)} | ${esc(x.notes)}</div>`).join("")}</div>`:`<div class="opacity-70">لا يوجد تحويلات</div>`;}
+document.getElementById("fromBranch").addEventListener("change",renderItems);document.getElementById("toBranch").addEventListener("change",renderItems);
+document.getElementById("saveTransferBtn").addEventListener("click",async()=>{try{await apiPostJson("/api/trade/branch-transfers",{transfer_no:document.getElementById("transferNo").value||`TR-${Date.now()}`,transfer_date:document.getElementById("transferDate").value||new Date().toISOString().slice(0,10),from_branch_id:document.getElementById("fromBranch").value||"",to_branch_id:document.getElementById("toBranch").value||"",notes:document.getElementById("transferNote").value||"",lines:[{from_item_id:document.getElementById("fromItem").value||"",to_item_id:document.getElementById("toItem").value||"",qty:Number(document.getElementById("transferQty").value||0)}]});showToast("تم التحويل ✔️","#10b981");await load();}catch(e){showToast(e.message||"فشل التحويل","#ef4444");}});
+document.getElementById("transferDate").value=new Date().toISOString().slice(0,10);
+await Promise.all([loadRef(),load()]);})();
+</script>
+</body></html>

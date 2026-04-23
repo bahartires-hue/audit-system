@@ -22,6 +22,7 @@ from .db import SessionLocal as _SessionLocal
 from .models import AnalysisReport, User, init_db
 from .rate_limit import limiter
 from .routers.auth_api import router as auth_router
+from .routers.cashierko_api import router as cashierko_router
 from .routers.trade_api import router as trade_router
 from .services.analyzer import analyze as analyze_pairs
 from .services.analyzer import compute_summary, process
@@ -92,6 +93,7 @@ FRONTEND_DIR = BASE_DIR / "frontend"
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 app.include_router(auth_router)
 app.include_router(trade_router)
+app.include_router(cashierko_router)
 
 init_db()
 
@@ -176,6 +178,26 @@ def ui_trade_inventory(request: Request):
 @app.get("/trade/reports", response_class=HTMLResponse)
 def ui_trade_reports(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "trade_reports.html")
+
+
+@app.get("/trade/master-data", response_class=HTMLResponse)
+def ui_trade_master_data(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "trade_master_data.html")
+
+
+@app.get("/trade/settings", response_class=HTMLResponse)
+def ui_trade_settings(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "trade_settings.html")
+
+
+@app.get("/trade/users", response_class=HTMLResponse)
+def ui_trade_users(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "trade_users.html")
+
+
+@app.get("/trade/transfers", response_class=HTMLResponse)
+def ui_trade_transfers(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "trade_transfers.html")
 
 
 @app.get("/settings", response_class=HTMLResponse)

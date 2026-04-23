@@ -1,30 +1,113 @@
 <!doctype html>
-<html lang="ar" dir="rtl"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>المشتريات</title><link rel="stylesheet" href="/static/tailwind.css?v=9" /><link rel="stylesheet" href="/static/dark.css?v=9" /></head>
+<html lang="ar" dir="rtl">
+<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>المشتريات</title><link rel="stylesheet" href="/static/tailwind.css?v=9" /><link rel="stylesheet" href="/static/dark.css?v=9" /></head>
 <body class="bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
-<div class="max-w-7xl mx-auto p-4 space-y-4">
-<div class="flex flex-wrap gap-2"><a class="px-3 py-2 rounded-xl border font-bold" href="/trade">الرئيسية</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/items">الأصناف</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/purchases">المشتريات</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/sales">المبيعات</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/inventory">المخزون</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/reports">التقارير</a></div>
+<div class="max-w-[1500px] mx-auto p-4 space-y-4">
+<div class="flex flex-wrap gap-2"><a class="px-3 py-2 rounded-xl border font-bold" href="/trade">الرئيسية</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/items">الأصناف</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/master-data">البيانات الأساسية</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/purchases">المشتريات</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/sales">المبيعات</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/inventory">المخزون</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/reports">التقارير</a></div>
 <div class="rounded-xl border p-4 bg-white dark:bg-slate-950">
 <h1 class="text-xl font-extrabold mb-2">فاتورة شراء</h1>
-<div class="grid grid-cols-1 md:grid-cols-6 gap-2">
+<div class="grid grid-cols-1 md:grid-cols-7 gap-2">
 <input id="no" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="رقم الفاتورة" />
-<input id="supplier" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="المورد" />
+<select id="supplierSel" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
+<select id="branchSel" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
 <input id="date" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
+<select id="pay" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"><option value="cash">نقد</option><option value="transfer">تحويل</option><option value="network">شبكة</option><option value="credit">آجل</option></select>
+<input id="tax" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="ضريبة" />
+<input id="discount" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="خصم" />
+</div>
+<div class="grid grid-cols-1 md:grid-cols-6 gap-2 mt-2">
 <select id="item" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
 <input id="qty" type="number" step="0.01" value="1" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الكمية" />
 <input id="unit" type="number" step="0.01" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="تكلفة الشراء" />
+<input id="extra" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="تكلفة إضافية (نقل/رش..)" />
+<button id="addLineBtn" class="rounded-xl border font-extrabold px-4 py-2">إضافة بند</button>
+<button id="clearBtn" class="rounded-xl border font-extrabold px-4 py-2">تفريغ البنود</button>
 </div>
-<div class="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2">
-<input id="extra" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="تكلفة إضافية" />
-<button id="saveBtn" class="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-4 py-2">حفظ</button>
+<div id="linesHost" class="mt-2"></div>
+<div class="grid grid-cols-1 md:grid-cols-4 gap-2 mt-2">
+<input id="paid" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="المدفوع" />
+<div id="totalsHost" class="rounded-xl border px-3 py-2 font-bold">الإجمالي: 0.00 | المتبقي: 0.00</div>
+<button id="saveBtn" class="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-4 py-2">حفظ الفاتورة</button>
 <button id="refreshBtn" class="rounded-xl border font-extrabold px-4 py-2">تحديث</button>
 </div></div>
 <div class="rounded-xl border p-4 bg-white dark:bg-slate-950"><div id="host"></div></div>
 </div>
 <script src="/static/app.js?v=14"></script>
 <script>
-(async function(){await initAuthUI();function esc(s){return String(s==null?"":s);}
-async function loadItems(){const d=await apiGet("/api/trade/items");const rows=d.items||[];document.getElementById("item").innerHTML=rows.map(x=>`<option value="${esc(x.id)}">${esc(x.code)} - ${esc(x.name)}</option>`).join("");}
-async function loadPurchases(){const d=await apiGet("/api/trade/purchases?limit=200");const rows=d.items||[];document.getElementById("host").innerHTML=rows.length?`<div class="grid gap-1">${rows.map(x=>`<div class="rounded-lg border px-3 py-2">${esc(x.purchase_date)} | ${esc(x.invoice_no)} | ${esc(x.supplier_name)} | ${esc(x.total_amount)}</div>`).join("")}</div>`:`<div class="opacity-70">لا توجد مشتريات</div>`;}
-document.getElementById("saveBtn").addEventListener("click",async()=>{try{await apiPostJson("/api/trade/purchases",{invoice_no:document.getElementById("no").value||"",supplier_name:document.getElementById("supplier").value||"",purchase_date:document.getElementById("date").value||"",lines:[{item_id:document.getElementById("item").value||"",qty:Number(document.getElementById("qty").value||0),unit_cost:Number(document.getElementById("unit").value||0),extra_cost:Number(document.getElementById("extra").value||0)}]});showToast("تم حفظ الشراء ✔️","#10b981");await loadPurchases();}catch(e){showToast(e.message||"فشل الحفظ","#ef4444");}});
-document.getElementById("refreshBtn").addEventListener("click",loadPurchases);document.getElementById("date").value=new Date().toISOString().slice(0,10);await loadItems();await loadPurchases();})();
+(async function(){
+await initAuthUI();
+function esc(s){return String(s==null?"":s);}
+function money(n){return Number(n||0).toFixed(2);}
+let items=[], suppliers=[], branches=[], lines=[];
+function computeTotals(){
+  const sub=lines.reduce((s,x)=>s+Number(x.qty)*Number(x.unit_cost)+Number(x.extra_cost),0);
+  const tax=Number(document.getElementById("tax").value||0);
+  const discount=Number(document.getElementById("discount").value||0);
+  const total=Math.max(0, sub+tax-discount);
+  const paid=Number(document.getElementById("paid").value||0);
+  const due=Math.max(0,total-paid);
+  document.getElementById("totalsHost").textContent=`الإجمالي: ${money(total)} | المدفوع: ${money(paid)} | المتبقي: ${money(due)}`;
+  return {sub,tax,discount,total,paid,due};
+}
+function renderLines(){
+  const h=document.getElementById("linesHost");
+  h.innerHTML=lines.length?`<div class="rounded-lg border overflow-auto"><table class="w-full text-sm"><thead class="bg-slate-100 dark:bg-slate-800"><tr><th class="px-2 py-2">الصنف</th><th class="px-2 py-2">الكمية</th><th class="px-2 py-2">التكلفة</th><th class="px-2 py-2">إضافي</th><th class="px-2 py-2">الإجمالي</th><th class="px-2 py-2">حذف</th></tr></thead><tbody>${lines.map((x,i)=>`<tr class="border-t"><td class="px-2 py-2">${esc(x.item_label)}</td><td class="px-2 py-2">${esc(x.qty)}</td><td class="px-2 py-2">${money(x.unit_cost)}</td><td class="px-2 py-2">${money(x.extra_cost)}</td><td class="px-2 py-2">${money(Number(x.qty)*Number(x.unit_cost)+Number(x.extra_cost))}</td><td class="px-2 py-2"><button class="rounded border px-2 py-1" data-del="${i}">✕</button></td></tr>`).join("")}</tbody></table></div>`:`<div class="opacity-70">لا توجد بنود</div>`;
+  h.querySelectorAll("[data-del]").forEach((b)=>b.addEventListener("click",()=>{lines.splice(Number(b.getAttribute("data-del")),1);renderLines();}));
+  computeTotals();
+}
+async function loadItems(){
+  const d=await apiGet("/api/trade/items"); items=d.items||[];
+  document.getElementById("item").innerHTML=items.map(x=>`<option value="${esc(x.id)}">${esc(x.code)} - ${esc(x.name)}</option>`).join("");
+}
+async function loadSuppliers(){
+  const d=await apiGet("/api/cashierko/suppliers"); suppliers=d.items||[];
+  document.getElementById("supplierSel").innerHTML=`<option value="">-- اختر المورد --</option>${suppliers.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("")}`;
+}
+async function loadBranches(){
+  const d=await apiGet("/api/cashierko/branches"); branches=d.items||[];
+  document.getElementById("branchSel").innerHTML=`<option value="">-- اختر الفرع --</option>${branches.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("")}`;
+}
+async function loadPurchases(){
+  const d=await apiGet("/api/trade/purchases?limit=200"); const rows=d.items||[];
+  document.getElementById("host").innerHTML=rows.length?`<div class="grid gap-1">${rows.map(x=>`<div class="rounded-lg border px-3 py-2">${esc(x.purchase_date)} | ${esc(x.invoice_no)} | ${esc(x.supplier_name)} | ${esc(x.payment_type)} | الإجمالي ${money(x.total_amount)} | متبقي ${money(x.due_amount)}</div>`).join("")}</div>`:`<div class="opacity-70">لا توجد مشتريات</div>`;
+}
+document.getElementById("addLineBtn").addEventListener("click",()=>{
+  const itemId=document.getElementById("item").value||"";
+  const item=items.find(x=>x.id===itemId); if(!item){showToast("اختر صنف", "#ef4444"); return;}
+  const qty=Number(document.getElementById("qty").value||0);
+  const unit=Number(document.getElementById("unit").value||0);
+  const extra=Number(document.getElementById("extra").value||0);
+  if(qty<=0){showToast("الكمية غير صحيحة","#ef4444"); return;}
+  lines.push({item_id:item.id,item_label:`${item.code} - ${item.name}`,qty,unit_cost:unit,extra_cost:extra});
+  renderLines();
+});
+document.getElementById("clearBtn").addEventListener("click",()=>{lines=[];renderLines();});
+["tax","discount","paid"].forEach((id)=>document.getElementById(id).addEventListener("input",computeTotals));
+document.getElementById("saveBtn").addEventListener("click",async()=>{
+  try{
+    if(!lines.length){showToast("أضف بنود الفاتورة أولًا","#ef4444");return;}
+    const supId=document.getElementById("supplierSel").value||"";
+    const sup=suppliers.find(x=>x.id===supId);
+    const t=computeTotals();
+    await apiPostJson("/api/trade/purchases",{
+      invoice_no:document.getElementById("no").value||`P-${Date.now()}`,
+      supplier_id:supId,
+      supplier_name:(sup&&sup.name)||"مورد نقدي",
+      branch_id:document.getElementById("branchSel").value||"",
+      purchase_date:document.getElementById("date").value||new Date().toISOString().slice(0,10),
+      payment_type:document.getElementById("pay").value||"cash",
+      tax_amount:t.tax,
+      discount:t.discount,
+      paid_amount:t.paid,
+      lines:lines.map(x=>({item_id:x.item_id,qty:Number(x.qty),unit_cost:Number(x.unit_cost),extra_cost:Number(x.extra_cost)}))
+    });
+    showToast("تم حفظ الشراء ✔️","#10b981");
+    lines=[]; renderLines(); await loadPurchases(); await loadItems();
+  }catch(e){showToast(e.message||"فشل الحفظ","#ef4444");}
+});
+document.getElementById("refreshBtn").addEventListener("click",loadPurchases);
+document.getElementById("date").value=new Date().toISOString().slice(0,10);
+await Promise.all([loadItems(),loadSuppliers(),loadBranches(),loadPurchases()]);
+renderLines();
+})();
 </script></body></html>
