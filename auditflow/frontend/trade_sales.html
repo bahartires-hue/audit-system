@@ -1,31 +1,138 @@
 <!doctype html>
-<html lang="ar" dir="rtl"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>المبيعات</title><link rel="stylesheet" href="/static/tailwind.css?v=9" /><link rel="stylesheet" href="/static/dark.css?v=9" /></head>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>المبيعات</title>
+<link rel="stylesheet" href="/static/tailwind.css?v=9" />
+<link rel="stylesheet" href="/static/dark.css?v=9" />
+</head>
 <body class="bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
-<div class="max-w-7xl mx-auto p-4 space-y-4">
+<div class="max-w-[1500px] mx-auto p-4 space-y-4">
 <div class="flex flex-wrap gap-2"><a class="px-3 py-2 rounded-xl border font-bold" href="/trade">الرئيسية</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/items">الأصناف</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/purchases">المشتريات</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/sales">المبيعات</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/inventory">المخزون</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/reports">التقارير</a></div>
 <div class="rounded-xl border p-4 bg-white dark:bg-slate-950">
-<h1 class="text-xl font-extrabold mb-2">فاتورة بيع</h1>
-<div class="grid grid-cols-1 md:grid-cols-6 gap-2">
-<input id="no" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="رقم الفاتورة" />
-<input id="customer" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="العميل" />
+<div class="flex items-center justify-between mb-3"><h1 class="text-xl font-extrabold">شاشة المبيعات</h1><div id="formMode" class="text-sm opacity-70">وضع: إضافة جديدة</div></div>
+<div class="grid grid-cols-1 md:grid-cols-8 gap-2">
+<input id="no" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950 md:col-span-2" placeholder="رقم الفاتورة" />
+<input id="customer" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950 md:col-span-2" placeholder="العميل" />
 <input id="date" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
-<select id="item" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
+<select id="pay" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"><option value="cash">نقد</option><option value="transfer">تحويل</option><option value="credit">آجل</option></select>
+<input id="tax" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الضريبة" />
+<input id="searchInput" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="بحث في الفواتير" />
+</div>
+<div class="grid grid-cols-1 md:grid-cols-6 gap-2 mt-2">
+<select id="item" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950 md:col-span-2"></select>
 <input id="qty" type="number" step="0.01" value="1" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الكمية" />
 <input id="price" type="number" step="0.01" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="سعر البيع" />
-</div>
-<div class="grid grid-cols-1 md:grid-cols-4 gap-2 mt-2">
-<input id="tax" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الضريبة" />
-<select id="pay" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"><option value="cash">نقد</option><option value="transfer">تحويل</option><option value="credit">آجل</option></select>
 <button id="saveBtn" class="rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-extrabold px-4 py-2">حفظ</button>
-<button id="refreshBtn" class="rounded-xl border font-extrabold px-4 py-2">تحديث</button>
-</div></div>
-<div class="rounded-xl border p-4 bg-white dark:bg-slate-950"><div id="host"></div></div>
+<button id="resetBtn" class="rounded-xl border font-extrabold px-4 py-2">جديد</button>
+</div>
+</div>
+<div class="rounded-xl border p-4 bg-white dark:bg-slate-950 overflow-auto">
+<div id="host"></div>
+</div>
 </div>
 <script src="/static/app.js?v=14"></script>
 <script>
-(async function(){await initAuthUI();function esc(s){return String(s==null?"":s);}
-async function loadItems(){const d=await apiGet("/api/trade/items");const rows=d.items||[];document.getElementById("item").innerHTML=rows.map(x=>`<option value="${esc(x.id)}">${esc(x.code)} - ${esc(x.name)}</option>`).join("");}
-async function loadSales(){const d=await apiGet("/api/trade/sales?limit=200");const rows=d.items||[];document.getElementById("host").innerHTML=rows.length?`<div class="grid gap-1">${rows.map(x=>`<div class="rounded-lg border px-3 py-2">${esc(x.sale_date)} | ${esc(x.invoice_no)} | ${esc(x.customer_name)} | ${esc(x.total_amount)} (${esc(x.payment_type)})</div>`).join("")}</div>`:`<div class="opacity-70">لا توجد مبيعات</div>`;}
-document.getElementById("saveBtn").addEventListener("click",async()=>{try{await apiPostJson("/api/trade/sales",{invoice_no:document.getElementById("no").value||"",customer_name:document.getElementById("customer").value||"",sale_date:document.getElementById("date").value||"",payment_type:document.getElementById("pay").value||"cash",lines:[{item_id:document.getElementById("item").value||"",qty:Number(document.getElementById("qty").value||0),sale_price:Number(document.getElementById("price").value||0),tax_amount:Number(document.getElementById("tax").value||0)}]});showToast("تم حفظ البيع ✔️","#10b981");await loadSales();}catch(e){showToast(e.message||"فشل الحفظ","#ef4444");}});
-document.getElementById("refreshBtn").addEventListener("click",loadSales);document.getElementById("date").value=new Date().toISOString().slice(0,10);await loadItems();await loadSales();})();
-</script></body></html>
+(async function(){
+await initAuthUI();
+function esc(s){return String(s==null?"":s);}
+function money(n){return Number(n||0).toFixed(2);}
+let salesRows=[];
+let editingId=null;
+
+async function apiPutJson(url, body){
+const csrf=localStorage.getItem("csrf_token")||"";
+const res=await fetch(url,{method:"PUT",credentials:"include",headers:{Accept:"application/json","Content-Type":"application/json","X-CSRF-Token":csrf},body:JSON.stringify(body||{})});
+if(!res.ok){throw new Error(await readErrorMessage(res));}
+return res.json();
+}
+
+function paymentLabel(v){if(v==="cash")return"نقد";if(v==="transfer")return"تحويل";if(v==="credit")return"آجل";return v||"";}
+function resetForm(){
+editingId=null;
+document.getElementById("formMode").textContent="وضع: إضافة جديدة";
+document.getElementById("no").value="";
+document.getElementById("customer").value="";
+document.getElementById("date").value=new Date().toISOString().slice(0,10);
+document.getElementById("pay").value="cash";
+document.getElementById("tax").value="0";
+document.getElementById("qty").value="1";
+}
+function payloadFromForm(){
+return {
+invoice_no:document.getElementById("no").value||"",
+customer_name:document.getElementById("customer").value||"",
+sale_date:document.getElementById("date").value||"",
+payment_type:document.getElementById("pay").value||"cash",
+lines:[{item_id:document.getElementById("item").value||"",qty:Number(document.getElementById("qty").value||0),sale_price:Number(document.getElementById("price").value||0),tax_amount:Number(document.getElementById("tax").value||0)}]
+};
+}
+function printInvoice(d){
+const lines=d.lines||[];
+const html=`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>فاتورة ${esc(d.invoice_no)}</title><style>body{font-family:Arial;padding:14px}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ddd;padding:6px;text-align:right}</style></head><body><h2>فاتورة بيع</h2><div>رقم الفاتورة: <b>${esc(d.invoice_no)}</b></div><div>التاريخ: <b>${esc(d.sale_date)}</b></div><div>العميل: <b>${esc(d.customer_name)}</b></div><div>الدفع: <b>${esc(paymentLabel(d.payment_type))}</b></div><table><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الضريبة</th><th>الإجمالي</th></tr></thead><tbody>${lines.map((x)=>`<tr><td>${esc(x.item_code)} - ${esc(x.item_name)}</td><td>${esc(x.qty)}</td><td>${money(x.sale_price)}</td><td>${money(x.tax_amount)}</td><td>${money(x.line_total)}</td></tr>`).join("")}</tbody></table><h3>الإجمالي النهائي: ${money(d.total_amount)}</h3></body></html>`;
+const w=window.open("","_blank");if(!w)return;w.document.open();w.document.write(html);w.document.close();w.focus();w.print();
+}
+async function loadItems(){
+const d=await apiGet("/api/trade/items");
+const rows=d.items||[];
+const sel=document.getElementById("item");
+sel.innerHTML=rows.map(x=>`<option value="${esc(x.id)}">${esc(x.code)} - ${esc(x.name)}</option>`).join("");
+if(rows[0]){document.getElementById("price").value=money(rows[0].default_sale_price);}
+sel.addEventListener("change",()=>{const it=rows.find(x=>x.id===sel.value);if(it)document.getElementById("price").value=money(it.default_sale_price);});
+}
+function renderSales(){
+const q=(document.getElementById("searchInput").value||"").trim().toLowerCase();
+const rows=q?salesRows.filter((x)=>`${x.invoice_no} ${x.customer_name} ${x.sale_date} ${x.payment_type}`.toLowerCase().includes(q)):salesRows;
+const host=document.getElementById("host");
+if(!rows.length){host.innerHTML='<div class="opacity-70">لا توجد مبيعات</div>';return;}
+host.innerHTML=`<table class="w-full min-w-[1000px] text-sm"><thead class="bg-slate-100 dark:bg-slate-800"><tr><th class="px-2 py-2 text-right">التاريخ</th><th class="px-2 py-2 text-right">الفاتورة</th><th class="px-2 py-2 text-right">العميل</th><th class="px-2 py-2 text-right">الدفع</th><th class="px-2 py-2 text-right">الإجمالي</th><th class="px-2 py-2 text-right">الإجراءات</th></tr></thead><tbody>${rows.map((x)=>`<tr class="border-t"><td class="px-2 py-2">${esc(x.sale_date)}</td><td class="px-2 py-2">${esc(x.invoice_no)}</td><td class="px-2 py-2">${esc(x.customer_name)}</td><td class="px-2 py-2">${esc(paymentLabel(x.payment_type))}</td><td class="px-2 py-2 font-bold">${money(x.total_amount)}</td><td class="px-2 py-2"><div class="flex gap-1"><button class="rounded-lg border px-2 py-1 font-bold" data-edit="${x.id}">تعديل</button><button class="rounded-lg border px-2 py-1 font-bold" data-print="${x.id}">طباعة</button><button class="rounded-lg border px-2 py-1 font-bold text-red-600" data-del="${x.id}">حذف</button></div></td></tr>`).join("")}</tbody></table>`;
+host.querySelectorAll("[data-edit]").forEach((b)=>b.addEventListener("click",()=>editSale(b.getAttribute("data-edit"))));
+host.querySelectorAll("[data-print]").forEach((b)=>b.addEventListener("click",()=>printSale(b.getAttribute("data-print"))));
+host.querySelectorAll("[data-del]").forEach((b)=>b.addEventListener("click",()=>removeSale(b.getAttribute("data-del"))));
+}
+async function loadSales(){const d=await apiGet("/api/trade/sales?limit=200");salesRows=d.items||[];renderSales();}
+async function editSale(id){
+try{
+const d=await apiGet(`/api/trade/sales/${encodeURIComponent(id)}`);
+editingId=id;
+document.getElementById("formMode").textContent=`وضع: تعديل ${d.invoice_no||""}`;
+document.getElementById("no").value=d.invoice_no||"";
+document.getElementById("customer").value=d.customer_name||"";
+document.getElementById("date").value=d.sale_date||new Date().toISOString().slice(0,10);
+document.getElementById("pay").value=d.payment_type||"cash";
+const first=(d.lines||[])[0];
+if(first){
+document.getElementById("item").value=first.item_id||"";
+document.getElementById("qty").value=String(first.qty||1);
+document.getElementById("price").value=money(first.sale_price||0);
+document.getElementById("tax").value=money(first.tax_amount||0);
+}
+window.scrollTo({top:0,behavior:"smooth"});
+}catch(e){showToast(e.message||"فشل تحميل الفاتورة","#ef4444");}
+}
+async function printSale(id){
+try{const d=await apiGet(`/api/trade/sales/${encodeURIComponent(id)}`);printInvoice(d);}catch(e){showToast(e.message||"فشلت الطباعة","#ef4444");}
+}
+async function removeSale(id){
+if(!confirm("تأكيد حذف الفاتورة؟ سيتم إرجاع الكمية للمخزون."))return;
+try{await apiDelete(`/api/trade/sales/${encodeURIComponent(id)}`);showToast("تم حذف الفاتورة ✔️","#10b981");if(editingId===id)resetForm();await loadSales();}catch(e){showToast(e.message||"فشل الحذف","#ef4444");}
+}
+document.getElementById("saveBtn").addEventListener("click",async()=>{
+try{
+const payload=payloadFromForm();
+if(editingId){await apiPutJson(`/api/trade/sales/${encodeURIComponent(editingId)}`,payload);showToast("تم تعديل الفاتورة ✔️","#10b981");}
+else{await apiPostJson("/api/trade/sales",payload);showToast("تم حفظ البيع ✔️","#10b981");}
+resetForm();
+await loadSales();
+}catch(e){showToast(e.message||"فشل الحفظ","#ef4444");}
+});
+document.getElementById("resetBtn").addEventListener("click",resetForm);
+document.getElementById("searchInput").addEventListener("input",renderSales);
+await loadItems();
+resetForm();
+await loadSales();
+})();
+</script>
+</body>
+</html>

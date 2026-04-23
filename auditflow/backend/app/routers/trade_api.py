@@ -80,6 +80,10 @@ class SaleCreate(BaseModel):
     lines: list[SaleLineIn]
 
 
+class SaleUpdate(SaleCreate):
+    pass
+
+
 def _parse_date(v: str, field_name: str) -> dt.datetime:
     try:
         return dt.datetime.strptime((v or "").strip(), "%Y-%m-%d")
@@ -111,6 +115,25 @@ def _avg_cost(db: Any, user_id: str, item_id: str) -> float:
     if qty <= 0:
         return 0.0
     return round(amt / qty, 4)
+
+
+def _reverse_sale_effects(db: Any, user_id: str, sale_id: str) -> None:
+    sale_lines = db.query(SaleLine).filter(SaleLine.sale_id == sale_id).all()
+    item_ids = {x.item_id for x in sale_lines}
+    items = db.query(Item).filter(Item.user_id == user_id, Item.id.in_(list(item_ids))).all() if item_ids else []
+    item_by_id = {x.id: x for x in items}
+    for ln in sale_lines:
+        item = item_by_id.get(ln.item_id)
+        if item:
+            item.quantity = round(float(item.quantity or 0.0) + float(ln.qty or 0.0), 4)
+    for mv in db.query(StockMovement).filter(
+        StockMovement.user_id == user_id,
+        StockMovement.reference_type == "sale",
+        StockMovement.reference_id == sale_id,
+    ).all():
+        db.delete(mv)
+    for ln in sale_lines:
+        db.delete(ln)
 
 
 @router.get("/items")
@@ -454,6 +477,102 @@ def sale_details(sale_id: str, request: Request):
                 for ln, item in lines
             ],
         }
+    finally:
+        db.close()
+
+
+@router.put("/sales/{sale_id}")
+def update_sale(sale_id: str, request: Request, body: SaleUpdate = Body(...)):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        sale = db.query(Sale).filter(Sale.user_id == user.id, Sale.id == sale_id).first()
+        if not sale:
+            raise HTTPException(404, "فاتورة البيع غير موجودة")
+        s_date = _parse_date(body.sale_date, "sale_date")
+        if not body.lines:
+            raise HTTPException(400, "فاتورة البيع تحتاج بنوداً")
+
+        _reverse_sale_effects(db, user.id, sale.id)
+
+        item_ids = {x.item_id for x in body.lines}
+        items = db.query(Item).filter(Item.user_id == user.id, Item.id.in_(list(item_ids))).all()
+        if len(items) != len(item_ids):
+            raise HTTPException(400, "يوجد صنف غير صالح")
+        item_by_id = {x.id: x for x in items}
+
+        sale.invoice_no = body.invoice_no.strip()
+        sale.customer_name = body.customer_name.strip()
+        sale.sale_date = s_date
+        sale.payment_type = (body.payment_type or "cash").strip().lower()
+        sale.discount = round(abs(float(body.discount or 0.0)), 2)
+        sale.notes = (body.notes or "").strip() or None
+        sale.seller_name = (body.seller_name or "").strip() or None
+        sale.branch_name = (body.branch_name or "").strip() or None
+
+        total = 0.0
+        for ln in body.lines:
+            qty = round(abs(float(ln.qty or 0.0)), 4)
+            sale_price = round(abs(float(ln.sale_price or 0.0)), 4)
+            tax = round(abs(float(ln.tax_amount or 0.0)), 2)
+            if qty <= 0:
+                continue
+            item = item_by_id[ln.item_id]
+            available = round(float(item.quantity or 0.0), 4)
+            if available + 0.0001 < qty:
+                raise HTTPException(400, f"المخزون غير كافٍ للصنف: {item.name}")
+            unit_cost = _avg_cost(db, user.id, ln.item_id)
+            cost_total = round(unit_cost * qty, 2)
+            line_total = round(sale_price * qty + tax, 2)
+            profit = round((sale_price * qty) - cost_total, 2)
+            db.add(
+                SaleLine(
+                    sale_id=sale.id,
+                    item_id=ln.item_id,
+                    qty=qty,
+                    sale_price=sale_price,
+                    tax_amount=tax,
+                    cost_price=cost_total,
+                    profit=profit,
+                )
+            )
+            db.add(
+                StockMovement(
+                    id=uuid.uuid4().hex,
+                    user_id=user.id,
+                    item_id=ln.item_id,
+                    movement_type="sale",
+                    qty_in=0.0,
+                    qty_out=qty,
+                    unit_cost=unit_cost,
+                    reference_type="sale",
+                    reference_id=sale.id,
+                    movement_date=s_date,
+                )
+            )
+            item.quantity = round(available - qty, 4)
+            total += line_total
+        sale.total_amount = round(max(0.0, total - sale.discount), 2)
+        db.commit()
+        return {"id": sale.id, "total_amount": sale.total_amount, "updated": True}
+    finally:
+        db.close()
+
+
+@router.delete("/sales/{sale_id}")
+def delete_sale(sale_id: str, request: Request):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        sale = db.query(Sale).filter(Sale.user_id == user.id, Sale.id == sale_id).first()
+        if not sale:
+            raise HTTPException(404, "فاتورة البيع غير موجودة")
+        _reverse_sale_effects(db, user.id, sale.id)
+        db.delete(sale)
+        db.commit()
+        return {"deleted": True}
     finally:
         db.close()
 
