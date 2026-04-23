@@ -290,6 +290,16 @@
           </div>
           <div id="trialBalanceHost" class="text-sm mb-3"></div>
           <div id="ledgerHost" class="text-sm"></div>
+          <hr class="my-4 border-slate-200 dark:border-slate-700" />
+          <h3 class="text-base font-extrabold mb-2">تقرير حركة مبيعات الصنف</h3>
+          <div id="salesMovementTotalsHost" class="grid grid-cols-1 md:grid-cols-5 gap-2 mb-2"></div>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
+            <input id="salesMovementQuery" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="بحث بالصنف أو كود الحساب" />
+            <input id="salesMovementFrom" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
+            <input id="salesMovementTo" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
+            <button id="runSalesMovementBtn" class="rounded-xl border font-extrabold px-4 py-2">تحديث تقرير المبيعات</button>
+          </div>
+          <div id="salesMovementHost" class="text-sm"></div>
         </section>
 
         <section class="erp-card module-pane" data-module-pane="inventory hr operations admin">
@@ -329,7 +339,16 @@
           const host = document.getElementById("accountsHost");
           host.innerHTML = accounts.length
             ? `<div class="grid gap-1">${accounts
-                .map((a) => `<div class="rounded-lg border px-3 py-2">${esc(a.code)} — ${esc(a.name)} <span class="opacity-60">(${esc(a.account_type)})</span></div>`)
+                .map(
+                  (a) =>
+                    `<div class="rounded-lg border px-3 py-2 flex items-center justify-between gap-2">
+                       <div>${esc(a.code)} — ${esc(a.name)} <span class="opacity-60">(${esc(a.account_type)})</span></div>
+                       <div class="flex items-center gap-1">
+                         <button class="px-2 py-1 rounded border text-xs font-extrabold" data-acc-edit="${esc(a.id)}">تعديل</button>
+                         <button class="px-2 py-1 rounded border text-xs font-extrabold text-rose-600" data-acc-del="${esc(a.id)}">حذف</button>
+                       </div>
+                     </div>`
+                )
                 .join("")}</div>`
             : `<div class="opacity-70">لا توجد حسابات بعد</div>`;
           const asLabel = (a) => `${a.code} - ${a.name}`;
@@ -338,6 +357,46 @@
           fillSelect(document.getElementById("ledgerAccount"), accounts, asLabel);
           fillSelect(document.getElementById("vAccount"), accounts, asLabel);
           fillSelect(document.getElementById("vCashAccount"), accounts, asLabel);
+          host.querySelectorAll("[data-acc-edit]").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              const id = btn.getAttribute("data-acc-edit");
+              const rec = accounts.find((x) => x.id === id);
+              if (!rec) return;
+              const code = prompt("كود الحساب", rec.code || "");
+              if (!code) return;
+              const name = prompt("اسم الحساب", rec.name || "");
+              if (!name) return;
+              const accountType = prompt("نوع الحساب (asset/liability/equity/revenue/expense)", rec.account_type || "asset");
+              if (!accountType) return;
+              try {
+                await apiPatchJson(`/accounting/accounts/${encodeURIComponent(id)}`, {
+                  code,
+                  name,
+                  account_type: accountType,
+                  parent_id: rec.parent_id || null,
+                  is_active: !!rec.is_active,
+                });
+                showToast("تم تعديل الحساب ✔️", "#10b981");
+                await loadAll();
+              } catch (e) {
+                showToast(e.message || "تعذر تعديل الحساب", "#ef4444");
+              }
+            });
+          });
+          host.querySelectorAll("[data-acc-del]").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              const id = btn.getAttribute("data-acc-del");
+              if (!id) return;
+              if (!confirm("هل تريد حذف الحساب؟")) return;
+              try {
+                await apiDelete(`/accounting/accounts/${encodeURIComponent(id)}`);
+                showToast("تم حذف الحساب ✔️", "#10b981");
+                await loadAll();
+              } catch (e) {
+                showToast(e.message || "تعذر حذف الحساب", "#ef4444");
+              }
+            });
+          });
         }
 
         function renderCounterparties() {
@@ -749,6 +808,78 @@
             : `<div class="opacity-70">لا توجد بيانات دفتر أستاذ للحساب المحدد</div>`;
         }
 
+        async function loadSalesMovementReport() {
+          const from = document.getElementById("salesMovementFrom").value || "";
+          const to = document.getElementById("salesMovementTo").value || "";
+          const query = (document.getElementById("salesMovementQuery").value || "").trim();
+          const qs = `date_from=${encodeURIComponent(from)}&date_to=${encodeURIComponent(to)}&item_query=${encodeURIComponent(query)}&limit=5000`;
+          const data = await apiGet(`/accounting/reports/sales-movement?${qs}`);
+          const rows = data.items || [];
+          const t = data.totals || {};
+          const totalsHost = document.getElementById("salesMovementTotalsHost");
+          if (totalsHost) {
+            const cards = [
+              ["إجمالي الكمية", Number(t.qty || 0).toFixed(4)],
+              ["صافي المبيعات", Number(t.net_sales || 0).toFixed(2)],
+              ["إجمالي الضريبة", Number(t.tax_amount || 0).toFixed(2)],
+              ["إجمالي التكلفة", Number(t.cost_total || 0).toFixed(2)],
+              ["إجمالي الربح", `${Number(t.profit || 0).toFixed(2)} (${Number(t.profit_margin_pct || 0).toFixed(2)}%)`],
+            ];
+            totalsHost.innerHTML = cards
+              .map(
+                (x) =>
+                  `<div class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"><div class="text-xs opacity-70">${x[0]}</div><div class="text-lg font-extrabold">${esc(x[1])}</div></div>`
+              )
+              .join("");
+          }
+          const host = document.getElementById("salesMovementHost");
+          if (!host) return;
+          host.innerHTML = rows.length
+            ? `<div class="rounded-lg border overflow-auto">
+                <table class="w-full text-sm">
+                  <thead class="bg-slate-100 dark:bg-slate-800">
+                    <tr>
+                      <th class="px-2 py-2">التاريخ</th>
+                      <th class="px-2 py-2">رقم الفاتورة</th>
+                      <th class="px-2 py-2">العميل</th>
+                      <th class="px-2 py-2">الصنف</th>
+                      <th class="px-2 py-2">كود الحساب</th>
+                      <th class="px-2 py-2">الكمية</th>
+                      <th class="px-2 py-2">سعر البيع</th>
+                      <th class="px-2 py-2">تكلفة الوحدة</th>
+                      <th class="px-2 py-2">صافي البيع</th>
+                      <th class="px-2 py-2">الضريبة</th>
+                      <th class="px-2 py-2">إجمالي التكلفة</th>
+                      <th class="px-2 py-2">الربح</th>
+                      <th class="px-2 py-2">هامش الربح %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${rows
+                      .map(
+                        (r) => `<tr class="border-t">
+                          <td class="px-2 py-2">${esc(r.invoice_date)}</td>
+                          <td class="px-2 py-2">${esc(r.invoice_no)}</td>
+                          <td class="px-2 py-2">${esc(r.customer_name)}</td>
+                          <td class="px-2 py-2">${esc(r.item_name)}</td>
+                          <td class="px-2 py-2">${esc(r.account_code)}</td>
+                          <td class="px-2 py-2">${esc(r.qty)}</td>
+                          <td class="px-2 py-2">${esc(r.sale_unit_price)}</td>
+                          <td class="px-2 py-2">${esc(r.cost_unit_price)}</td>
+                          <td class="px-2 py-2">${esc(r.net_sales)}</td>
+                          <td class="px-2 py-2">${esc(r.tax_amount)}</td>
+                          <td class="px-2 py-2">${esc(r.cost_total)}</td>
+                          <td class="px-2 py-2">${esc(r.profit)}</td>
+                          <td class="px-2 py-2">${esc(r.profit_margin_pct)}</td>
+                        </tr>`
+                      )
+                      .join("")}
+                  </tbody>
+                </table>
+              </div>`
+            : `<div class="opacity-70">لا توجد حركة مبيعات ضمن الفلتر الحالي</div>`;
+        }
+
         async function loadAll() {
           const [accRes, cpRes, invRes, voucherRes, periodRes] = await Promise.all([
             apiGet("/accounting/accounts"),
@@ -888,6 +1019,13 @@
               showToast(e.message || "تعذر تحميل التقارير", "#ef4444");
             }
           });
+          document.getElementById("runSalesMovementBtn")?.addEventListener("click", async () => {
+            try {
+              await loadSalesMovementReport();
+            } catch (e) {
+              showToast(e.message || "تعذر تحميل تقرير حركة المبيعات", "#ef4444");
+            }
+          });
           document.getElementById("salesRefreshBtn")?.addEventListener("click", () => applySalesFilters());
           document.getElementById("salesSearch")?.addEventListener("input", () => applySalesFilters());
           document.getElementById("salesStatusFilter")?.addEventListener("change", () => applySalesFilters());
@@ -938,11 +1076,14 @@
             document.getElementById("vDate").value = d.toISOString().slice(0, 10);
             document.getElementById("reportFrom").value = `${d.getFullYear()}-01-01`;
             document.getElementById("reportTo").value = d.toISOString().slice(0, 10);
+            document.getElementById("salesMovementFrom").value = `${d.getFullYear()}-01-01`;
+            document.getElementById("salesMovementTo").value = d.toISOString().slice(0, 10);
           } catch (e) {}
           wireActions();
           renderDraftLines();
           try {
             await loadAll();
+            await loadSalesMovementReport();
           } catch (e) {
             showToast(e.message || "تعذر تحميل البيانات المحاسبية", "#ef4444");
           }

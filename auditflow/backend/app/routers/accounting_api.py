@@ -22,12 +22,42 @@ from ..models import (
 
 router = APIRouter(prefix="/accounting", tags=["accounting"])
 
+ACCOUNT_OPERATION_MAP: dict[str, str] = {
+    "40101": "sale",
+    "40102": "sale",
+    "40103": "sale",
+    "40201": "sale_return",
+    "50101": "purchase",
+    "50102": "purchase_return",
+    "50103": "purchase",
+    "80101": "branch_transfer",
+    "80102": "branch_transfer",
+    "80201": "branch_transfer",
+    "80202": "branch_transfer",
+}
+
+EXPECTED_SIDE_BY_OPERATION: dict[str, str] = {
+    "sale": "debit",
+    "sale_return": "credit",
+    "purchase": "credit",
+    "purchase_return": "debit",
+    "branch_transfer": "either",
+}
+
 
 class AccountCreate(BaseModel):
     code: str = Field(min_length=1, max_length=40)
     name: str = Field(min_length=1, max_length=160)
     account_type: str = Field(min_length=1, max_length=40)
     parent_id: Optional[str] = None
+
+
+class AccountUpdate(BaseModel):
+    code: Optional[str] = Field(default=None, min_length=1, max_length=40)
+    name: Optional[str] = Field(default=None, min_length=1, max_length=160)
+    account_type: Optional[str] = Field(default=None, min_length=1, max_length=40)
+    parent_id: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
 class JournalLineIn(BaseModel):
@@ -135,6 +165,38 @@ def _assert_date_in_open_period(db: Any, user_id: str, doc_date: dt.datetime) ->
     )
     if hit:
         raise HTTPException(400, f"الفترة المحاسبية مغلقة: {hit.name}")
+
+
+def _movement_side(debit: float, credit: float) -> str:
+    d = round(abs(float(debit or 0.0)), 2)
+    c = round(abs(float(credit or 0.0)), 2)
+    if d > 0 and c <= 0:
+        return "debit"
+    if c > 0 and d <= 0:
+        return "credit"
+    return "none"
+
+
+def _operation_from_account_code(code: str) -> str:
+    c = (code or "").strip()
+    if c in ACCOUNT_OPERATION_MAP:
+        return ACCOUNT_OPERATION_MAP[c]
+    if c.startswith("401"):
+        return "sale"
+    if c.startswith("402"):
+        return "sale_return"
+    if c.startswith("501"):
+        return "purchase"
+    if c.startswith("502"):
+        return "purchase_return"
+    if c.startswith("801") or c.startswith("802"):
+        return "branch_transfer"
+    return "other"
+
+
+def _item_key(description: str, account_id: str) -> str:
+    d = (description or "").strip().lower()
+    return d if d else f"acc:{(account_id or '').strip()}"
 
 
 def _normalize_invoice_lines(lines: List[InvoiceLineIn]) -> tuple[list[dict[str, Any]], float, float, float]:
@@ -249,6 +311,98 @@ def create_account(request: Request, body: AccountCreate = Body(...)):
             "parent_id": rec.parent_id,
             "is_active": True,
         }
+    finally:
+        db.close()
+
+
+@router.patch("/accounts/{account_id}")
+def update_account(account_id: str, request: Request, body: AccountUpdate = Body(...)):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        _ensure_write_access(user)
+        rec = db.query(Account).filter(Account.user_id == user.id, Account.id == account_id).first()
+        if not rec:
+            raise HTTPException(404, "الحساب غير موجود")
+
+        new_code = (body.code or rec.code or "").strip()
+        new_name = (body.name or rec.name or "").strip()
+        new_type = (body.account_type or rec.account_type or "").strip().lower()
+        if not new_code or not new_name or not new_type:
+            raise HTTPException(400, "بيانات الحساب غير مكتملة")
+
+        dup = (
+            db.query(Account)
+            .filter(Account.user_id == user.id, Account.code == new_code, Account.id != rec.id)
+            .first()
+        )
+        if dup:
+            raise HTTPException(400, "كود الحساب مستخدم مسبقاً")
+
+        new_parent_id = body.parent_id
+        if new_parent_id:
+            if new_parent_id == rec.id:
+                raise HTTPException(400, "لا يمكن جعل الحساب أباً لنفسه")
+            parent = db.query(Account).filter(Account.user_id == user.id, Account.id == new_parent_id).first()
+            if not parent:
+                raise HTTPException(400, "الحساب الأب غير موجود")
+
+        rec.code = new_code
+        rec.name = new_name
+        rec.account_type = new_type
+        rec.parent_id = new_parent_id
+        if body.is_active is not None:
+            rec.is_active = 1 if bool(body.is_active) else 0
+        db.commit()
+        return {
+            "id": rec.id,
+            "code": rec.code,
+            "name": rec.name,
+            "account_type": rec.account_type,
+            "parent_id": rec.parent_id,
+            "is_active": bool(int(rec.is_active or 0)),
+        }
+    finally:
+        db.close()
+
+
+@router.delete("/accounts/{account_id}")
+def delete_account(account_id: str, request: Request):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        _ensure_write_access(user)
+        rec = db.query(Account).filter(Account.user_id == user.id, Account.id == account_id).first()
+        if not rec:
+            raise HTTPException(404, "الحساب غير موجود")
+
+        child = db.query(Account).filter(Account.user_id == user.id, Account.parent_id == rec.id).first()
+        if child:
+            raise HTTPException(400, "لا يمكن حذف الحساب لأنه يحتوي حسابات فرعية")
+
+        has_lines = db.query(JournalLine).filter(JournalLine.account_id == rec.id).first()
+        if has_lines:
+            raise HTTPException(400, "لا يمكن حذف الحساب لوجود حركات محاسبية مرتبطة به")
+
+        used_in_invoice_line = db.query(AccountingInvoiceLine).filter(AccountingInvoiceLine.account_id == rec.id).first()
+        if used_in_invoice_line:
+            raise HTTPException(400, "لا يمكن حذف الحساب لارتباطه ببنود فواتير")
+
+        used_as_offset = db.query(AccountingInvoice).filter(AccountingInvoice.offset_account_id == rec.id).first()
+        if used_as_offset:
+            raise HTTPException(400, "لا يمكن حذف الحساب لارتباطه بفواتير")
+
+        used_in_voucher = db.query(PaymentVoucher).filter(
+            (PaymentVoucher.account_id == rec.id) | (PaymentVoucher.cash_account_id == rec.id)
+        ).first()
+        if used_in_voucher:
+            raise HTTPException(400, "لا يمكن حذف الحساب لارتباطه بسندات")
+
+        db.delete(rec)
+        db.commit()
+        return {"deleted": True, "id": account_id}
     finally:
         db.close()
 
@@ -1037,22 +1191,59 @@ def bootstrap_chart(request: Request):
         require_csrf(request)
         user = require_user(db, request)
         _ensure_write_access(user)
-        if db.query(Account).filter(Account.user_id == user.id).count() > 0:
-            return {"created": 0, "message": "دليل الحسابات موجود مسبقاً"}
         defaults = [
-            ("1000", "الصندوق", "asset", None),
-            ("1100", "البنك", "asset", None),
-            ("1200", "الذمم المدينة", "asset", None),
-            ("1300", "المخزون", "asset", None),
-            ("2000", "الذمم الدائنة", "liability", None),
-            ("3000", "رأس المال", "equity", None),
-            ("4000", "الإيرادات", "revenue", None),
-            ("5000", "تكلفة المبيعات", "expense", None),
-            ("6000", "المصروفات التشغيلية", "expense", None),
-            ("7000", "ضريبة القيمة المضافة", "liability", None),
+            # 1) الأصول
+            ("10101", "صندوق الفرع الرئيسي", "asset", None),
+            ("10102", "صندوق فرع 1", "asset", None),
+            ("10103", "صندوق فرع 2", "asset", None),
+            ("10201", "بنك الراجحي", "asset", None),
+            ("10202", "بنك الأهلي", "asset", None),
+            ("10301", "عملاء الفرع الرئيسي", "asset", None),
+            ("10302", "عملاء فرع 1", "asset", None),
+            ("10303", "عملاء فرع 2", "asset", None),
+            ("10401", "مخزون كفرات الفرع الرئيسي", "asset", None),
+            ("10402", "مخزون كفرات فرع 1", "asset", None),
+            ("10403", "مخزون كفرات فرع 2", "asset", None),
+            # 2) الالتزامات
+            ("20101", "موردين كفرات", "liability", None),
+            ("20102", "موردين خدمات", "liability", None),
+            ("20201", "ضريبة القيمة المضافة", "liability", None),
+            ("20301", "رواتب مستحقة", "liability", None),
+            # 3) حقوق الملكية
+            ("30101", "رأس المال", "equity", None),
+            ("30201", "جاري المالك", "equity", None),
+            ("30301", "أرباح محتجزة", "equity", None),
+            # 4) الإيرادات
+            ("40101", "مبيعات كفرات نقدي", "revenue", None),
+            ("40102", "مبيعات كفرات آجل", "revenue", None),
+            ("40103", "مبيعات خدمات (ترصيص / ميزان)", "revenue", None),
+            ("40201", "مردود مبيعات كفرات", "revenue", None),
+            # 5) المشتريات
+            ("50101", "مشتريات كفرات", "expense", None),
+            ("50102", "مردود مشتريات", "expense", None),
+            ("50103", "نقل مشتريات", "expense", None),
+            # 6) تكلفة المبيعات
+            ("60101", "تكلفة بضاعة مباعة", "expense", None),
+            # 7) المصروفات
+            ("70101", "رواتب", "expense", None),
+            ("70102", "إيجار", "expense", None),
+            ("70103", "كهرباء", "expense", None),
+            ("70104", "صيانة أجهزة", "expense", None),
+            ("70105", "مصاريف تشغيل", "expense", None),
+            # 8) حسابات الفروع
+            ("80101", "تحويل إلى فرع 1", "equity", None),
+            ("80102", "تحويل إلى فرع 2", "equity", None),
+            ("80201", "تحويل من فرع 1", "equity", None),
+            ("80202", "تحويل من فرع 2", "equity", None),
         ]
+        existing = {
+            x.code: x
+            for x in db.query(Account).filter(Account.user_id == user.id).all()
+        }
         created = 0
         for code, name, acc_type, parent_id in defaults:
+            if code in existing:
+                continue
             db.add(
                 Account(
                     id=uuid.uuid4().hex,
@@ -1079,5 +1270,192 @@ def accounting_role_info(request: Request):
         role = (getattr(user, "role_name", "") or "user").strip().lower()
         can_write = role not in {"viewer", "readonly"}
         return {"role": role, "can_write": can_write, "can_read": True}
+    finally:
+        db.close()
+
+
+@router.get("/analysis/operations")
+def analyze_operations(
+    request: Request,
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    limit: int = Query(1000, ge=1, le=5000),
+):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        df = _parse_iso_date(date_from, "date_from") if (date_from or "").strip() else None
+        dt_to = _parse_iso_date(date_to, "date_to") if (date_to or "").strip() else None
+        q = (
+            db.query(JournalLine, JournalEntry, Account)
+            .join(JournalEntry, JournalEntry.id == JournalLine.entry_id)
+            .join(Account, Account.id == JournalLine.account_id)
+            .filter(JournalEntry.user_id == user.id, Account.user_id == user.id)
+            .order_by(JournalEntry.entry_date.desc(), JournalEntry.created_at.desc())
+            .limit(limit)
+        )
+        if df:
+            q = q.filter(JournalEntry.entry_date >= df)
+        if dt_to:
+            q = q.filter(JournalEntry.entry_date <= dt_to)
+        rows = q.all()
+        items: list[dict[str, Any]] = []
+        summary: dict[str, dict[str, int]] = {}
+        for ln, je, acc in rows:
+            side = _movement_side(float(ln.debit or 0.0), float(ln.credit or 0.0))
+            op = _operation_from_account_code(acc.code or "")
+            expected = EXPECTED_SIDE_BY_OPERATION.get(op, "either")
+            is_ok = expected == "either" or side == expected
+            rec = summary.setdefault(op, {"total": 0, "ok": 0, "violations": 0})
+            rec["total"] += 1
+            if is_ok:
+                rec["ok"] += 1
+            else:
+                rec["violations"] += 1
+            items.append(
+                {
+                    "entry_id": je.id,
+                    "entry_date": _to_iso(je.entry_date),
+                    "reference": je.reference or "",
+                    "account_code": acc.code or "",
+                    "account_name": acc.name or "",
+                    "debit": round(float(ln.debit or 0.0), 2),
+                    "credit": round(float(ln.credit or 0.0), 2),
+                    "side": side,
+                    "operation": op,
+                    "expected_side": expected,
+                    "is_consistent": is_ok,
+                }
+            )
+        return {"items": items, "summary": summary, "rules": EXPECTED_SIDE_BY_OPERATION, "map": ACCOUNT_OPERATION_MAP}
+    finally:
+        db.close()
+
+
+@router.get("/reports/sales-movement")
+def sales_movement_report(
+    request: Request,
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    item_query: str = Query(""),
+    limit: int = Query(5000, ge=1, le=20000),
+):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        df = _parse_iso_date(date_from, "date_from") if (date_from or "").strip() else None
+        dt_to = _parse_iso_date(date_to, "date_to") if (date_to or "").strip() else None
+        q_txt = (item_query or "").strip().lower()
+
+        sale_q = (
+            db.query(AccountingInvoice, AccountingInvoiceLine, Account, Counterparty)
+            .join(AccountingInvoiceLine, AccountingInvoiceLine.invoice_id == AccountingInvoice.id)
+            .join(Account, Account.id == AccountingInvoiceLine.account_id)
+            .join(Counterparty, Counterparty.id == AccountingInvoice.counterparty_id)
+            .filter(
+                AccountingInvoice.user_id == user.id,
+                AccountingInvoice.invoice_type == "sale",
+                AccountingInvoice.status.in_(["posted", "partially_paid", "paid"]),
+            )
+            .order_by(AccountingInvoice.invoice_date.asc(), AccountingInvoice.created_at.asc())
+            .limit(limit)
+        )
+        if df:
+            sale_q = sale_q.filter(AccountingInvoice.invoice_date >= df)
+        if dt_to:
+            sale_q = sale_q.filter(AccountingInvoice.invoice_date <= dt_to)
+        sale_rows = sale_q.all()
+
+        # Build weighted average cost per item key from posted purchase lines.
+        pur_q = (
+            db.query(AccountingInvoice, AccountingInvoiceLine)
+            .join(AccountingInvoiceLine, AccountingInvoiceLine.invoice_id == AccountingInvoice.id)
+            .filter(
+                AccountingInvoice.user_id == user.id,
+                AccountingInvoice.invoice_type == "purchase",
+                AccountingInvoice.status.in_(["posted", "partially_paid", "paid"]),
+            )
+        )
+        if dt_to:
+            pur_q = pur_q.filter(AccountingInvoice.invoice_date <= dt_to)
+        purchase_rows = pur_q.all()
+
+        cost_acc: dict[str, dict[str, float]] = {}
+        for inv, ln in purchase_rows:
+            key = _item_key(ln.description or "", ln.account_id or "")
+            qty = abs(float(ln.qty or 0.0))
+            if qty <= 0:
+                continue
+            unit_cost = abs(float(ln.net_amount or 0.0)) / qty if float(ln.net_amount or 0.0) > 0 else abs(float(ln.unit_price or 0.0))
+            if unit_cost <= 0:
+                continue
+            rec = cost_acc.setdefault(key, {"qty": 0.0, "amount": 0.0})
+            rec["qty"] += qty
+            rec["amount"] += round(unit_cost * qty, 4)
+
+        avg_cost: dict[str, float] = {}
+        for k, v in cost_acc.items():
+            q = float(v["qty"] or 0.0)
+            avg_cost[k] = round(float(v["amount"] or 0.0) / q, 4) if q > 0 else 0.0
+
+        items: list[dict[str, Any]] = []
+        t_qty = 0.0
+        t_sales = 0.0
+        t_tax = 0.0
+        t_cost = 0.0
+        t_profit = 0.0
+        for inv, ln, acc, cp in sale_rows:
+            item_name = (ln.description or "").strip() or (acc.name or "")
+            if q_txt and q_txt not in item_name.lower() and q_txt not in (acc.code or "").lower():
+                continue
+            qty = abs(float(ln.qty or 0.0))
+            if qty <= 0:
+                continue
+            sale_unit = round(abs(float(ln.unit_price or 0.0)), 4)
+            net_sales = round(abs(float(ln.net_amount or 0.0)), 2)
+            tax_amount = round(abs(float(ln.tax_amount or 0.0)), 2)
+            gross_sales = round(abs(float(ln.amount or 0.0)), 2)
+            key = _item_key(ln.description or "", ln.account_id or "")
+            cost_unit = round(float(avg_cost.get(key, 0.0)), 4)
+            cost_total = round(cost_unit * qty, 2)
+            profit = round(net_sales - cost_total, 2)
+            margin_pct = round((profit / net_sales) * 100.0, 2) if net_sales > 0 else 0.0
+            t_qty += qty
+            t_sales += net_sales
+            t_tax += tax_amount
+            t_cost += cost_total
+            t_profit += profit
+            items.append(
+                {
+                    "invoice_id": inv.id,
+                    "invoice_no": inv.invoice_no,
+                    "invoice_date": _to_iso(inv.invoice_date),
+                    "customer_name": cp.name,
+                    "item_name": item_name,
+                    "account_code": acc.code or "",
+                    "qty": round(qty, 4),
+                    "sale_unit_price": sale_unit,
+                    "cost_unit_price": cost_unit,
+                    "net_sales": net_sales,
+                    "tax_amount": tax_amount,
+                    "gross_sales": gross_sales,
+                    "cost_total": cost_total,
+                    "profit": profit,
+                    "profit_margin_pct": margin_pct,
+                }
+            )
+
+        return {
+            "items": items,
+            "totals": {
+                "qty": round(t_qty, 4),
+                "net_sales": round(t_sales, 2),
+                "tax_amount": round(t_tax, 2),
+                "cost_total": round(t_cost, 2),
+                "profit": round(t_profit, 2),
+                "profit_margin_pct": round((t_profit / t_sales) * 100.0, 2) if t_sales > 0 else 0.0,
+            },
+            "cost_method": "weighted_avg_from_posted_purchases",
+        }
     finally:
         db.close()
