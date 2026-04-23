@@ -39,6 +39,9 @@ def _migrate_postgresql() -> None:
         "ALTER TABLE sales ADD COLUMN IF NOT EXISTS tax_amount DOUBLE PRECISION DEFAULT 0",
         "ALTER TABLE sales ADD COLUMN IF NOT EXISTS paid_amount DOUBLE PRECISION DEFAULT 0",
         "ALTER TABLE sales ADD COLUMN IF NOT EXISTS due_amount DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE sales ADD COLUMN IF NOT EXISTS customer_tax_no VARCHAR",
+        "ALTER TABLE sales ADD COLUMN IF NOT EXISTS customer_phone VARCHAR",
+        "ALTER TABLE sales ADD COLUMN IF NOT EXISTS customer_address TEXT",
         # analysis_reports
         "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS user_id VARCHAR",
         "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS tags_json JSON DEFAULT '[]'::json",
@@ -167,6 +170,12 @@ def run_migrations() -> None:
                 conn.execute(text("ALTER TABLE sales ADD COLUMN paid_amount REAL DEFAULT 0"))
             if "due_amount" not in sale_cols:
                 conn.execute(text("ALTER TABLE sales ADD COLUMN due_amount REAL DEFAULT 0"))
+            if "customer_tax_no" not in sale_cols:
+                conn.execute(text("ALTER TABLE sales ADD COLUMN customer_tax_no VARCHAR"))
+            if "customer_phone" not in sale_cols:
+                conn.execute(text("ALTER TABLE sales ADD COLUMN customer_phone VARCHAR"))
+            if "customer_address" not in sale_cols:
+                conn.execute(text("ALTER TABLE sales ADD COLUMN customer_address TEXT"))
 
         r3 = conn.execute(text("PRAGMA table_info(analysis_reports)"))
         rcols = [row[1] for row in r3.fetchall()]

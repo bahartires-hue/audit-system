@@ -83,6 +83,9 @@ class SaleCreate(BaseModel):
     sale_date: str
     payment_type: str = "cash"
     customer_id: str = ""
+    customer_tax_no: str = ""
+    customer_phone: str = ""
+    customer_address: str = ""
     branch_id: str = ""
     discount: float = Field(ge=0, default=0)
     paid_amount: float = Field(ge=0, default=0)
@@ -474,10 +477,15 @@ def create_sale(request: Request, body: SaleCreate = Body(...)):
             raise HTTPException(400, "يوجد صنف غير صالح")
         item_by_id = {x.id: x for x in items}
         customer_name = body.customer_name.strip()
+        customer_tax_no = (body.customer_tax_no or "").strip()
+        customer_phone = (body.customer_phone or "").strip()
+        customer_address = (body.customer_address or "").strip()
         if (body.customer_id or "").strip():
             c = db.query(Customer).filter(Customer.user_id == user.id, Customer.id == body.customer_id.strip()).first()
             if c:
                 customer_name = c.name
+                customer_phone = (c.phone or "").strip()
+                customer_address = (c.address or "").strip()
         branch_id = (body.branch_id or "").strip() or None
         if branch_id and not db.query(Branch).filter(Branch.user_id == user.id, Branch.id == branch_id).first():
             raise HTTPException(400, "الفرع غير صالح")
@@ -489,6 +497,9 @@ def create_sale(request: Request, body: SaleCreate = Body(...)):
             customer_id=(body.customer_id or "").strip() or None,
             invoice_no=body.invoice_no.strip(),
             customer_name=customer_name,
+            customer_tax_no=customer_tax_no or None,
+            customer_phone=customer_phone or None,
+            customer_address=customer_address or None,
             sale_date=s_date,
             payment_type=(body.payment_type or "cash").strip().lower(),
             discount=round(abs(float(body.discount or 0.0)), 2),
@@ -555,6 +566,9 @@ def list_sales(request: Request, limit: int = Query(200, ge=1, le=1000)):
                     "id": x.id,
                     "invoice_no": x.invoice_no,
                     "customer_name": x.customer_name,
+                    "customer_tax_no": x.customer_tax_no or "",
+                    "customer_phone": x.customer_phone or "",
+                    "customer_address": x.customer_address or "",
                     "sale_date": _fmt_date(x.sale_date),
                     "payment_type": x.payment_type,
                     "paid_amount": round(float(x.paid_amount or 0.0), 2),
@@ -717,6 +731,9 @@ def sale_details(sale_id: str, request: Request):
             "id": sale.id,
             "invoice_no": sale.invoice_no,
             "customer_name": sale.customer_name,
+            "customer_tax_no": sale.customer_tax_no or "",
+            "customer_phone": sale.customer_phone or "",
+            "customer_address": sale.customer_address or "",
             "sale_date": _fmt_date(sale.sale_date),
             "payment_type": sale.payment_type,
             "discount": round(float(sale.discount or 0.0), 2),
@@ -937,11 +954,16 @@ def update_sale(sale_id: str, request: Request, body: SaleUpdate = Body(...)):
 
         sale.invoice_no = body.invoice_no.strip()
         sale.customer_name = body.customer_name.strip()
+        sale.customer_tax_no = (body.customer_tax_no or "").strip() or None
+        sale.customer_phone = (body.customer_phone or "").strip() or None
+        sale.customer_address = (body.customer_address or "").strip() or None
         if (body.customer_id or "").strip():
             c = db.query(Customer).filter(Customer.user_id == user.id, Customer.id == body.customer_id.strip()).first()
             if c:
                 sale.customer_name = c.name
                 sale.customer_id = c.id
+                sale.customer_phone = (c.phone or "").strip() or None
+                sale.customer_address = (c.address or "").strip() or None
         sale.sale_date = s_date
         sale.payment_type = (body.payment_type or "cash").strip().lower()
         sale.discount = round(abs(float(body.discount or 0.0)), 2)

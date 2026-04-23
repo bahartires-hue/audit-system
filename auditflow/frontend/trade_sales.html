@@ -13,7 +13,7 @@
     .cmd{height:30px;border:1px solid #94a3b8;border-radius:4px;padding:0 10px;font-weight:700;background:#fff}
     .cmd-primary{background:#16a34a;color:#fff;border-color:#16a34a}
     .cmd-accent{background:#2563eb;color:#fff;border-color:#2563eb}
-    .top-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;align-items:end}
+    .top-grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px;align-items:end}
     .line-grid{display:grid;grid-template-columns:2fr .7fr .9fr .8fr auto;gap:6px;align-items:end}
     .footer-grid{display:grid;grid-template-columns:1.1fr 1fr auto auto auto;gap:6px;align-items:center}
     .bottom-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
@@ -36,6 +36,9 @@
         <div><div class="lbl">التاريخ</div><input id="date" type="date" class="field w-full" /></div>
         <div><div class="lbl">طريقة الدفع</div><select id="pay" class="field w-full"><option value="cash">نقد</option><option value="transfer">تحويل</option><option value="credit">آجل</option></select></div>
         <div><div class="lbl">العميل</div><input id="customer" class="field w-full" placeholder="عميل عام" /></div>
+        <div><div class="lbl">الرقم الضريبي</div><input id="customerTaxNo" class="field w-full" placeholder="VAT/TIN" /></div>
+        <div><div class="lbl">الهاتف</div><input id="customerPhone" class="field w-full" placeholder="05xxxxxxxx" /></div>
+        <div><div class="lbl">العنوان</div><input id="customerAddress" class="field w-full" placeholder="عنوان العميل" /></div>
         <div><div class="lbl">بحث بالفواتير</div><input id="searchInput" class="field w-full" placeholder="بحث..." /></div>
         <div><div class="lbl">خصم الفاتورة</div><input id="discount" type="number" step="0.01" class="field w-full" /></div>
       </div>
@@ -135,6 +138,9 @@
         document.getElementById("saveBtn").textContent = "حفظ الفاتورة";
         document.getElementById("no").value = nextInvoiceNo("S-", salesRows);
         document.getElementById("customer").value = "";
+        document.getElementById("customerTaxNo").value = "";
+        document.getElementById("customerPhone").value = "";
+        document.getElementById("customerAddress").value = "";
         document.getElementById("date").value = new Date().toISOString().slice(0, 10);
         document.getElementById("pay").value = "cash";
         document.getElementById("discount").value = "";
@@ -148,6 +154,9 @@
         return {
           invoice_no: document.getElementById("no").value || `S-${Date.now()}`,
           customer_name: document.getElementById("customer").value || "عميل نقدي",
+          customer_tax_no: document.getElementById("customerTaxNo").value || "",
+          customer_phone: document.getElementById("customerPhone").value || "",
+          customer_address: document.getElementById("customerAddress").value || "",
           sale_date: document.getElementById("date").value || new Date().toISOString().slice(0, 10),
           payment_type: document.getElementById("pay").value || "cash",
           discount: Number(document.getElementById("discount").value || 0),
@@ -163,7 +172,7 @@
       function printInvoice(d) {
         const lines = d.lines || [];
         const thermal = String(appSettings.print_size || "A4").toLowerCase() === "80mm";
-        const html = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>فاتورة ${esc(d.invoice_no)}</title><style>body{font-family:Arial;padding:${thermal ? "6px" : "14px"};font-size:${thermal ? "12px" : "14px"}}.invoice{max-width:${thermal ? "280px" : "900px"};margin:0 auto}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ddd;padding:${thermal ? "4px" : "6px"};text-align:right}</style></head><body><div class="invoice"><h2>${esc(appSettings.shop_name || "كاشيركو")}</h2><div>${esc(appSettings.thermal_header || "")}</div><div>رقم الفاتورة: <b>${esc(d.invoice_no)}</b></div><div>التاريخ: <b>${esc(d.sale_date)}</b></div><div>العميل: <b>${esc(d.customer_name)}</b></div><div>الدفع: <b>${esc(paymentLabel(d.payment_type))}</b></div><table><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الضريبة</th><th>الإجمالي</th></tr></thead><tbody>${lines.map((x)=>`<tr><td>${esc(x.item_code)} - ${esc(x.item_name)}</td><td>${esc(x.qty)}</td><td>${money(x.sale_price)}</td><td>${money(x.tax_amount)}</td><td>${money(x.line_total)}</td></tr>`).join("")}</tbody></table><h3>الإجمالي النهائي: ${money(d.total_amount)} ${esc(appSettings.currency || "SAR")}</h3></div></body></html>`;
+        const html = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>فاتورة ${esc(d.invoice_no)}</title><style>body{font-family:Arial;padding:${thermal ? "6px" : "14px"};font-size:${thermal ? "12px" : "14px"}}.invoice{max-width:${thermal ? "280px" : "900px"};margin:0 auto}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ddd;padding:${thermal ? "4px" : "6px"};text-align:right}</style></head><body><div class="invoice"><h2>${esc(appSettings.shop_name || "كاشيركو")}</h2><div>${esc(appSettings.thermal_header || "")}</div><div>رقم الفاتورة: <b>${esc(d.invoice_no)}</b></div><div>التاريخ: <b>${esc(d.sale_date)}</b></div><div>العميل: <b>${esc(d.customer_name)}</b></div><div>الرقم الضريبي: <b>${esc(d.customer_tax_no || "")}</b></div><div>هاتف العميل: <b>${esc(d.customer_phone || "")}</b></div><div>العنوان: <b>${esc(d.customer_address || "")}</b></div><div>الدفع: <b>${esc(paymentLabel(d.payment_type))}</b></div><table><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الضريبة</th><th>الإجمالي</th></tr></thead><tbody>${lines.map((x)=>`<tr><td>${esc(x.item_code)} - ${esc(x.item_name)}</td><td>${esc(x.qty)}</td><td>${money(x.sale_price)}</td><td>${money(x.tax_amount)}</td><td>${money(x.line_total)}</td></tr>`).join("")}</tbody></table><h3>الإجمالي النهائي: ${money(d.total_amount)} ${esc(appSettings.currency || "SAR")}</h3></div></body></html>`;
         const w = window.open("", "_blank");
         if (!w) return;
         w.document.open();
@@ -243,6 +252,9 @@
           document.getElementById("saveBtn").textContent = "حفظ التعديل";
           document.getElementById("no").value = d.invoice_no || "";
           document.getElementById("customer").value = d.customer_name || "";
+          document.getElementById("customerTaxNo").value = d.customer_tax_no || "";
+          document.getElementById("customerPhone").value = d.customer_phone || "";
+          document.getElementById("customerAddress").value = d.customer_address || "";
           document.getElementById("date").value = d.sale_date || new Date().toISOString().slice(0, 10);
           document.getElementById("pay").value = d.payment_type || "cash";
           document.getElementById("discount").value = String(d.discount || 0);
@@ -342,8 +354,12 @@
       document.getElementById("searchInput").addEventListener("input", renderSales);
       document.getElementById("discount").addEventListener("input", renderCart);
 
-      await Promise.all([loadItems(), loadSettings(), loadSales()]);
-      resetForm();
+      try {
+        await Promise.all([loadItems(), loadSettings(), loadSales()]);
+        resetForm();
+      } catch (e) {
+        showToast(e.message || "فشل تحميل شاشة المبيعات", "#ef4444");
+      }
     })();
   </script>
 </body>

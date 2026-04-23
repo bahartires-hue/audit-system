@@ -257,6 +257,9 @@ class Sale(Base):
     customer_id = Column(String, ForeignKey("customers.id"), nullable=True, index=True)
     invoice_no = Column(String, nullable=False, index=True)
     customer_name = Column(String, nullable=False, index=True)
+    customer_tax_no = Column(String, nullable=True, index=True)
+    customer_phone = Column(String, nullable=True, index=True)
+    customer_address = Column(Text, nullable=True)
     sale_date = Column(DateTime, nullable=False, index=True)
     payment_type = Column(String, nullable=False, default="cash", index=True)  # cash | transfer | credit
     tax_amount = Column(Float, nullable=False, default=0.0)
