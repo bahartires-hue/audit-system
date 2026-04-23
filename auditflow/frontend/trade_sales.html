@@ -7,77 +7,71 @@
   <link rel="stylesheet" href="/static/tailwind.css?v=9" />
   <link rel="stylesheet" href="/static/dark.css?v=9" />
   <style>
-    .layout{display:grid;grid-template-columns:240px 1fr;gap:12px}
-    .side-link{display:block;border-radius:12px;padding:10px 12px;font-weight:800;border:1px solid #e5e7eb}
-    .side-link.active{background:#2563eb;color:#fff;border-color:#2563eb}
-    .panel{border:1px solid #e5e7eb;border-radius:14px;background:#fff}
-    .panel-pad{padding:10px}
-    .touch-btn{min-height:48px}
-    .quick-btn{border:1px solid #e5e7eb;border-radius:10px;padding:10px;font-weight:800}
-    .soft{background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px}
-    @media (max-width:900px){.layout{grid-template-columns:1fr}}
+    .panel{border:1px solid #cbd5e1;border-radius:10px;background:#fff}
+    .field{height:34px;border-radius:4px;border:1px solid #cbd5e1;padding:4px 8px;background:#fff}
+    .lbl{font-size:12px;font-weight:700;color:#0f172a}
+    .cmd{height:30px;border:1px solid #94a3b8;border-radius:4px;padding:0 10px;font-weight:700;background:#fff}
+    .cmd-primary{background:#16a34a;color:#fff;border-color:#16a34a}
+    .cmd-accent{background:#2563eb;color:#fff;border-color:#2563eb}
+    .top-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;align-items:end}
+    .line-grid{display:grid;grid-template-columns:2fr .7fr .9fr .8fr auto;gap:6px;align-items:end}
+    .footer-grid{display:grid;grid-template-columns:1.1fr 1fr auto auto auto;gap:6px;align-items:center}
+    .bottom-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+    @media (max-width:1100px){.top-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.line-grid{grid-template-columns:1fr 1fr}.footer-grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body class="bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
-  <div class="max-w-[1600px] mx-auto p-3">
-    <div class="layout">
-      <aside class="panel panel-pad h-fit">
-        <div class="text-lg font-extrabold mb-3">كاشيركو ويب</div>
-        <a class="side-link" href="/trade">الرئيسية</a>
-        <a class="side-link mt-2" href="/trade/pos">الكاشير</a>
-        <a class="side-link active mt-2" href="/trade/sales">المبيعات</a>
-        <a class="side-link mt-2" href="/trade/purchases">المشتريات</a>
-        <a class="side-link mt-2" href="/trade/transfers">التحويلات</a>
-        <a class="side-link mt-2" href="/trade/inventory">المخزون</a>
-        <a class="side-link mt-2" href="/trade/reports">التقارير</a>
-      </aside>
-      <main class="space-y-2">
-        <div class="panel panel-pad flex items-center justify-between">
-          <h1 class="text-2xl font-extrabold">المبيعات</h1>
-          <div id="authArea"></div>
-        </div>
-
-        <section class="panel panel-pad">
-          <div class="flex items-center justify-between mb-2">
-            <h2 class="text-lg font-extrabold">شاشة المبيعات</h2>
-            <div id="formMode" class="text-sm opacity-70">وضع: إضافة جديدة</div>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-7 gap-2">
-            <input id="no" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="رقم الفاتورة" />
-            <input id="customer" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم العميل" />
-            <input id="date" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
-            <select id="pay" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
-              <option value="cash">نقد</option>
-              <option value="transfer">تحويل</option>
-              <option value="credit">آجل</option>
-            </select>
-            <input id="discount" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="خصم الفاتورة" />
-            <input id="searchInput" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950 md:col-span-2" placeholder="بحث في الفواتير" />
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-6 gap-2 mt-2">
-            <select id="item" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950 md:col-span-2"></select>
-            <input id="qty" type="number" step="0.01" value="1" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الكمية" />
-            <input id="price" type="number" step="0.01" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="سعر البيع" />
-            <input id="tax" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الضريبة" />
-            <button id="addLineBtn" class="touch-btn rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-4 py-2">إضافة للسلة</button>
-          </div>
-
-          <div id="cartHost" class="mt-2"></div>
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mt-2">
-            <button id="saveBtn" class="touch-btn rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2">حفظ الفاتورة</button>
-            <button id="resetBtn" class="quick-btn">فاتورة جديدة</button>
-            <button id="printCurrentBtn" class="quick-btn">طباعة آخر فاتورة</button>
-            <div id="totalsHost" class="soft px-3 py-2 font-bold text-sm"></div>
-          </div>
-        </section>
-
-        <section class="panel panel-pad overflow-auto">
-          <div id="host"></div>
-        </section>
-      </main>
+  <div class="max-w-[1700px] mx-auto p-2 space-y-2">
+    <div class="panel p-2 flex items-center justify-between">
+      <div class="text-base font-extrabold">المبيعات - نمط كاشير احترافي</div>
+      <div class="flex items-center gap-2">
+        <div id="formMode" class="text-xs opacity-70">وضع: إضافة جديدة</div>
+        <div id="authArea"></div>
+      </div>
     </div>
+
+    <section class="panel p-2">
+      <div class="top-grid">
+        <div><div class="lbl">رقم الفاتورة</div><input id="no" class="field w-full" placeholder="14916" /></div>
+        <div><div class="lbl">التاريخ</div><input id="date" type="date" class="field w-full" /></div>
+        <div><div class="lbl">طريقة الدفع</div><select id="pay" class="field w-full"><option value="cash">نقد</option><option value="transfer">تحويل</option><option value="credit">آجل</option></select></div>
+        <div><div class="lbl">العميل</div><input id="customer" class="field w-full" placeholder="عميل عام" /></div>
+        <div><div class="lbl">بحث بالفواتير</div><input id="searchInput" class="field w-full" placeholder="بحث..." /></div>
+        <div><div class="lbl">خصم الفاتورة</div><input id="discount" type="number" step="0.01" value="0" class="field w-full" /></div>
+      </div>
+
+      <div class="line-grid mt-2">
+        <div><div class="lbl">الصنف</div><select id="item" class="field w-full"></select></div>
+        <div><div class="lbl">الكمية</div><input id="qty" type="number" step="0.01" value="1" class="field w-full" /></div>
+        <div><div class="lbl">سعر البيع</div><input id="price" type="number" step="0.01" class="field w-full" /></div>
+        <div><div class="lbl">الضريبة</div><input id="tax" type="number" step="0.01" value="0" class="field w-full" /></div>
+        <div class="pt-5"><button id="addLineBtn" class="cmd cmd-accent w-full">إضافة بند</button></div>
+      </div>
+    </section>
+
+    <section class="panel p-2 min-h-[230px] overflow-auto">
+      <div id="cartHost"></div>
+    </section>
+
+    <section class="panel p-2">
+      <div class="footer-grid">
+        <div id="totalsHost" class="field !h-auto py-2 font-bold text-sm"></div>
+        <div class="text-sm font-semibold">حفظ / تعديل / طباعة / بحث</div>
+        <button id="saveBtn" class="cmd cmd-primary">حفظ</button>
+        <button id="printCurrentBtn" class="cmd">طباعة</button>
+        <button id="resetBtn" class="cmd">جديد</button>
+      </div>
+      <div class="bottom-actions mt-2">
+        <a class="cmd" href="/trade/pos">كاشير</a>
+        <a class="cmd" href="/trade/purchases">مشتريات</a>
+        <a class="cmd" href="/trade/inventory">مخزون</a>
+        <a class="cmd" href="/trade/reports">تقارير</a>
+      </div>
+    </section>
+
+    <section class="panel p-2 overflow-auto">
+      <div id="host"></div>
+    </section>
   </div>
 
   <script src="/static/app.js?v=14"></script>
