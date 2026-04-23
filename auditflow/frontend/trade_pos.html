@@ -7,71 +7,107 @@
     <link rel="stylesheet" href="/static/tailwind.css?v=9" />
     <link rel="stylesheet" href="/static/dark.css?v=9" />
     <style>
-      .touch-btn { min-height: 56px; }
-      .product-tile { min-height: 110px; }
+      .touch-btn { min-height: 52px; }
+      .pos-grid { display: grid; grid-template-columns: 360px 1fr 170px; gap: 10px; }
+      .panel { border: 1px solid #e5e7eb; border-radius: 14px; background: #fff; }
+      .panel-pad { padding: 10px; }
+      .product-tile { min-height: 175px; }
+      .side-btn { display: block; width: 100%; border: 1px solid #e5e7eb; border-radius: 10px; font-weight: 800; padding: 10px; text-align: right; }
+      .quick-btn { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; font-weight: 800; }
+      .soft { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; }
+      @media (max-width: 1280px) { .pos-grid { grid-template-columns: 1fr; } }
     </style>
   </head>
   <body class="bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
-    <div class="max-w-7xl mx-auto p-4 space-y-4">
-      <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-extrabold">نقطة البيع المتقدمة (POS)</h1>
+    <div class="max-w-[1600px] mx-auto p-3 space-y-2">
+      <div class="panel panel-pad flex items-center justify-between">
+        <div>
+          <div class="text-xs opacity-70">نقطة البيع</div>
+          <h1 class="text-2xl font-extrabold">نقطة البيع المتقدمة (POS)</h1>
+        </div>
         <div id="authArea"></div>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <section class="rounded-xl border p-4 bg-white dark:bg-slate-950 lg:col-span-2">
-          <h2 class="font-extrabold mb-2">بحث وإضافة للسلة</h2>
-          <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
-            <input id="itemSearch" class="rounded-xl border px-3 py-3 bg-white dark:bg-slate-950 md:col-span-2 text-base" placeholder="بحث بالكود أو الاسم أو الماركة" />
-            <select id="itemSelect" class="rounded-xl border px-3 py-3 bg-white dark:bg-slate-950 md:col-span-2 text-base"></select>
-            <button id="searchBtn" class="touch-btn rounded-xl border font-extrabold px-4 py-3 text-base">بحث</button>
+      <div class="pos-grid">
+        <!-- Cart / Invoice -->
+        <section class="panel panel-pad space-y-2">
+          <div class="font-extrabold">فاتورة بيع جديدة</div>
+          <div class="grid grid-cols-2 gap-2">
+            <input id="saleNo" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="رقم الفاتورة" />
+            <input id="saleDate" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
+            <input id="saleCustomer" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950 col-span-2" placeholder="عميل عام" />
+            <input id="sellerName" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم الكاشير" />
+            <input id="branchName" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الفرع" />
           </div>
-          <div class="grid grid-cols-1 md:grid-cols-5 gap-2 mt-2">
-            <div class="grid grid-cols-3 gap-1">
-              <button id="qtyMinusBtn" class="touch-btn rounded-xl border font-extrabold text-xl">-</button>
-              <input id="lineQty" type="number" step="0.01" value="1" class="rounded-xl border px-3 py-3 bg-white dark:bg-slate-950 text-center text-lg font-extrabold" placeholder="الكمية" />
-              <button id="qtyPlusBtn" class="touch-btn rounded-xl border font-extrabold text-xl">+</button>
-            </div>
-            <input id="linePrice" type="number" step="0.01" class="rounded-xl border px-3 py-3 bg-white dark:bg-slate-950 text-base" placeholder="سعر البيع" />
-            <input id="lineTax" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-3 bg-white dark:bg-slate-950 text-base" placeholder="الضريبة" />
-            <button id="addToCartBtn" class="touch-btn rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-3 text-base">إضافة للسلة</button>
-            <button id="clearCartBtn" class="touch-btn rounded-xl border font-extrabold px-4 py-3 text-base">تفريغ السلة</button>
-          </div>
-          <h3 class="font-extrabold mt-3 mb-2">المنتجات الأكثر استخدامًا (بيع سريع)</h3>
-          <div id="topItemsGrid" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2"></div>
-          <h3 class="font-extrabold mt-3 mb-2">كل المنتجات</h3>
-          <div id="itemsGrid" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2 mt-3"></div>
-          <div id="cartHost" class="mt-3 text-sm"></div>
-        </section>
-
-        <section class="rounded-xl border p-4 bg-white dark:bg-slate-950">
-          <h2 class="font-extrabold mb-2">إتمام البيع</h2>
-          <div class="space-y-2">
-            <input id="saleNo" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="رقم الفاتورة" />
-            <input id="saleCustomer" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم العميل" />
-            <input id="saleDate" type="date" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
-            <select id="paymentType" class="w-full rounded-xl border px-3 py-3 bg-white dark:bg-slate-950 text-base">
+          <div id="cartHost" class="text-sm"></div>
+          <div id="totalsHost" class="soft px-3 py-2 text-sm"></div>
+          <div class="grid grid-cols-2 gap-2">
+            <select id="paymentType" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
               <option value="cash">نقد</option>
               <option value="transfer">تحويل</option>
               <option value="credit">آجل</option>
             </select>
-            <input id="saleDiscount" type="number" step="0.01" value="0" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="خصم الفاتورة" />
-            <input id="salePaid" type="number" step="0.01" value="0" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="المبلغ المدفوع" />
-            <input id="sellerName" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم البائع" />
-            <input id="branchName" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الفرع" />
+            <input id="salePaid" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="المدفوع" />
+            <input id="saleDiscount" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950 col-span-2" placeholder="خصم الفاتورة" />
           </div>
-          <div id="totalsHost" class="mt-3 text-sm"></div>
-          <div class="grid grid-cols-3 gap-2 mt-3">
-            <button class="touch-btn rounded-xl border font-extrabold" data-pay="cash">نقد</button>
-            <button class="touch-btn rounded-xl border font-extrabold" data-pay="transfer">تحويل</button>
-            <button class="touch-btn rounded-xl border font-extrabold" data-pay="credit">آجل</button>
+          <button id="checkoutBtn" class="touch-btn w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-3">إتمام البيع (F5)</button>
+          <div class="grid grid-cols-2 gap-2">
+            <button id="suspendBtn" class="quick-btn">حفظ مؤقت</button>
+            <button id="loadSuspendedBtn" class="quick-btn">استكمال</button>
+            <button id="clearCartBtn" class="quick-btn">تفريغ السلة</button>
+            <button id="searchBtn" class="quick-btn">بحث</button>
           </div>
-          <div class="grid grid-cols-2 gap-2 mt-3">
-            <button id="suspendBtn" class="touch-btn rounded-xl border font-extrabold px-4 py-3 text-base">تعليق الفاتورة</button>
-            <button id="loadSuspendedBtn" class="touch-btn rounded-xl border font-extrabold px-4 py-3 text-base">استكمال معلّقة</button>
-          </div>
-          <button id="checkoutBtn" class="touch-btn mt-3 w-full rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-extrabold px-4 py-3 text-base">إتمام البيع وطباعة الفاتورة</button>
         </section>
+
+        <!-- Products -->
+        <section class="panel panel-pad space-y-2">
+          <div class="grid grid-cols-1 md:grid-cols-6 gap-2">
+            <input id="itemSearch" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950 md:col-span-3" placeholder="ابحث بالاسم أو الكود أو الماركة..." />
+            <select id="itemSelect" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950 md:col-span-3"></select>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
+            <div class="grid grid-cols-3 gap-1">
+              <button id="qtyMinusBtn" class="quick-btn">-</button>
+              <input id="lineQty" type="number" step="0.01" value="1" class="rounded-xl border px-3 py-2 text-center bg-white dark:bg-slate-950" />
+              <button id="qtyPlusBtn" class="quick-btn">+</button>
+            </div>
+            <input id="linePrice" type="number" step="0.01" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="السعر" />
+            <input id="lineTax" type="number" step="0.01" value="0" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الضريبة" />
+            <button id="addToCartBtn" class="touch-btn rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-3 py-2 md:col-span-2">إضافة للسلة</button>
+          </div>
+          <div class="font-extrabold text-sm mt-1">المنتجات الأكثر استخدامًا</div>
+          <div id="topItemsGrid" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2"></div>
+          <div class="font-extrabold text-sm mt-1">كل المنتجات</div>
+          <div id="itemsGrid" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2"></div>
+        </section>
+
+        <!-- Right actions -->
+        <aside class="panel panel-pad space-y-2">
+          <a class="side-btn bg-blue-600 text-white border-blue-600" href="/trade/pos">المبيعات</a>
+          <a class="side-btn" href="/trade/reports">المرتجعات</a>
+          <a class="side-btn" href="/trade/master-data">العملاء</a>
+          <a class="side-btn" href="/trade/purchases">المشتريات</a>
+          <a class="side-btn" href="/trade/inventory">المخزون</a>
+          <a class="side-btn" href="/trade/reports">التقارير</a>
+          <a class="side-btn" href="/trade/settings">الإعدادات</a>
+          <a class="side-btn" href="/trade">الرئيسية</a>
+          <div class="soft p-2 text-xs mt-2">
+            <div>F5: إتمام البيع</div>
+            <div>F7: حفظ مؤقت</div>
+            <div>F10: طباعة</div>
+          </div>
+        </aside>
+      </div>
+
+      <div class="panel panel-pad">
+        <div class="grid grid-cols-2 md:grid-cols-6 gap-2">
+          <button id="printInvoiceQuickBtn" class="quick-btn">طباعة F10</button>
+          <button id="holdQuickBtn" class="quick-btn">حفظ مؤقت F7</button>
+          <button id="discountQuickBtn" class="quick-btn">خصم</button>
+          <button id="customerQuickBtn" class="quick-btn">عميل</button>
+          <button id="searchQuickBtn" class="quick-btn">بحث</button>
+          <button id="emptyQuickBtn" class="quick-btn">تفريغ</button>
+        </div>
       </div>
     </div>
     <script src="/static/app.js?v=14"></script>
@@ -267,6 +303,34 @@
           renderCart();
         });
         document.getElementById("clearCartBtn").addEventListener("click", () => { cart = []; renderCart(); });
+        document.getElementById("printInvoiceQuickBtn").addEventListener("click", async () => {
+          try {
+            const no = document.getElementById("saleNo").value || "";
+            if (!no) { showToast("لا توجد فاتورة للطباعة", "#ef4444"); return; }
+            const d = await apiGet("/api/trade/sales?limit=200");
+            const rows = d.items || [];
+            const hit = rows.find((x) => String(x.invoice_no || "") === String(no));
+            if (!hit) { showToast("احفظ الفاتورة أولاً", "#ef4444"); return; }
+            const details = await apiGet(`/api/trade/sales/${encodeURIComponent(hit.id)}`);
+            openPrintInvoice(details);
+          } catch (e) { showToast(e.message || "فشلت الطباعة", "#ef4444"); }
+        });
+        document.getElementById("holdQuickBtn").addEventListener("click", async () => {
+          try { await suspendCurrentInvoice(); } catch (e) { showToast(e.message || "فشل الحفظ المؤقت", "#ef4444"); }
+        });
+        document.getElementById("discountQuickBtn").addEventListener("click", () => {
+          const v = prompt("أدخل الخصم:", document.getElementById("saleDiscount").value || "0");
+          if (v != null) { document.getElementById("saleDiscount").value = String(Number(v || 0)); renderCart(); }
+        });
+        document.getElementById("customerQuickBtn").addEventListener("click", () => {
+          document.getElementById("saleCustomer").focus();
+        });
+        document.getElementById("searchQuickBtn").addEventListener("click", () => {
+          document.getElementById("itemSearch").focus();
+        });
+        document.getElementById("emptyQuickBtn").addEventListener("click", () => {
+          cart = []; renderCart();
+        });
         document.getElementById("checkoutBtn").addEventListener("click", async () => {
           try { await checkout(); } catch (e) { showToast(e.message || "فشل إتمام البيع", "#ef4444"); }
         });
@@ -278,6 +342,18 @@
         });
         document.getElementById("saleDiscount").addEventListener("input", renderCart);
         document.getElementById("salePaid").addEventListener("input", renderCart);
+        window.addEventListener("keydown", async (ev) => {
+          if (ev.key === "F5") {
+            ev.preventDefault();
+            try { await checkout(); } catch (e) { showToast(e.message || "فشل إتمام البيع", "#ef4444"); }
+          } else if (ev.key === "F7") {
+            ev.preventDefault();
+            try { await suspendCurrentInvoice(); } catch (e) { showToast(e.message || "فشل تعليق الفاتورة", "#ef4444"); }
+          } else if (ev.key === "F10") {
+            ev.preventDefault();
+            document.getElementById("printInvoiceQuickBtn").click();
+          }
+        });
         (async function init() {
           await initAuthUI();
           document.getElementById("saleDate").value = new Date().toISOString().slice(0,10);
