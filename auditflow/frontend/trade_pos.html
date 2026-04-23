@@ -69,7 +69,7 @@
         function esc(s) { return String(s == null ? "" : s); }
         function money(v) { return Number(v || 0).toFixed(2); }
         async function loadItems(q = "") {
-          const d = await apiGet(`/trade/items?q=${encodeURIComponent(q)}`);
+          const d = await apiGet(`/api/trade/items?q=${encodeURIComponent(q)}`);
           items = d.items || [];
           const sel = document.getElementById("itemSelect");
           sel.innerHTML = items.map((x) => `<option value="${esc(x.id)}">${esc(x.code)} - ${esc(x.name)} | متاح: ${esc(x.quantity)} | سعر: ${esc(x.default_sale_price)}</option>`).join("");
@@ -127,8 +127,8 @@
             branch_name: document.getElementById("branchName").value || "",
             lines: cart.map((x) => ({ item_id: x.item_id, qty: Number(x.qty), sale_price: Number(x.sale_price), tax_amount: Number(x.tax_amount) })),
           };
-          const res = await apiPostJson("/trade/sales", payload);
-          const details = await apiGet(`/trade/sales/${encodeURIComponent(res.id)}`);
+          const res = await apiPostJson("/api/trade/sales", payload);
+          const details = await apiGet(`/api/trade/sales/${encodeURIComponent(res.id)}`);
           openPrintInvoice(details);
           cart = [];
           renderCart();

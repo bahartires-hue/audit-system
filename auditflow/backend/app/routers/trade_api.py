@@ -11,7 +11,7 @@ from ..auth_core import require_csrf, require_user
 from ..db import SessionLocal
 from ..models import Item, Purchase, PurchaseLine, Sale, SaleLine, StockMovement
 
-router = APIRouter(prefix="/trade", tags=["trade"])
+router = APIRouter(prefix="/api/trade", tags=["trade"])
 
 
 class ItemCreate(BaseModel):

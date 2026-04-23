@@ -45,7 +45,7 @@
         async function loadSummary() {
           const from = document.getElementById("fromDate").value || "";
           const to = document.getElementById("toDate").value || "";
-          const d = await apiGet(`/trade/dashboard-summary?date_from=${encodeURIComponent(from)}&date_to=${encodeURIComponent(to)}`);
+          const d = await apiGet(`/api/trade/dashboard-summary?date_from=${encodeURIComponent(from)}&date_to=${encodeURIComponent(to)}`);
           const t = d.totals || {};
           document.getElementById("summaryCards").innerHTML = [
             card("إجمالي المبيعات", Number(t.sales || 0).toFixed(2)),

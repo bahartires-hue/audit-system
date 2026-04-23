@@ -28,12 +28,12 @@
         await initAuthUI();
         function esc(s){return String(s==null?"":s);}
         async function load(){
-          const d=await apiGet("/trade/items"); const rows=d.items||[];
+          const d=await apiGet("/api/trade/items"); const rows=d.items||[];
           document.getElementById("host").innerHTML=rows.length?`<div class="grid gap-1">${rows.map(x=>`<div class="rounded-lg border px-3 py-2">${esc(x.code)} — ${esc(x.name)} | ${esc(x.brand||"")} ${esc(x.size||"")} | الكمية ${esc(x.quantity)}</div>`).join("")}</div>`:`<div class="opacity-70">لا توجد أصناف</div>`;
         }
         document.getElementById("addBtn").addEventListener("click",async()=>{
           try{
-            await apiPostJson("/trade/items",{code:document.getElementById("code").value||"",name:document.getElementById("name").value||"",brand:document.getElementById("brand").value||"",size:document.getElementById("size").value||"",category:document.getElementById("category").value||"rim"});
+            await apiPostJson("/api/trade/items",{code:document.getElementById("code").value||"",name:document.getElementById("name").value||"",brand:document.getElementById("brand").value||"",size:document.getElementById("size").value||"",category:document.getElementById("category").value||"rim"});
             showToast("تمت الإضافة ✔️","#10b981"); await load();
           }catch(e){showToast(e.message||"فشل الإضافة","#ef4444");}
         });
