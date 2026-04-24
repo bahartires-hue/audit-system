@@ -7,37 +7,39 @@
     <link rel="stylesheet" href="/static/tailwind.css?v=9" />
     <link rel="stylesheet" href="/static/dark.css?v=9" />
     <style>
-      .layout { display: grid; grid-template-columns: 240px 1fr; gap: 14px; }
-      .side-link { display: block; border-radius: 12px; padding: 10px 12px; font-weight: 800; border: 1px solid #e5e7eb; }
-      .side-link.active { background: #f59e0b; color: #fff; border-color: #f59e0b; }
-      .kpi-card { border-radius: 14px; padding: 14px; color: #fff; min-height: 90px; }
-      .kpi-green { background: linear-gradient(135deg, #10b981, #059669); }
-      .kpi-blue { background: linear-gradient(135deg, #0ea5e9, #2563eb); }
-      .kpi-orange { background: linear-gradient(135deg, #fb923c, #f97316); }
-      .kpi-indigo { background: linear-gradient(135deg, #6366f1, #4f46e5); }
-      .soft-card { border-radius: 14px; border: 1px solid #e5e7eb; background: #fff; padding: 12px; }
-      @media (max-width: 1024px) { .layout { grid-template-columns: 1fr; } }
+      .top-alert { background: #ea580c; color: #fff; padding: 6px 12px; font-size: 12px; font-weight: 700; }
+      .layout { display: grid; grid-template-columns: 260px 1fr; gap: 0; min-height: calc(100vh - 24px); }
+      .sidebar { background: linear-gradient(180deg, #2d1ea8, #3f2bbf); color: #fff; padding: 14px 12px; }
+      .side-link { display: flex; align-items: center; justify-content: space-between; border-radius: 10px; padding: 9px 10px; font-weight: 800; color: #dbeafe; border: 1px solid transparent; }
+      .side-link:hover { background: rgba(255,255,255,.08); }
+      .side-link.active { background: rgba(255,255,255,.16); color: #fff; border-color: rgba(255,255,255,.25); }
+      .content { background: #f3f4f6; padding: 12px; }
+      .header-bar { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; }
+      .kpi-card { border-radius: 10px; padding: 10px 12px; border: 1px solid #e5e7eb; background: #fff; min-height: 82px; }
+      .kpi-val { color: #4f46e5; font-size: 30px; font-weight: 900; line-height: 1; margin-top: 8px; }
+      .soft-card { border-radius: 10px; border: 1px solid #e5e7eb; background: #fff; padding: 10px; }
+      @media (max-width: 1024px) { .layout { grid-template-columns: 1fr; } .sidebar { border-radius: 10px; margin-bottom: 10px; } }
     </style>
   </head>
-  <body class="bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
-    <div class="max-w-[1500px] mx-auto p-3">
+  <body class="bg-slate-100 text-slate-900 min-h-screen">
+    <div class="top-alert">متبقي 14 يوماً على نهاية الفترة المجانية</div>
+    <div class="max-w-[1700px] mx-auto">
       <div class="layout">
-        <aside class="rounded-2xl border bg-white dark:bg-slate-950 p-3 h-fit">
-          <div class="text-lg font-extrabold mb-3">كاشيركو ويب</div>
-          <a class="side-link active" href="/trade">الرئيسية</a>
-          <a class="side-link mt-2" href="/trade/sales">المبيعات</a>
-          <a class="side-link mt-2" href="/trade/purchases">المشتريات</a>
-          <a class="side-link mt-2" href="/trade/inventory">المخزون</a>
-          <a class="side-link mt-2" href="/trade/items">الأصناف</a>
-          <a class="side-link mt-2" href="/trade/master-data">البيانات الأساسية</a>
-          <a class="side-link mt-2" href="/trade/transfers">التحويلات</a>
-          <a class="side-link mt-2" href="/trade/reports">التقارير</a>
-          <a class="side-link mt-2" href="/trade/settings">الإعدادات</a>
-          <a class="side-link mt-2" href="/trade/users">المستخدمين</a>
+        <aside class="sidebar">
+          <div class="text-2xl font-extrabold mb-4">الأستاذ</div>
+          <a class="side-link active" href="/trade"><span>لوحة التحكم</span><span>⌂</span></a>
+          <a class="side-link mt-1" href="/trade/sales"><span>المبيعات</span><span>◀</span></a>
+          <a class="side-link mt-1" href="/trade/purchases"><span>المشتريات</span><span>◀</span></a>
+          <a class="side-link mt-1" href="/trade/inventory"><span>المخزون</span><span>◀</span></a>
+          <a class="side-link mt-1" href="/trade/items"><span>الأصناف</span><span>◀</span></a>
+          <a class="side-link mt-1" href="/trade/master-data"><span>البيانات الأساسية</span><span>◀</span></a>
+          <a class="side-link mt-1" href="/trade/reports"><span>التقارير</span><span>◀</span></a>
+          <a class="side-link mt-1" href="/trade/users"><span>المستخدمين</span><span>◀</span></a>
+          <a class="side-link mt-1" href="/trade/settings"><span>الإعدادات</span><span>◀</span></a>
         </aside>
 
-        <main class="space-y-3">
-          <div class="rounded-2xl border bg-white dark:bg-slate-950 p-3 flex items-center justify-between">
+        <main class="content space-y-3">
+          <div class="header-bar flex items-center justify-between">
             <div>
               <div class="text-xs opacity-70">الفرع الرئيسي</div>
               <h1 class="text-2xl font-extrabold">لوحة التحكم</h1>
@@ -76,8 +78,8 @@
     <script>
       (async function () {
         await initAuthUI();
-        function card(title, value, cls) {
-          return `<div class="kpi-card ${cls}"><div class="text-xs opacity-90">${title}</div><div class="text-3xl font-extrabold mt-2">${value}</div></div>`;
+        function card(title, value) {
+          return `<div class="kpi-card"><div class="text-sm font-bold">${title}</div><div class="kpi-val">${value}</div></div>`;
         }
         function row(text) {
           return `<div class="rounded-lg border px-3 py-2 text-sm">${text}</div>`;
@@ -92,10 +94,10 @@
           const t = d1.totals || {};
           const c = d2.totals || {};
           document.getElementById("summaryCards").innerHTML = [
-            card("المبيعات", Number(t.sales || 0).toFixed(2), "kpi-green"),
-            card("المشتريات", Number(t.purchases || 0).toFixed(2), "kpi-blue"),
-            card("مرتجع مبيعات", Number(0).toFixed(2), "kpi-orange"),
-            card("مرتجع مشتريات", Number(0).toFixed(2), "kpi-indigo"),
+            card("المبيعات", Number(t.sales || 0).toFixed(2)),
+            card("العملاء الجدد", Number(c.sales_invoices_today || 0)),
+            card("مدفوعات العملاء", Number(t.sales || 0).toFixed(2)),
+            card("المخزون", Number(c.inventory_value || 0).toFixed(2)),
           ].join("");
           const recentSales = d2.recent_sales || [];
           const recentPurchases = d2.recent_purchases || [];
