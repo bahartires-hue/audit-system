@@ -128,6 +128,11 @@ class CashierkoSettingsPatch(BaseModel):
     logo_url: Optional[str] = None
     phone: Optional[str] = None
     address: Optional[str] = None
+    tax_number: Optional[str] = None
+    commercial_register: Optional[str] = None
+    postal_code: Optional[str] = None
+    country: Optional[str] = None
+    city: Optional[str] = None
     currency: Optional[str] = None
     tax_rate: Optional[float] = None
     invoice_prefix: Optional[str] = None
@@ -660,6 +665,11 @@ def get_cashierko_settings(request: Request):
             "logo_url": "",
             "phone": "",
             "address": "",
+            "tax_number": "",
+            "commercial_register": "",
+            "postal_code": "",
+            "country": "",
+            "city": "",
             "currency": "SAR",
             "tax_rate": 0.0,
             "invoice_prefix": "INV",
