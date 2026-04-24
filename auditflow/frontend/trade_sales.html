@@ -51,8 +51,8 @@
           <select id="item" class="hidden"></select>
         </div>
         <div><div class="lbl">الكمية</div><input id="qty" type="number" step="0.01" value="1" class="field w-full" /></div>
-        <div><div class="lbl">سعر البيع</div><input id="price" type="number" step="0.01" class="field w-full" /></div>
-        <div><div class="lbl">الضريبة</div><input id="tax" type="number" step="0.01" class="field w-full" /></div>
+        <div><div class="lbl">سعر البيع (شامل الضريبة)</div><input id="price" type="number" step="0.01" class="field w-full" /></div>
+        <div><div class="lbl">ضريبة القيمة المضافة (%)</div><input id="tax" type="number" step="0.01" class="field w-full" /></div>
         <div class="pt-5"><button id="addLineBtn" class="cmd cmd-accent w-full">إضافة بند</button></div>
       </div>
     </section>
@@ -64,7 +64,7 @@
     <section class="panel p-2">
       <div class="footer-grid">
         <div id="totalsHost" class="field !h-auto py-2 font-bold text-sm"></div>
-        <div class="text-sm font-semibold">حفظ / تعديل / طباعة / بحث</div>
+        <div><div class="lbl">الإجمالي النهائي (قابل للتعديل)</div><input id="finalTotal" type="number" step="0.01" class="field w-full" /></div>
         <button id="saveBtn" class="cmd cmd-primary">حفظ</button>
         <button id="printCurrentBtn" class="cmd">طباعة</button>
         <button id="resetBtn" class="cmd">جديد</button>
@@ -112,19 +112,64 @@
         } catch (_) {}
       }
 
+      function round2(n) { return Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100; }
+      function round4(n) { return Math.round((Number(n || 0) + Number.EPSILON) * 10000) / 10000; }
+      function vatRate() { return Math.max(0, Number(document.getElementById("tax").value || 0)); }
+      function lineFromGross(qty, grossUnit, ratePct) {
+        const q = Math.max(0, Number(qty || 0));
+        const g = Math.max(0, Number(grossUnit || 0));
+        const r = Math.max(0, Number(ratePct || 0));
+        const gross = round2(q * g);
+        if (q <= 0) return { qty: 0, unit_gross: g, sale_price: 0, tax_amount: 0, gross: 0 };
+        if (r <= 0) return { qty: q, unit_gross: g, sale_price: round4(g), tax_amount: 0, gross };
+        const net = gross / (1 + r / 100);
+        const tax = gross - net;
+        return {
+          qty: q,
+          unit_gross: round4(g),
+          sale_price: round4(net / q),
+          tax_amount: round2(tax),
+          gross: round2(gross),
+        };
+      }
+      function recalcCartByRate() {
+        const r = vatRate();
+        cart = cart.map((x) => {
+          const calc = lineFromGross(x.qty, x.unit_gross != null ? x.unit_gross : (Number(x.sale_price || 0) + (Number(x.tax_amount || 0) / Math.max(1, Number(x.qty || 1)))), r);
+          return { ...x, qty: calc.qty, unit_gross: calc.unit_gross, sale_price: calc.sale_price, tax_amount: calc.tax_amount };
+        });
+      }
       function totals() {
         const discount = Number(document.getElementById("discount").value || 0);
-        const gross = cart.reduce((s, x) => s + Number(x.qty) * Number(x.sale_price) + Number(x.tax_amount), 0);
+        const gross = cart.reduce((s, x) => s + round2(Number(x.qty || 0) * Number(x.unit_gross != null ? x.unit_gross : x.sale_price || 0)), 0);
         return { gross, discount, net: Math.max(0, gross - discount) };
       }
 
       function renderCart() {
         const host = document.getElementById("cartHost");
         const t = totals();
-        document.getElementById("totalsHost").innerHTML = `الإجمالي: ${money(t.gross)} | الخصم: ${money(t.discount)} | الصافي: ${money(t.net)}`;
+        document.getElementById("totalsHost").innerHTML = `الإجمالي قبل الضريبة: ${money(cart.reduce((s,x)=>s + Number(x.qty||0)*Number(x.sale_price||0),0))} | الضريبة: ${money(cart.reduce((s,x)=>s + Number(x.tax_amount||0),0))} | الإجمالي: ${money(t.gross)} | الخصم: ${money(t.discount)} | الصافي: ${money(t.net)}`;
+        const finalInput = document.getElementById("finalTotal");
+        if (finalInput && document.activeElement !== finalInput) finalInput.value = money(t.net);
         host.innerHTML = cart.length
-          ? `<div class="rounded-lg border overflow-auto"><table class="w-full min-w-[900px] text-sm"><thead class="bg-slate-100 dark:bg-slate-800"><tr><th class="px-2 py-2 text-right">الصنف</th><th class="px-2 py-2 text-right">الكمية</th><th class="px-2 py-2 text-right">السعر</th><th class="px-2 py-2 text-right">الضريبة</th><th class="px-2 py-2 text-right">الإجمالي</th><th class="px-2 py-2 text-right">حذف</th></tr></thead><tbody>${cart.map((x,i)=>`<tr class="border-t"><td class="px-2 py-2">${esc(x.item_label)}</td><td class="px-2 py-2">${esc(x.qty)}</td><td class="px-2 py-2">${money(x.sale_price)}</td><td class="px-2 py-2">${money(x.tax_amount)}</td><td class="px-2 py-2">${money(Number(x.qty)*Number(x.sale_price)+Number(x.tax_amount))}</td><td class="px-2 py-2"><button class="rounded-lg border px-2 py-1" data-del="${i}">✕</button></td></tr>`).join("")}</tbody></table></div>`
+          ? `<div class="rounded-lg border overflow-auto"><table class="w-full min-w-[900px] text-sm"><thead class="bg-slate-100 dark:bg-slate-800"><tr><th class="px-2 py-2 text-right">الصنف</th><th class="px-2 py-2 text-right">الكمية</th><th class="px-2 py-2 text-right">السعر شامل الضريبة</th><th class="px-2 py-2 text-right">الضريبة</th><th class="px-2 py-2 text-right">الإجمالي</th><th class="px-2 py-2 text-right">حذف</th></tr></thead><tbody>${cart.map((x,i)=>`<tr class="border-t"><td class="px-2 py-2">${esc(x.item_label)}</td><td class="px-2 py-2"><input class="field !h-8 w-24" type="number" step="0.01" data-qty="${i}" value="${esc(x.qty)}" /></td><td class="px-2 py-2"><input class="field !h-8 w-28" type="number" step="0.01" data-price="${i}" value="${esc(x.unit_gross != null ? x.unit_gross : x.sale_price)}" /></td><td class="px-2 py-2">${money(x.tax_amount)}</td><td class="px-2 py-2">${money(Number(x.qty)*Number(x.unit_gross != null ? x.unit_gross : x.sale_price || 0))}</td><td class="px-2 py-2"><button class="rounded-lg border px-2 py-1" data-del="${i}">✕</button></td></tr>`).join("")}</tbody></table></div>`
           : `<div class="opacity-70 text-sm">لا توجد بنود بعد</div>`;
+        host.querySelectorAll("[data-qty]").forEach((inp) => inp.addEventListener("input", () => {
+          const i = Number(inp.getAttribute("data-qty"));
+          const row = cart[i];
+          if (!row) return;
+          const calc = lineFromGross(Number(inp.value || 0), row.unit_gross != null ? row.unit_gross : row.sale_price, vatRate());
+          cart[i] = { ...row, qty: calc.qty, unit_gross: calc.unit_gross, sale_price: calc.sale_price, tax_amount: calc.tax_amount };
+          renderCart();
+        }));
+        host.querySelectorAll("[data-price]").forEach((inp) => inp.addEventListener("input", () => {
+          const i = Number(inp.getAttribute("data-price"));
+          const row = cart[i];
+          if (!row) return;
+          const calc = lineFromGross(row.qty, Number(inp.value || 0), vatRate());
+          cart[i] = { ...row, qty: calc.qty, unit_gross: calc.unit_gross, sale_price: calc.sale_price, tax_amount: calc.tax_amount };
+          renderCart();
+        }));
         host.querySelectorAll("[data-del]").forEach((btn) => btn.addEventListener("click", () => {
           cart.splice(Number(btn.getAttribute("data-del")), 1);
           renderCart();
@@ -146,6 +191,7 @@
         document.getElementById("discount").value = "";
         document.getElementById("qty").value = "1";
         document.getElementById("tax").value = Number(appSettings.tax_rate || 0).toFixed(2);
+        document.getElementById("finalTotal").value = "";
         document.getElementById("itemSearchLine").value = "";
         renderCart();
       }
@@ -172,7 +218,7 @@
       function printInvoice(d) {
         const lines = d.lines || [];
         const thermal = String(appSettings.print_size || "A4").toLowerCase() === "80mm";
-        const html = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>فاتورة ${esc(d.invoice_no)}</title><style>body{font-family:Arial;padding:${thermal ? "6px" : "14px"};font-size:${thermal ? "12px" : "14px"}}.invoice{max-width:${thermal ? "280px" : "900px"};margin:0 auto}.invoice-head{text-align:center;margin-bottom:8px}.meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;direction:ltr;margin:8px 0}.meta-box{border:1px solid #ddd;border-radius:8px;padding:${thermal ? "4px" : "8px"};direction:rtl;text-align:right}.meta-title{font-weight:700;margin-bottom:4px}.meta-line{margin:2px 0}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ddd;padding:${thermal ? "4px" : "6px"};text-align:right}.thanks{margin-top:10px;text-align:center;font-weight:700}.sub{font-size:${thermal ? "11px" : "13px"};opacity:.85}@media print{.invoice{max-width:100%}}</style></head><body><div class="invoice"><div class="invoice-head"><h2>${esc(appSettings.shop_name || "كاشيركو")}</h2><div class="sub">${esc(appSettings.thermal_header || "")}</div><div>رقم الفاتورة: <b>${esc(d.invoice_no)}</b> | التاريخ: <b>${esc(d.sale_date)}</b> | الدفع: <b>${esc(paymentLabel(d.payment_type))}</b></div></div><div class="meta-grid"><div class="meta-box"><div class="meta-title">بيانات الشركة</div><div class="meta-line">الاسم: <b>${esc(appSettings.shop_name || "كاشيركو")}</b></div><div class="meta-line">الرقم الضريبي: <b>${esc(appSettings.tax_number || "")}</b></div><div class="meta-line">السجل التجاري: <b>${esc(appSettings.commercial_register || "")}</b></div><div class="meta-line">العنوان: <b>${esc([appSettings.city || "", appSettings.country || "", appSettings.address || ""].filter(Boolean).join(" - "))}</b></div></div><div class="meta-box"><div class="meta-title">بيانات العميل</div><div class="meta-line">الاسم: <b>${esc(d.customer_name)}</b></div><div class="meta-line">الرقم الضريبي: <b>${esc(d.customer_tax_no || "")}</b></div><div class="meta-line">الهاتف: <b>${esc(d.customer_phone || "")}</b></div><div class="meta-line">العنوان: <b>${esc(d.customer_address || "")}</b></div></div></div><table><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الضريبة</th><th>الإجمالي</th></tr></thead><tbody>${lines.map((x)=>`<tr><td>${esc(x.item_code)} - ${esc(x.item_name)}</td><td>${esc(x.qty)}</td><td>${money(x.sale_price)}</td><td>${money(x.tax_amount)}</td><td>${money(x.line_total)}</td></tr>`).join("")}</tbody></table><h3>الإجمالي النهائي: ${money(d.total_amount)} ${esc(appSettings.currency || "SAR")}</h3><div class="thanks">شكراً لزيارتكم لنا</div></div></body></html>`;
+        const html = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>فاتورة ${esc(d.invoice_no)}</title><style>body{font-family:Arial;padding:${thermal ? "6px" : "14px"};font-size:${thermal ? "12px" : "14px"}}.invoice{max-width:${thermal ? "280px" : "900px"};margin:0 auto}.invoice-head{text-align:center;margin-bottom:8px}.meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;direction:ltr;margin:8px 0}.meta-box{border:1px solid #ddd;border-radius:8px;padding:${thermal ? "4px" : "8px"};direction:rtl;text-align:right}.meta-title{font-weight:700;margin-bottom:4px}.meta-line{margin:2px 0}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ddd;padding:${thermal ? "4px" : "6px"};text-align:right}.thanks{margin-top:10px;text-align:center;font-weight:700}.sub{font-size:${thermal ? "11px" : "13px"};opacity:.85}@media print{.invoice{max-width:100%}}</style></head><body><div class="invoice"><div class="invoice-head"><h2>${esc(appSettings.shop_name || "كاشيركو")}</h2><div class="sub">${esc(appSettings.thermal_header || "")}</div><div>رقم الفاتورة: <b>${esc(d.invoice_no)}</b> | التاريخ: <b>${esc(d.sale_date)}</b> | الدفع: <b>${esc(paymentLabel(d.payment_type))}</b></div></div><div class="meta-grid"><div class="meta-box"><div class="meta-title">بيانات الشركة</div><div class="meta-line">الاسم: <b>${esc(appSettings.shop_name || "كاشيركو")}</b></div><div class="meta-line">الرقم الضريبي: <b>${esc(appSettings.tax_number || "")}</b></div><div class="meta-line">السجل التجاري: <b>${esc(appSettings.commercial_register || "")}</b></div><div class="meta-line">العنوان: <b>${esc([appSettings.city || "", appSettings.country || "", appSettings.address || ""].filter(Boolean).join(" - "))}</b></div></div><div class="meta-box"><div class="meta-title">بيانات العميل</div><div class="meta-line">الاسم: <b>${esc(d.customer_name)}</b></div><div class="meta-line">الرقم الضريبي: <b>${esc(d.customer_tax_no || "")}</b></div><div class="meta-line">الهاتف: <b>${esc(d.customer_phone || "")}</b></div><div class="meta-line">العنوان: <b>${esc(d.customer_address || "")}</b></div></div></div><table><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر قبل الضريبة</th><th>الضريبة</th><th>الإجمالي</th></tr></thead><tbody>${lines.map((x)=>`<tr><td>${esc(x.item_code)} - ${esc(x.item_name)}</td><td>${esc(x.qty)}</td><td>${money(x.sale_price)}</td><td>${money(x.tax_amount)}</td><td>${money(x.line_total)}</td></tr>`).join("")}</tbody></table><h3>الإجمالي النهائي: ${money(d.total_amount)} ${esc(appSettings.currency || "SAR")}</h3><div class="thanks">شكراً لزيارتكم لنا</div></div></body></html>`;
         const w = window.open("", "_blank");
         if (!w) return;
         w.document.open();
@@ -258,12 +304,17 @@
           document.getElementById("date").value = d.sale_date || new Date().toISOString().slice(0, 10);
           document.getElementById("pay").value = d.payment_type || "cash";
           document.getElementById("discount").value = String(d.discount || 0);
+          const netBase = (d.lines || []).reduce((s, x) => s + (Number(x.qty || 0) * Number(x.sale_price || 0)), 0);
+          const taxBase = (d.lines || []).reduce((s, x) => s + Number(x.tax_amount || 0), 0);
+          const guessedRate = netBase > 0 ? (taxBase / netBase) * 100 : Number(appSettings.tax_rate || 0);
+          document.getElementById("tax").value = Number(guessedRate || 0).toFixed(2);
           cart = (d.lines || []).map((x) => ({
             item_id: x.item_id,
             item_label: `${x.item_code || ""} - ${x.item_name || ""}`,
             qty: Number(x.qty || 0),
             sale_price: Number(x.sale_price || 0),
             tax_amount: Number(x.tax_amount || 0),
+            unit_gross: Number(x.qty || 0) > 0 ? round4((Number(x.qty || 0) * Number(x.sale_price || 0) + Number(x.tax_amount || 0)) / Number(x.qty || 0)) : Number(x.sale_price || 0),
           }));
           renderCart();
           window.scrollTo({ top: 0, behavior: "smooth" });
@@ -300,14 +351,16 @@
         if (!item) { showToast("اختر صنفًا أولًا", "#ef4444"); return; }
         const qty = Number(document.getElementById("qty").value || 0);
         const price = Number(document.getElementById("price").value || 0);
-        const tax = Number(document.getElementById("tax").value || 0);
+        const taxRate = vatRate();
         if (qty <= 0) { showToast("الكمية يجب أن تكون أكبر من صفر", "#ef4444"); return; }
+        const calc = lineFromGross(qty, price, taxRate);
         cart.push({
           item_id: item.id,
           item_label: `${item.code} - ${item.name}`,
-          qty,
-          sale_price: price,
-          tax_amount: tax,
+          qty: calc.qty,
+          unit_gross: calc.unit_gross,
+          sale_price: calc.sale_price,
+          tax_amount: calc.tax_amount,
         });
         document.getElementById("itemSearchLine").value = "";
         renderCart();
@@ -353,6 +406,14 @@
       document.getElementById("resetBtn").addEventListener("click", resetForm);
       document.getElementById("searchInput").addEventListener("input", renderSales);
       document.getElementById("discount").addEventListener("input", renderCart);
+      document.getElementById("tax").addEventListener("input", () => { recalcCartByRate(); renderCart(); });
+      document.getElementById("finalTotal").addEventListener("input", () => {
+        const t = totals();
+        const wanted = Number(document.getElementById("finalTotal").value || 0);
+        if (!Number.isFinite(wanted)) return;
+        document.getElementById("discount").value = money(Math.max(0, t.gross - Math.max(0, wanted)));
+        renderCart();
+      });
 
       try {
         await Promise.all([loadItems(), loadSettings(), loadSales()]);
