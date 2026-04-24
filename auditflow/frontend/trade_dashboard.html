@@ -13,6 +13,11 @@
       .side-link { display: flex; align-items: center; justify-content: space-between; border-radius: 10px; padding: 9px 10px; font-weight: 800; color: #dbeafe; border: 1px solid transparent; }
       .side-link:hover { background: rgba(255,255,255,.08); }
       .side-link.active { background: rgba(255,255,255,.16); color: #fff; border-color: rgba(255,255,255,.25); }
+      .side-menu-btn { width: 100%; background: transparent; cursor: pointer; text-align: right; }
+      .submenu { display: none; margin: 4px 0 8px; padding-right: 10px; border-right: 1px solid rgba(255,255,255,.2); }
+      .submenu.open { display: grid; gap: 4px; }
+      .sub-link { display: block; border-radius: 8px; padding: 7px 9px; font-size: 13px; color: #e0e7ff; }
+      .sub-link:hover { background: rgba(255,255,255,.08); }
       .content { background: #f3f4f6; padding: 12px; }
       .header-bar { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; }
       .kpi-card { border-radius: 10px; padding: 10px 12px; border: 1px solid #e5e7eb; background: #fff; min-height: 82px; }
@@ -28,7 +33,14 @@
         <aside class="sidebar">
           <div class="text-2xl font-extrabold mb-4">الأستاذ</div>
           <a class="side-link active" href="/trade"><span>لوحة التحكم</span><span>⌂</span></a>
-          <a class="side-link mt-1" href="/trade/sales"><span>المبيعات</span><span>◀</span></a>
+          <button id="salesMenuToggle" class="side-link side-menu-btn mt-1" type="button"><span>المبيعات</span><span id="salesMenuArrow">▾</span></button>
+          <div id="salesSubmenu" class="submenu open">
+            <a class="sub-link" href="/trade/sales">الفواتير</a>
+            <a class="sub-link" href="/trade/reports#returns">المرتجع</a>
+            <a class="sub-link" href="/trade/master-data">العملاء</a>
+            <a class="sub-link" href="/trade/reports#movement">تقرير حركة مبيعات</a>
+            <a class="sub-link" href="/trade/reports#customer-statement">كشف حساب العميل</a>
+          </div>
           <a class="side-link mt-1" href="/trade/purchases"><span>المشتريات</span><span>◀</span></a>
           <a class="side-link mt-1" href="/trade/inventory"><span>المخزون</span><span>◀</span></a>
           <a class="side-link mt-1" href="/trade/items"><span>الأصناف</span><span>◀</span></a>
@@ -117,6 +129,12 @@
         document.getElementById("toDate").value = now.toISOString().slice(0, 10);
         document.getElementById("fromDate").value = `${now.getFullYear()}-01-01`;
         document.getElementById("refreshBtn").addEventListener("click", loadSummary);
+        document.getElementById("salesMenuToggle").addEventListener("click", () => {
+          const menu = document.getElementById("salesSubmenu");
+          const arrow = document.getElementById("salesMenuArrow");
+          const open = menu.classList.toggle("open");
+          arrow.textContent = open ? "▾" : "▸";
+        });
         await loadSummary();
       })();
     </script>
