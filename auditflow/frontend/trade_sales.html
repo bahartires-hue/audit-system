@@ -7,73 +7,114 @@
   <link rel="stylesheet" href="/static/tailwind.css?v=9" />
   <link rel="stylesheet" href="/static/dark.css?v=9" />
   <style>
-    .panel{border:1px solid #cbd5e1;border-radius:10px;background:#fff}
+    .pos-shell{border:1px solid #111827;border-radius:12px;background:#f8fafc;overflow:hidden}
+    .titlebar{background:#0b1220;color:#e5e7eb;padding:8px 12px;display:flex;align-items:center;justify-content:space-between}
     .field{height:34px;border-radius:4px;border:1px solid #cbd5e1;padding:4px 8px;background:#fff}
     .lbl{font-size:12px;font-weight:700;color:#0f172a}
-    .cmd{height:30px;border:1px solid #94a3b8;border-radius:4px;padding:0 10px;font-weight:700;background:#fff}
+    .main-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:10px;padding:10px}
+    .left-col{display:grid;grid-template-rows:auto 1fr auto;gap:8px}
+    .head-grid{display:grid;grid-template-columns:1.1fr .9fr .9fr 1fr 1fr 1fr 1.2fr;gap:6px;align-items:end}
+    .line-grid{display:grid;grid-template-columns:2.2fr .7fr .9fr .8fr auto;gap:6px;align-items:end}
+    .cart-panel{border:1px solid #cbd5e1;border-radius:8px;background:#fff;min-height:320px;overflow:auto}
+    .total-strip{display:grid;grid-template-columns:1.2fr .9fr auto auto auto;gap:6px;align-items:center}
+    .cmd{height:34px;border:1px solid #64748b;border-radius:6px;padding:0 10px;font-weight:800;background:#fff}
     .cmd-primary{background:#16a34a;color:#fff;border-color:#16a34a}
     .cmd-accent{background:#2563eb;color:#fff;border-color:#2563eb}
-    .top-grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px;align-items:end}
-    .line-grid{display:grid;grid-template-columns:2fr .7fr .9fr .8fr auto;gap:6px;align-items:end}
-    .footer-grid{display:grid;grid-template-columns:1.1fr 1fr auto auto auto;gap:6px;align-items:center}
-    .bottom-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
-    @media (max-width:1100px){.top-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.line-grid{grid-template-columns:1fr 1fr}.footer-grid{grid-template-columns:1fr}}
+    .side-pad{display:grid;gap:8px}
+    .pad-box{border:1px solid #1f2937;border-radius:8px;background:#0f172a;padding:8px}
+    .pad-title{color:#cbd5e1;font-size:12px;font-weight:700;margin-bottom:6px}
+    .quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+    .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+    .k{height:44px;border-radius:6px;border:1px solid #475569;background:linear-gradient(180deg,#f8fafc,#cbd5e1);font-weight:900}
+    .k.wide{grid-column:span 2}
+    .recent-panel{margin:0 10px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;overflow:auto}
+    @media (max-width:1200px){.main-grid{grid-template-columns:1fr}.head-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.line-grid{grid-template-columns:1fr 1fr}.total-strip{grid-template-columns:1fr}}
   </style>
 </head>
 <body class="bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
-  <div class="max-w-[1700px] mx-auto p-2 space-y-2">
-    <div class="panel p-2 flex items-center justify-between">
-      <div class="text-base font-extrabold">المبيعات - نمط كاشير احترافي</div>
-      <div class="flex items-center gap-2">
-        <div id="formMode" class="text-xs opacity-70">وضع: إضافة جديدة</div>
-        <div id="authArea"></div>
-      </div>
-    </div>
-
-    <section class="panel p-2">
-      <div class="top-grid">
-        <div><div class="lbl">رقم الفاتورة</div><input id="no" class="field w-full" placeholder="14916" /></div>
-        <div><div class="lbl">التاريخ</div><input id="date" type="date" class="field w-full" /></div>
-        <div><div class="lbl">طريقة الدفع</div><select id="pay" class="field w-full"><option value="cash">نقد</option><option value="transfer">تحويل</option><option value="credit">آجل</option></select></div>
-        <div><div class="lbl">العميل</div><input id="customer" class="field w-full" placeholder="عميل عام" /></div>
-        <div><div class="lbl">الرقم الضريبي</div><input id="customerTaxNo" class="field w-full" placeholder="VAT/TIN" /></div>
-        <div><div class="lbl">الهاتف</div><input id="customerPhone" class="field w-full" placeholder="05xxxxxxxx" /></div>
-        <div><div class="lbl">العنوان</div><input id="customerAddress" class="field w-full" placeholder="عنوان العميل" /></div>
-        <div><div class="lbl">بحث بالفواتير</div><input id="searchInput" class="field w-full" placeholder="بحث..." /></div>
-        <div><div class="lbl">خصم الفاتورة</div><input id="discount" type="number" step="0.01" class="field w-full" /></div>
-      </div>
-
-      <div class="line-grid mt-2">
-        <div>
-          <div class="lbl">بحث الصنف</div>
-          <input id="itemSearchLine" class="field w-full" list="itemOptions" placeholder="اكتب الكود أو الاسم" />
-          <datalist id="itemOptions"></datalist>
-          <select id="item" class="hidden"></select>
+  <div class="max-w-[1800px] mx-auto p-2">
+    <div class="pos-shell">
+      <div class="titlebar">
+        <div class="font-extrabold">شاشة المبيعات - POS</div>
+        <div class="flex items-center gap-3">
+          <div id="formMode" class="text-xs opacity-80">وضع: إضافة جديدة</div>
+          <div id="authArea"></div>
         </div>
-        <div><div class="lbl">الكمية</div><input id="qty" type="number" step="0.01" value="1" class="field w-full" /></div>
-        <div><div class="lbl">سعر البيع (شامل الضريبة)</div><input id="price" type="number" step="0.01" class="field w-full" /></div>
-        <div><div class="lbl">ضريبة القيمة المضافة (%)</div><input id="tax" type="number" step="0.01" class="field w-full" /></div>
-        <div class="pt-5"><button id="addLineBtn" class="cmd cmd-accent w-full">إضافة بند</button></div>
       </div>
-    </section>
 
-    <section class="panel p-2 min-h-[230px] overflow-auto">
-      <div id="cartHost"></div>
-    </section>
+      <div class="main-grid">
+        <div class="left-col">
+          <section>
+            <div class="head-grid">
+              <div><div class="lbl">رقم الفاتورة</div><input id="no" class="field w-full" placeholder="14916" /></div>
+              <div><div class="lbl">التاريخ</div><input id="date" type="date" class="field w-full" /></div>
+              <div><div class="lbl">طريقة الدفع</div><select id="pay" class="field w-full"><option value="cash">نقد</option><option value="transfer">تحويل</option><option value="credit">آجل</option></select></div>
+              <div><div class="lbl">العميل</div><input id="customer" class="field w-full" placeholder="عميل عام" /></div>
+              <div><div class="lbl">الرقم الضريبي</div><input id="customerTaxNo" class="field w-full" placeholder="VAT/TIN" /></div>
+              <div><div class="lbl">الهاتف</div><input id="customerPhone" class="field w-full" placeholder="05xxxxxxxx" /></div>
+              <div><div class="lbl">العنوان</div><input id="customerAddress" class="field w-full" placeholder="عنوان العميل" /></div>
+            </div>
+            <div class="line-grid mt-2">
+              <div>
+                <div class="lbl">بحث الصنف</div>
+                <input id="itemSearchLine" class="field w-full" list="itemOptions" placeholder="اكتب الكود أو الاسم" />
+                <datalist id="itemOptions"></datalist>
+                <select id="item" class="hidden"></select>
+              </div>
+              <div><div class="lbl">الكمية</div><input id="qty" type="number" step="0.01" value="1" class="field w-full" /></div>
+              <div><div class="lbl">سعر البيع (شامل الضريبة)</div><input id="price" type="number" step="0.01" class="field w-full" /></div>
+              <div><div class="lbl">ضريبة القيمة المضافة (%)</div><input id="tax" type="number" step="0.01" class="field w-full" /></div>
+              <div class="pt-5"><button id="addLineBtn" class="cmd cmd-accent w-full">إضافة بند</button></div>
+            </div>
+          </section>
 
-    <section class="panel p-2">
-      <div class="footer-grid">
-        <div id="totalsHost" class="field !h-auto py-2 font-bold text-sm"></div>
-        <div><div class="lbl">الإجمالي النهائي (قابل للتعديل)</div><input id="finalTotal" type="number" step="0.01" class="field w-full" /></div>
-        <button id="saveBtn" class="cmd cmd-primary">حفظ</button>
-        <button id="printCurrentBtn" class="cmd">طباعة</button>
-        <button id="resetBtn" class="cmd">جديد</button>
+          <section class="cart-panel p-2">
+            <div id="cartHost"></div>
+          </section>
+
+          <section>
+            <div class="total-strip">
+              <div id="totalsHost" class="field !h-auto py-2 font-bold text-sm"></div>
+              <div><div class="lbl">الإجمالي النهائي (قابل للتعديل)</div><input id="finalTotal" type="number" step="0.01" class="field w-full" /></div>
+              <button id="saveBtn" class="cmd cmd-primary">حفظ</button>
+              <button id="printCurrentBtn" class="cmd">طباعة</button>
+              <button id="resetBtn" class="cmd">جديد</button>
+            </div>
+          </section>
+        </div>
+
+        <aside class="side-pad">
+          <div class="pad-box">
+            <div class="pad-title">بحث بالفواتير</div>
+            <input id="searchInput" class="field w-full mb-2" placeholder="بحث..." />
+            <div class="lbl text-slate-200">خصم الفاتورة</div>
+            <input id="discount" type="number" step="0.01" class="field w-full" />
+          </div>
+          <div class="pad-box">
+            <div class="pad-title">أوامر سريعة</div>
+            <div class="quick-actions">
+              <button class="k" id="quickCash">دفع نقدي</button>
+              <button class="k" id="quickTransfer">تحويل</button>
+              <button class="k" id="quickCredit">آجل</button>
+              <button class="k" id="quickAdd">إضافة بند</button>
+            </div>
+          </div>
+          <div class="pad-box">
+            <div class="pad-title">لوحة الأرقام</div>
+            <div class="keypad">
+              <button class="k" data-key="7">7</button><button class="k" data-key="8">8</button><button class="k" data-key="9">9</button>
+              <button class="k" data-key="4">4</button><button class="k" data-key="5">5</button><button class="k" data-key="6">6</button>
+              <button class="k" data-key="1">1</button><button class="k" data-key="2">2</button><button class="k" data-key="3">3</button>
+              <button class="k wide" data-key="0">0</button><button class="k" data-key=".">.</button>
+            </div>
+          </div>
+        </aside>
       </div>
-    </section>
 
-    <section class="panel p-2 overflow-auto">
-      <div id="host"></div>
-    </section>
+      <section class="recent-panel p-2">
+        <div id="host"></div>
+      </section>
+    </div>
   </div>
   <div id="toast" class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-50 text-white text-sm font-bold px-4 py-2 rounded-xl shadow-lg"></div>
 
@@ -407,6 +448,18 @@
       document.getElementById("searchInput").addEventListener("input", renderSales);
       document.getElementById("discount").addEventListener("input", renderCart);
       document.getElementById("tax").addEventListener("input", () => { recalcCartByRate(); renderCart(); });
+      document.getElementById("quickCash").addEventListener("click", () => { document.getElementById("pay").value = "cash"; });
+      document.getElementById("quickTransfer").addEventListener("click", () => { document.getElementById("pay").value = "transfer"; });
+      document.getElementById("quickCredit").addEventListener("click", () => { document.getElementById("pay").value = "credit"; });
+      document.getElementById("quickAdd").addEventListener("click", () => { document.getElementById("addLineBtn").click(); });
+      document.querySelectorAll("[data-key]").forEach((btn) => btn.addEventListener("click", () => {
+        const el = document.activeElement;
+        if (!el || !(el instanceof HTMLInputElement) || el.type === "date") return;
+        if (el.readOnly || el.disabled) return;
+        const k = btn.getAttribute("data-key") || "";
+        el.value = `${el.value || ""}${k}`;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      }));
       document.getElementById("finalTotal").addEventListener("input", () => {
         const t = totals();
         const wanted = Number(document.getElementById("finalTotal").value || 0);
