@@ -7,7 +7,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from ..auth_core import require_csrf, require_user
+from ..auth_core import log_event, require_csrf, require_user
 from ..db import SessionLocal
 from ..models import BranchTransfer, BranchTransferLine, Item, Purchase, PurchaseLine, Sale, SaleLine, StockAdjustment, StockMovement
 from ..models import Branch, Customer, Supplier
@@ -94,6 +94,7 @@ class SaleCreate(BaseModel):
     notes: str = ""
     seller_name: str = ""
     branch_name: str = ""
+    allow_negative_stock: bool = False
     lines: list[SaleLineIn]
 
 
@@ -153,6 +154,13 @@ def _parse_date(v: str, field_name: str) -> dt.datetime:
         return dt.datetime.strptime((v or "").strip(), "%Y-%m-%d")
     except Exception:
         raise HTTPException(400, f"{field_name} يجب أن يكون بصيغة YYYY-MM-DD")
+
+
+def _can_override_stock(user: Any) -> bool:
+    if int(getattr(user, "is_admin", 0) or 0) == 1:
+        return True
+    role = (getattr(user, "role_name", "") or "").strip().lower()
+    return role in {"admin", "manager"}
 
 
 def _fmt_date(v: Any) -> str:
@@ -445,6 +453,7 @@ def create_purchase(request: Request, body: PurchaseCreate = Body(...)):
         rec.total_amount = round(max(0.0, gross - rec.discount), 2)
         rec.due_amount = round(max(0.0, rec.total_amount - rec.paid_amount), 2)
         db.commit()
+        log_event(db, "trade.purchase.create", user.id, {"purchase_id": rec.id, "invoice_no": rec.invoice_no, "total_amount": rec.total_amount})
         return {"id": rec.id, "total_amount": rec.total_amount, "due_amount": rec.due_amount}
     finally:
         db.close()
@@ -537,7 +546,8 @@ def create_sale(request: Request, body: SaleCreate = Body(...)):
                 continue
             item = item_by_id[ln.item_id]
             available = round(float(item.quantity or 0.0), 4)
-            if available + 0.0001 < qty:
+            allow_negative_stock = bool(body.allow_negative_stock and _can_override_stock(user))
+            if available + 0.0001 < qty and not allow_negative_stock:
                 raise HTTPException(400, f"المخزون غير كافٍ للصنف: {item.name}")
             unit_cost = _avg_cost(db, user.id, ln.item_id)
             cost_total = round(unit_cost * qty, 2)
@@ -564,6 +574,7 @@ def create_sale(request: Request, body: SaleCreate = Body(...)):
         rec.tax_amount = round(sum(float(x.tax_amount or 0.0) for x in db.query(SaleLine).filter(SaleLine.sale_id == rec.id).all()), 2)
         rec.due_amount = round(max(0.0, rec.total_amount - rec.paid_amount), 2)
         db.commit()
+        log_event(db, "trade.sale.create", user.id, {"sale_id": rec.id, "invoice_no": rec.invoice_no, "total_amount": rec.total_amount})
         return {"id": rec.id, "total_amount": rec.total_amount}
     finally:
         db.close()
@@ -869,6 +880,7 @@ def create_sale_return(request: Request, body: SaleReturnCreate = Body(...)):
             total += line_total
         ret.total_amount = round(total, 2)
         db.commit()
+        log_event(db, "trade.sale_return.create", user.id, {"return_id": ret.id, "reference_sale_id": rec_sale.id, "total_amount": ret.total_amount})
         return {"id": ret.id, "total_amount": ret.total_amount}
     finally:
         db.close()
@@ -941,6 +953,7 @@ def create_purchase_return(request: Request, body: PurchaseReturnCreate = Body(.
             total += line_total
         ret.total_amount = round(total, 2)
         db.commit()
+        log_event(db, "trade.purchase_return.create", user.id, {"return_id": ret.id, "reference_purchase_id": rec_purchase.id, "total_amount": ret.total_amount})
         return {"id": ret.id, "total_amount": ret.total_amount}
     finally:
         db.close()
@@ -997,7 +1010,8 @@ def update_sale(sale_id: str, request: Request, body: SaleUpdate = Body(...)):
                 continue
             item = item_by_id[ln.item_id]
             available = round(float(item.quantity or 0.0), 4)
-            if available + 0.0001 < qty:
+            allow_negative_stock = bool(body.allow_negative_stock and _can_override_stock(user))
+            if available + 0.0001 < qty and not allow_negative_stock:
                 raise HTTPException(400, f"المخزون غير كافٍ للصنف: {item.name}")
             unit_cost = _avg_cost(db, user.id, ln.item_id)
             cost_total = round(unit_cost * qty, 2)
@@ -1034,6 +1048,7 @@ def update_sale(sale_id: str, request: Request, body: SaleUpdate = Body(...)):
         sale.tax_amount = round(sum(float(x.tax_amount or 0.0) for x in db.query(SaleLine).filter(SaleLine.sale_id == sale.id).all()), 2)
         sale.due_amount = round(max(0.0, sale.total_amount - sale.paid_amount), 2)
         db.commit()
+        log_event(db, "trade.sale.update", user.id, {"sale_id": sale.id, "invoice_no": sale.invoice_no, "total_amount": sale.total_amount})
         return {"id": sale.id, "total_amount": sale.total_amount, "updated": True}
     finally:
         db.close()
@@ -1051,6 +1066,7 @@ def delete_sale(sale_id: str, request: Request):
         _reverse_sale_effects(db, user.id, sale.id)
         db.delete(sale)
         db.commit()
+        log_event(db, "trade.sale.delete", user.id, {"sale_id": sale_id, "invoice_no": sale.invoice_no})
         return {"deleted": True}
     finally:
         db.close()
@@ -1130,6 +1146,7 @@ def inventory_adjust(request: Request, body: StockAdjustCreate = Body(...)):
             )
         )
         db.commit()
+        log_event(db, "trade.inventory.adjust", user.id, {"item_id": item.id, "qty_before": before, "qty_after": after, "difference": diff})
         return {"ok": True, "qty_before": before, "qty_after": after, "difference": diff}
     finally:
         db.close()
