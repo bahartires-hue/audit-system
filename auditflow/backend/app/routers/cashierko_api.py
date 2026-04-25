@@ -747,6 +747,24 @@ def create_expense(request: Request, body: ExpenseIn = Body(...)):
         db.close()
 
 
+@router.delete("/expenses/{expense_id}")
+def delete_expense(expense_id: str, request: Request):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        _require_roles(user, {"admin", "manager", "accountant"})
+        rec = db.query(Expense).filter(Expense.user_id == user.id, Expense.id == expense_id).first()
+        if not rec:
+            raise HTTPException(404, "المصروف غير موجود")
+        db.delete(rec)
+        db.commit()
+        log_event(db, "cashierko.expense.delete", user.id, {"expense_id": expense_id})
+        return {"deleted": True}
+    finally:
+        db.close()
+
+
 @router.get("/settings")
 def get_cashierko_settings(request: Request):
     db = SessionLocal()

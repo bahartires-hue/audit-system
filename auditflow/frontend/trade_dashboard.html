@@ -99,17 +99,25 @@
         async function loadSummary() {
           const from = document.getElementById("fromDate").value || "";
           const to = document.getElementById("toDate").value || "";
-          const [d1, d2] = await Promise.all([
+          const [d1, d2, pr, ex] = await Promise.all([
             apiGet(`/api/trade/dashboard-summary?date_from=${encodeURIComponent(from)}&date_to=${encodeURIComponent(to)}`),
             apiGet("/api/cashierko/dashboard/overview"),
+            apiGet(`/api/trade/reports/profit?date_from=${encodeURIComponent(from)}&date_to=${encodeURIComponent(to)}`),
+            apiGet(`/api/cashierko/expenses?date_from=${encodeURIComponent(from)}&date_to=${encodeURIComponent(to)}&limit=500`),
           ]);
           const t = d1.totals || {};
           const c = d2.totals || {};
+          const p = (pr && pr.totals) || {};
+          const expenses = Number((ex && ex.totals && ex.totals.amount) || 0);
+          const profitBefore = Number(p.profit || 0);
+          const profitAfter = profitBefore - expenses;
           document.getElementById("summaryCards").innerHTML = [
-            card("المبيعات", Number(t.sales || 0).toFixed(2)),
-            card("العملاء الجدد", Number(c.sales_invoices_today || 0)),
-            card("مدفوعات العملاء", Number(t.sales || 0).toFixed(2)),
-            card("المخزون", Number(c.inventory_value || 0).toFixed(2)),
+            card("إجمالي المبيعات", Number(t.sales || 0).toFixed(2)),
+            card("إجمالي المشتريات", Number(t.purchases || 0).toFixed(2)),
+            card("إجمالي المصروفات", expenses.toFixed(2)),
+            card("الربح بعد المصروفات", profitAfter.toFixed(2)),
+            card("قيمة المخزون", Number(t.inventory_value || c.inventory_value || 0).toFixed(2)),
+            card("الأصناف الناقصة", Number(c.low_stock_items || 0)),
           ].join("");
           const recentSales = d2.recent_sales || [];
           const recentPurchases = d2.recent_purchases || [];
@@ -121,8 +129,8 @@
             : `<div class="opacity-70 text-sm">لا توجد مشتريات</div>`;
           document.getElementById("extraStatsHost").innerHTML = [
             `<div class="soft-card"><div class="text-xs opacity-70">عدد الفواتير اليوم</div><div class="text-2xl font-extrabold">${Number(c.sales_invoices_today || 0)}</div></div>`,
-            `<div class="soft-card"><div class="text-xs opacity-70">أصناف ناقصة</div><div class="text-2xl font-extrabold">${Number(c.low_stock_items || 0)}</div></div>`,
-            `<div class="soft-card"><div class="text-xs opacity-70">قيمة المخزون</div><div class="text-2xl font-extrabold">${Number(c.inventory_value || 0).toFixed(2)}</div></div>`,
+            `<div class="soft-card"><div class="text-xs opacity-70">الربح قبل المصروفات</div><div class="text-2xl font-extrabold">${profitBefore.toFixed(2)}</div></div>`,
+            `<div class="soft-card"><div class="text-xs opacity-70">قيمة المخزون</div><div class="text-2xl font-extrabold">${Number(t.inventory_value || c.inventory_value || 0).toFixed(2)}</div></div>`,
           ].join("");
         }
         const now = new Date();
