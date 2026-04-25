@@ -205,6 +205,14 @@ def _returned_qty(db: Any, user_id: str, reference_type: str, reference_id: str,
     return round(sum(float(ln.qty or 0.0) for ln, _ in rows), 4)
 
 
+def _safe_div(a: float, b: float) -> float:
+    aa = float(a or 0.0)
+    bb = float(b or 0.0)
+    if abs(bb) < 1e-9:
+        return 0.0
+    return aa / bb
+
+
 def _reverse_sale_effects(db: Any, user_id: str, sale_id: str) -> None:
     sale_lines = db.query(SaleLine).filter(SaleLine.sale_id == sale_id).all()
     item_ids = {x.item_id for x in sale_lines}
@@ -1459,6 +1467,121 @@ def item_movement_report(
                 "qty_out": round(qty_out, 4),
                 "balance_qty": round(float(item.quantity or 0.0), 4),
             },
+        }
+    finally:
+        db.close()
+
+
+@router.get("/reports/tax-return")
+def tax_return_report(request: Request, date_from: str = Query(""), date_to: str = Query("")):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        df = _parse_date(date_from, "date_from") if (date_from or "").strip() else None
+        dt_to = _parse_date(date_to, "date_to") if (date_to or "").strip() else None
+
+        sales_q = db.query(Sale).filter(Sale.user_id == user.id)
+        purchases_q = db.query(Purchase).filter(Purchase.user_id == user.id)
+        sale_ret_q = db.query(ReturnTxn).filter(ReturnTxn.user_id == user.id, ReturnTxn.return_type == "sale_return")
+        purchase_ret_q = db.query(ReturnTxn).filter(ReturnTxn.user_id == user.id, ReturnTxn.return_type == "purchase_return")
+        if df:
+            sales_q = sales_q.filter(Sale.sale_date >= df)
+            purchases_q = purchases_q.filter(Purchase.purchase_date >= df)
+            sale_ret_q = sale_ret_q.filter(ReturnTxn.return_date >= df)
+            purchase_ret_q = purchase_ret_q.filter(ReturnTxn.return_date >= df)
+        if dt_to:
+            sales_q = sales_q.filter(Sale.sale_date <= dt_to)
+            purchases_q = purchases_q.filter(Purchase.purchase_date <= dt_to)
+            sale_ret_q = sale_ret_q.filter(ReturnTxn.return_date <= dt_to)
+            purchase_ret_q = purchase_ret_q.filter(ReturnTxn.return_date <= dt_to)
+
+        sales_rows = sales_q.all()
+        purchase_rows = purchases_q.all()
+        sale_returns = sale_ret_q.all()
+        purchase_returns = purchase_ret_q.all()
+
+        sales_taxable_before = round(sum(max(0.0, float(x.total_amount or 0.0) - float(x.tax_amount or 0.0)) for x in sales_rows), 2)
+        sales_tax = round(sum(float(x.tax_amount or 0.0) for x in sales_rows), 2)
+        sales_total_with_tax = round(sum(float(x.total_amount or 0.0) for x in sales_rows), 2)
+
+        purchases_taxable_before = round(sum(max(0.0, float(x.total_amount or 0.0) - float(x.tax_amount or 0.0)) for x in purchase_rows), 2)
+        purchases_tax = round(sum(float(x.tax_amount or 0.0) for x in purchase_rows), 2)
+        purchases_total_with_tax = round(sum(float(x.total_amount or 0.0) for x in purchase_rows), 2)
+
+        sales_by_id = {x.id: x for x in sales_rows}
+        purchases_by_id = {x.id: x for x in purchase_rows}
+
+        sale_ret_total = 0.0
+        sale_ret_tax = 0.0
+        for r in sale_returns:
+            amt = float(r.total_amount or 0.0)
+            sale_ret_total += amt
+            ref = sales_by_id.get(r.reference_id)
+            if ref:
+                ratio = _safe_div(float(ref.tax_amount or 0.0), max(0.0, float(ref.total_amount or 0.0)))
+                sale_ret_tax += round(amt * ratio, 2)
+
+        purchase_ret_total = 0.0
+        purchase_ret_tax = 0.0
+        for r in purchase_returns:
+            amt = float(r.total_amount or 0.0)
+            purchase_ret_total += amt
+            ref = purchases_by_id.get(r.reference_id)
+            if ref:
+                ratio = _safe_div(float(ref.tax_amount or 0.0), max(0.0, float(ref.total_amount or 0.0)))
+                purchase_ret_tax += round(amt * ratio, 2)
+
+        sale_ret_total = round(sale_ret_total, 2)
+        sale_ret_tax = round(sale_ret_tax, 2)
+        sale_ret_before = round(max(0.0, sale_ret_total - sale_ret_tax), 2)
+
+        purchase_ret_total = round(purchase_ret_total, 2)
+        purchase_ret_tax = round(purchase_ret_tax, 2)
+        purchase_ret_before = round(max(0.0, purchase_ret_total - purchase_ret_tax), 2)
+
+        net_sales_before = round(max(0.0, sales_taxable_before - sale_ret_before), 2)
+        net_sales_tax = round(max(0.0, sales_tax - sale_ret_tax), 2)
+
+        net_purchases_before = round(max(0.0, purchases_taxable_before - purchase_ret_before), 2)
+        net_purchases_tax = round(max(0.0, purchases_tax - purchase_ret_tax), 2)
+
+        net_tax_due = round(net_sales_tax - net_purchases_tax, 2)
+
+        settings_row = db.query(AppSetting).filter(AppSetting.key == f"cashierko_settings:{user.id}").first()
+        settings = settings_row.value_json if settings_row and isinstance(settings_row.value_json, dict) else {}
+
+        return {
+            "company": {
+                "shop_name": settings.get("shop_name", "SmartPOS"),
+                "tax_number": settings.get("tax_number", ""),
+                "address": settings.get("address", ""),
+            },
+            "period": {"date_from": _fmt_date(df) if df else "", "date_to": _fmt_date(dt_to) if dt_to else ""},
+            "output_vat": {
+                "sales_before_tax": sales_taxable_before,
+                "sales_tax": sales_tax,
+                "sales_with_tax": sales_total_with_tax,
+                "returns_before_tax": sale_ret_before,
+                "returns_tax": sale_ret_tax,
+                "net_sales_before_tax": net_sales_before,
+                "net_sales_tax": net_sales_tax,
+            },
+            "input_vat": {
+                "purchases_before_tax": purchases_taxable_before,
+                "purchases_tax": purchases_tax,
+                "purchases_with_tax": purchases_total_with_tax,
+                "returns_before_tax": purchase_ret_before,
+                "returns_tax": purchase_ret_tax,
+                "net_purchases_before_tax": net_purchases_before,
+                "net_purchases_tax": net_purchases_tax,
+            },
+            "net_vat": {
+                "net_tax_due": net_tax_due,
+                "status": "payable" if net_tax_due >= 0 else "credit",
+                "payable_amount": net_tax_due if net_tax_due >= 0 else 0.0,
+                "credit_amount": abs(net_tax_due) if net_tax_due < 0 else 0.0,
+            },
+            "generated_at": dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
         }
     finally:
         db.close()
