@@ -27,6 +27,7 @@ class ItemCreate(BaseModel):
     color: str = ""
     item_condition: str = ""
     location: str = ""
+    unit: str = "قطعة"
     is_set: bool = False
     default_sale_price: float = 0.0
     notes: str = ""
@@ -43,6 +44,7 @@ class ItemUpdate(BaseModel):
     color: Optional[str] = None
     item_condition: Optional[str] = None
     location: Optional[str] = None
+    unit: Optional[str] = None
     is_set: Optional[bool] = None
     default_sale_price: Optional[float] = None
     notes: Optional[str] = None
@@ -247,6 +249,7 @@ def list_items(request: Request, q: str = Query("")):
                     "color": r.color or "",
                     "item_condition": r.item_condition or "",
                     "location": r.location or "",
+                    "unit": r.unit or "قطعة",
                     "branch_id": r.branch_id or "",
                     "category_id": r.category_id or "",
                     "is_set": bool(int(r.is_set or 0)),
@@ -287,6 +290,7 @@ def create_item(request: Request, body: ItemCreate = Body(...)):
             color=(body.color or "").strip() or None,
             item_condition=(body.item_condition or "").strip() or None,
             location=(body.location or "").strip() or None,
+            unit=(body.unit or "قطعة").strip() or "قطعة",
             is_set=1 if body.is_set else 0,
             quantity=0.0,
             default_sale_price=round(abs(float(body.default_sale_price or 0.0)), 2),
@@ -318,11 +322,14 @@ def update_item(item_id: str, request: Request, body: ItemUpdate = Body(...)):
             if dup:
                 raise HTTPException(400, "كود الصنف مستخدم مسبقاً")
             rec.code = code
-        for k in ("name", "category", "brand", "size", "pcd", "color", "item_condition", "location", "notes", "image_url"):
+        for k in ("name", "category", "brand", "size", "pcd", "color", "item_condition", "location", "unit", "notes", "image_url"):
             v = getattr(body, k)
             if v is not None:
                 vv = str(v).strip()
-                setattr(rec, k, vv if vv else None)
+                if k == "unit":
+                    setattr(rec, k, vv if vv else "قطعة")
+                else:
+                    setattr(rec, k, vv if vv else None)
         if body.name is not None and not (body.name or "").strip():
             raise HTTPException(400, "name لا يمكن أن يكون فارغاً")
         if body.name is not None:

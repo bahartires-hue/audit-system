@@ -115,7 +115,7 @@
       (function () {
         let items = [];
         let cart = [];
-        let appSettings = { shop_name: "PrimePOS", currency: "SAR", print_size: "A4", thermal_header: "شكراً لزيارتكم" };
+        let appSettings = { shop_name: "SmartPOS", currency: "SAR", print_size: "A4", thermal_header: "شكراً لزيارتكم" };
         let topItemIds = [];
         function esc(s) { return String(s == null ? "" : s); }
         function money(v) { return Number(v || 0).toFixed(2); }
@@ -200,7 +200,7 @@
           const widthStyle = thermal ? "max-width:280px" : "max-width:900px";
           const baseStyle = thermal ? "font-size:12px;padding:6px" : "font-size:14px;padding:16px";
           const html = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>فاتورة ${data.invoice_no}</title><style>body{font-family:Arial;${baseStyle}} .invoice{${widthStyle};margin:0 auto} table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:${thermal ? "4px" : "6px"};text-align:right}</style></head><body><div class="invoice">
-            <h2>${esc(appSettings.shop_name || "PrimePOS")}</h2>
+            <h2>${esc(appSettings.shop_name || "SmartPOS")}</h2>
             <div>${esc(appSettings.thermal_header || "")}</div>
             <div>رقم الفاتورة: <b>${data.invoice_no}</b></div>
             <div>التاريخ: <b>${data.sale_date}</b></div>

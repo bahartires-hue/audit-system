@@ -8,11 +8,12 @@
       </div>
       <div class="rounded-xl border p-4 bg-white dark:bg-slate-950">
         <h1 class="text-xl font-extrabold mb-2">إضافة صنف</h1>
-        <div class="grid grid-cols-1 md:grid-cols-6 gap-2">
+        <div class="grid grid-cols-1 md:grid-cols-7 gap-2">
           <input id="code" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الكود" />
           <input id="name" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم الصنف" />
           <input id="brand" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الماركة" />
           <input id="size" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="المقاس" />
+          <select id="unit" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
           <select id="category" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"><option value="rim">جنط</option><option value="set">طقم</option><option value="accessory">اكسسوار</option></select>
           <button id="addBtn" class="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2">إضافة</button>
         </div>
@@ -27,17 +28,23 @@
       (async function () {
         await initAuthUI();
         function esc(s){return String(s==null?"":s);}
+        async function loadUnits(){
+          const d = await apiGet("/api/cashierko/units");
+          const rows = d.items || [];
+          const opts = rows.length ? rows : [{name:"قطعة"}];
+          document.getElementById("unit").innerHTML = opts.map((x)=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join("");
+        }
         async function load(){
           const d=await apiGet("/api/trade/items"); const rows=d.items||[];
-          document.getElementById("host").innerHTML=rows.length?`<div class="grid gap-1">${rows.map(x=>`<div class="rounded-lg border px-3 py-2">${esc(x.code)} — ${esc(x.name)} | ${esc(x.brand||"")} ${esc(x.size||"")} | الكمية ${esc(x.quantity)}</div>`).join("")}</div>`:`<div class="opacity-70">لا توجد أصناف</div>`;
+          document.getElementById("host").innerHTML=rows.length?`<div class="grid gap-1">${rows.map(x=>`<div class="rounded-lg border px-3 py-2">${esc(x.code)} — ${esc(x.name)} | ${esc(x.brand||"")} ${esc(x.size||"")} | الوحدة ${esc(x.unit||"قطعة")} | الكمية ${esc(x.quantity)}</div>`).join("")}</div>`:`<div class="opacity-70">لا توجد أصناف</div>`;
         }
         document.getElementById("addBtn").addEventListener("click",async()=>{
           try{
-            await apiPostJson("/api/trade/items",{code:document.getElementById("code").value||"",name:document.getElementById("name").value||"",brand:document.getElementById("brand").value||"",size:document.getElementById("size").value||"",category:document.getElementById("category").value||"rim"});
+            await apiPostJson("/api/trade/items",{code:document.getElementById("code").value||"",name:document.getElementById("name").value||"",brand:document.getElementById("brand").value||"",size:document.getElementById("size").value||"",unit:document.getElementById("unit").value||"قطعة",category:document.getElementById("category").value||"rim"});
             showToast("تمت الإضافة ✔️","#10b981"); await load();
           }catch(e){showToast(e.message||"فشل الإضافة","#ef4444");}
         });
-        await load();
+        await Promise.all([loadUnits(), load()]);
       })();
     </script>
   </body>

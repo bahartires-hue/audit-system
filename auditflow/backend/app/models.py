@@ -159,6 +159,17 @@ class Category(Base):
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
 
+class Unit(Base):
+    __tablename__ = "units"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    code = Column(String, nullable=False, index=True)
+    name = Column(String, nullable=False, index=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
 class Supplier(Base):
     __tablename__ = "suppliers"
 
@@ -202,6 +213,7 @@ class Item(Base):
     color = Column(String, nullable=True)
     item_condition = Column(String, nullable=True, index=True)
     location = Column(String, nullable=True, index=True)
+    unit = Column(String, nullable=False, default="قطعة", index=True)
     category_id = Column(String, ForeignKey("categories.id"), nullable=True, index=True)
     branch_id = Column(String, ForeignKey("branches.id"), nullable=True, index=True)
     is_set = Column(Integer, nullable=False, default=0, index=True)

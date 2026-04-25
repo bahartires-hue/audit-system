@@ -3,14 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>البيانات الأساسية | PrimePOS</title>
+    <title>البيانات الأساسية | SmartPOS</title>
     <link rel="stylesheet" href="/static/tailwind.css?v=9" />
     <link rel="stylesheet" href="/static/dark.css?v=9" />
   </head>
   <body class="bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
     <div class="max-w-[1500px] mx-auto p-4 space-y-4">
       <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-extrabold">البيانات الأساسية (PrimePOS)</h1>
+        <h1 class="text-2xl font-extrabold">البيانات الأساسية (SmartPOS)</h1>
         <div id="authArea"></div>
       </div>
 
@@ -49,6 +49,17 @@
             <button id="addCatBtn" class="rounded-xl border font-extrabold px-4 py-2">إضافة</button>
           </div>
           <div id="categoriesHost"></div>
+        </section>
+
+        <section class="rounded-xl border p-4 bg-white dark:bg-slate-950 space-y-2">
+          <h2 class="font-extrabold">الوحدات</h2>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <input id="unitCode" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="كود الوحدة" />
+            <input id="unitName" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم الوحدة (قطعة/كرتون...)" />
+            <input id="unitNotes" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="ملاحظات" />
+            <button id="addUnitBtn" class="rounded-xl border font-extrabold px-4 py-2">إضافة</button>
+          </div>
+          <div id="unitsHost"></div>
         </section>
 
         <section class="rounded-xl border p-4 bg-white dark:bg-slate-950 space-y-2">
@@ -129,6 +140,14 @@
           document.querySelectorAll("[data-cat-del]").forEach((b)=>b.onclick=async()=>{const id=b.getAttribute("data-cat-del");if(confirm("حذف التصنيف؟")){await apiDelete(`/api/cashierko/categories/${encodeURIComponent(id)}`);await loadCategories();}});
         }
 
+        async function loadUnits() {
+          const d = await apiGet("/api/cashierko/units");
+          const rows = d.items || [];
+          document.getElementById("unitsHost").innerHTML = rows.length ? `<div class="grid gap-1">${rows.map((x)=>`<div class="rounded-lg border p-2 flex items-center justify-between"><div>${esc(x.code)} - ${esc(x.name)}</div><div class="flex gap-1"><button class="rounded border px-2 py-1" data-unit-edit="${x.id}">تعديل</button><button class="rounded border px-2 py-1 text-red-600" data-unit-del="${x.id}">حذف</button></div></div>`).join("")}</div>` : `<div class="opacity-70">لا توجد وحدات</div>`;
+          document.querySelectorAll("[data-unit-edit]").forEach((b)=>b.onclick=async()=>{const id=b.getAttribute("data-unit-edit");const name=prompt("اسم الوحدة الجديد");if(name!=null){await apiPatchJson(`/api/cashierko/units/${encodeURIComponent(id)}`,{name});await loadUnits();}});
+          document.querySelectorAll("[data-unit-del]").forEach((b)=>b.onclick=async()=>{const id=b.getAttribute("data-unit-del");if(confirm("حذف الوحدة؟")){await apiDelete(`/api/cashierko/units/${encodeURIComponent(id)}`);await loadUnits();}});
+        }
+
         async function loadSuppliers() {
           const d = await apiGet("/api/cashierko/suppliers");
           const rows = d.items || [];
@@ -166,6 +185,13 @@
             await loadCategories();
           } catch (e) { showToast(e.message || "فشل إضافة التصنيف", "#ef4444"); }
         };
+        document.getElementById("addUnitBtn").onclick = async () => {
+          try {
+            await apiPostJson("/api/cashierko/units", { code: document.getElementById("unitCode").value || "", name: document.getElementById("unitName").value || "", notes: document.getElementById("unitNotes").value || "" });
+            showToast("تمت إضافة الوحدة ✔️", "#10b981");
+            await loadUnits();
+          } catch (e) { showToast(e.message || "فشل إضافة الوحدة", "#ef4444"); }
+        };
         document.getElementById("addSupBtn").onclick = async () => {
           try {
             await apiPostJson("/api/cashierko/suppliers", { name: document.getElementById("supName").value || "", phone: document.getElementById("supPhone").value || "", city: document.getElementById("supCity").value || "" });
@@ -195,7 +221,7 @@
         };
 
         document.getElementById("expDate").value = new Date().toISOString().slice(0,10);
-        await Promise.all([loadOverview(), loadBranches(), loadCategories(), loadSuppliers(), loadCustomers(), loadExpenses()]);
+        await Promise.all([loadOverview(), loadBranches(), loadCategories(), loadUnits(), loadSuppliers(), loadCustomers(), loadExpenses()]);
       })();
     </script>
   </body>

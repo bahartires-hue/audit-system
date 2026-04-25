@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from ..auth_core import log_event, require_csrf, require_user
 from ..db import SessionLocal
-from ..models import AppSetting, Branch, Category, Customer, Expense, Item, Purchase, Sale, Supplier, User
+from ..models import AppSetting, Branch, Category, Customer, Expense, Item, Purchase, Sale, Supplier, Unit, User
 
 router = APIRouter(prefix="/api/cashierko", tags=["cashierko"])
 
@@ -80,6 +80,12 @@ class CategoryIn(BaseModel):
     notes: str = ""
 
 
+class UnitIn(BaseModel):
+    code: str = Field(min_length=1, max_length=60)
+    name: str = Field(min_length=1, max_length=120)
+    notes: str = ""
+
+
 class PartyIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     phone: str = ""
@@ -109,6 +115,12 @@ class BranchPatch(BaseModel):
 
 
 class CategoryPatch(BaseModel):
+    code: Optional[str] = None
+    name: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class UnitPatch(BaseModel):
     code: Optional[str] = None
     name: Optional[str] = None
     notes: Optional[str] = None
@@ -323,6 +335,88 @@ def list_categories(request: Request):
         user = require_user(db, request)
         rows = db.query(Category).filter(Category.user_id == user.id).order_by(Category.created_at.desc()).all()
         return {"items": [{"id": x.id, "code": x.code, "name": x.name, "notes": x.notes or ""} for x in rows]}
+    finally:
+        db.close()
+
+
+@router.get("/units")
+def list_units(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = db.query(Unit).filter(Unit.user_id == user.id).order_by(Unit.created_at.desc()).all()
+        return {"items": [{"id": x.id, "code": x.code, "name": x.name, "notes": x.notes or ""} for x in rows]}
+    finally:
+        db.close()
+
+
+@router.post("/units")
+def create_unit(request: Request, body: UnitIn = Body(...)):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        _require_roles(user, {"admin", "manager", "inventory"})
+        rec = Unit(
+            id=uuid.uuid4().hex,
+            user_id=user.id,
+            code=body.code.strip(),
+            name=body.name.strip(),
+            notes=(body.notes or "").strip() or None,
+        )
+        db.add(rec)
+        db.commit()
+        log_event(db, "cashierko.unit.create", user.id, {"unit_id": rec.id})
+        return {"id": rec.id}
+    finally:
+        db.close()
+
+
+@router.patch("/units/{unit_id}")
+def patch_unit(unit_id: str, request: Request, body: UnitPatch = Body(...)):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        _require_roles(user, {"admin", "manager", "inventory"})
+        rec = db.query(Unit).filter(Unit.user_id == user.id, Unit.id == unit_id).first()
+        if not rec:
+            raise HTTPException(404, "الوحدة غير موجودة")
+        old_name = rec.name
+        if body.code is not None:
+            rec.code = body.code.strip()
+        if body.name is not None:
+            rec.name = body.name.strip()
+        if body.notes is not None:
+            rec.notes = (body.notes or "").strip() or None
+        if rec.name != old_name:
+            linked_items = db.query(Item).filter(Item.user_id == user.id, Item.unit == old_name).all()
+            for it in linked_items:
+                it.unit = rec.name
+        db.commit()
+        log_event(db, "cashierko.unit.patch", user.id, {"unit_id": rec.id})
+        return {"ok": True}
+    finally:
+        db.close()
+
+
+@router.delete("/units/{unit_id}")
+def delete_unit(unit_id: str, request: Request):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        _require_roles(user, {"admin", "manager", "inventory"})
+        rec = db.query(Unit).filter(Unit.user_id == user.id, Unit.id == unit_id).first()
+        if not rec:
+            raise HTTPException(404, "الوحدة غير موجودة")
+        linked = db.query(Item).filter(Item.user_id == user.id, Item.unit == rec.name).first()
+        if linked:
+            raise HTTPException(400, "لا يمكن حذف وحدة مرتبطة بأصناف")
+        db.delete(rec)
+        db.commit()
+        log_event(db, "cashierko.unit.delete", user.id, {"unit_id": unit_id})
+        return {"deleted": True}
     finally:
         db.close()
 
@@ -661,7 +755,7 @@ def get_cashierko_settings(request: Request):
         key = f"cashierko_settings:{user.id}"
         row = db.query(AppSetting).filter(AppSetting.key == key).first()
         defaults = {
-            "shop_name": "PrimePOS",
+            "shop_name": "SmartPOS",
             "logo_url": "",
             "phone": "",
             "address": "",

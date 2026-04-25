@@ -25,6 +25,7 @@ def _migrate_postgresql() -> None:
         "ALTER TABLE items ADD COLUMN IF NOT EXISTS is_unique INTEGER DEFAULT 0",
         "ALTER TABLE items ADD COLUMN IF NOT EXISTS needs_service INTEGER DEFAULT 0",
         "ALTER TABLE items ADD COLUMN IF NOT EXISTS min_qty DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE items ADD COLUMN IF NOT EXISTS unit VARCHAR DEFAULT 'قطعة'",
         # purchases
         "ALTER TABLE purchases ADD COLUMN IF NOT EXISTS branch_id VARCHAR",
         "ALTER TABLE purchases ADD COLUMN IF NOT EXISTS supplier_id VARCHAR",
@@ -138,6 +139,8 @@ def run_migrations() -> None:
                 conn.execute(text("ALTER TABLE items ADD COLUMN needs_service INTEGER DEFAULT 0"))
             if "min_qty" not in item_cols:
                 conn.execute(text("ALTER TABLE items ADD COLUMN min_qty REAL DEFAULT 0"))
+            if "unit" not in item_cols:
+                conn.execute(text("ALTER TABLE items ADD COLUMN unit VARCHAR DEFAULT 'قطعة'"))
 
         r_purchase = conn.execute(text("PRAGMA table_info(purchases)"))
         purchase_cols = [row[1] for row in r_purchase.fetchall()]
