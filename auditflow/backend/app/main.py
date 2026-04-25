@@ -144,7 +144,7 @@ def ui_convert(request: Request):
 
 @app.get("/trade", response_class=HTMLResponse)
 def ui_trade_dashboard(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_dashboard.html")
+    return _require_login_page(request, FRONTEND_DIR / "trade_sales.html")
 
 
 @app.get("/trade/items", response_class=HTMLResponse)
