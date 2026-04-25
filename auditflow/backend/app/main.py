@@ -23,6 +23,7 @@ from .models import AnalysisReport, User, init_db
 from .rate_limit import limiter
 from .routers.auth_api import router as auth_router
 from .routers.cashierko_api import router as cashierko_router
+from .routers.smartpos_v2_api import router as smartpos_v2_router
 from .routers.trade_api import router as trade_router
 from .services.analyzer import analyze as analyze_pairs
 from .services.analyzer import compute_summary, process
@@ -94,6 +95,7 @@ app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 app.include_router(auth_router)
 app.include_router(trade_router)
 app.include_router(cashierko_router)
+app.include_router(smartpos_v2_router)
 
 init_db()
 
