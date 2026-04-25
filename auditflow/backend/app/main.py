@@ -64,7 +64,7 @@ async def ui_cache_headers(request: Request, call_next):
     if path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-store, max-age=0, must-revalidate"
         response.headers["Pragma"] = "no-cache"
-    elif path in ("/", "/analyze", "/convert", "/accounting", "/settings", "/login", "/reports", "/help", "/terms", "/privacy", "/user-agreement", "/about", "/contact", "/social") or path.startswith("/report"):
+    elif path in ("/", "/analyze", "/convert", "/settings", "/login", "/reports", "/help", "/terms", "/privacy", "/user-agreement", "/about", "/contact", "/social") or path.startswith("/report"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
@@ -138,11 +138,6 @@ def ui_analyze(request: Request):
 @app.get("/convert", response_class=HTMLResponse)
 def ui_convert(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "convert.html")
-
-
-@app.get("/accounting", response_class=HTMLResponse)
-def ui_accounting(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_dashboard.html")
 
 
 @app.get("/trade", response_class=HTMLResponse)

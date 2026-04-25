@@ -824,7 +824,6 @@ function initNavAndTheme() {
   let key = "home";
   if (path.startsWith("/analyze")) key = "analyze";
   else if (path.startsWith("/convert")) key = "convert";
-  else if (path.startsWith("/accounting")) key = "accounting";
   else if (path.startsWith("/reports")) key = "reports";
   else if (path.startsWith("/report")) key = "reports";
   else if (path.startsWith("/settings")) key = "settings";
@@ -838,9 +837,7 @@ function initNavAndTheme() {
 
   const sidebar = document.querySelector(".erp-sidebar__nav");
   const mobileDrawer = document.getElementById("mobileNavDrawer");
-  const coreLinks = [
-    { href: "/accounting", nav: "accounting", title: "المحاسبة", text: "المحاسبة" },
-  ];
+  const coreLinks = [];
   const legalLinks = [
     { href: "/terms", nav: "terms", title: "شروط الاستخدام", text: "شروط الاستخدام" },
     { href: "/privacy", nav: "privacy", title: "سياسة الخصوصية", text: "سياسة الخصوصية" },
