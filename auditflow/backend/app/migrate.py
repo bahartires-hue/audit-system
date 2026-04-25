@@ -20,12 +20,16 @@ def _migrate_postgresql() -> None:
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences_json JSON DEFAULT '{}'::json",
         # items
         "ALTER TABLE items ADD COLUMN IF NOT EXISTS bolt_pattern VARCHAR",
+        "ALTER TABLE items ADD COLUMN IF NOT EXISTS barcode VARCHAR",
         "ALTER TABLE items ADD COLUMN IF NOT EXISTS category_id VARCHAR",
         "ALTER TABLE items ADD COLUMN IF NOT EXISTS branch_id VARCHAR",
         "ALTER TABLE items ADD COLUMN IF NOT EXISTS is_unique INTEGER DEFAULT 0",
         "ALTER TABLE items ADD COLUMN IF NOT EXISTS needs_service INTEGER DEFAULT 0",
         "ALTER TABLE items ADD COLUMN IF NOT EXISTS min_qty DOUBLE PRECISION DEFAULT 0",
         "ALTER TABLE items ADD COLUMN IF NOT EXISTS unit VARCHAR DEFAULT 'قطعة'",
+        "ALTER TABLE items ADD COLUMN IF NOT EXISTS is_taxable INTEGER DEFAULT 1",
+        "ALTER TABLE items ADD COLUMN IF NOT EXISTS tax_rate DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE items ADD COLUMN IF NOT EXISTS is_active INTEGER DEFAULT 1",
         # purchases
         "ALTER TABLE purchases ADD COLUMN IF NOT EXISTS branch_id VARCHAR",
         "ALTER TABLE purchases ADD COLUMN IF NOT EXISTS supplier_id VARCHAR",
@@ -129,6 +133,8 @@ def run_migrations() -> None:
         if item_cols:
             if "bolt_pattern" not in item_cols:
                 conn.execute(text("ALTER TABLE items ADD COLUMN bolt_pattern VARCHAR"))
+            if "barcode" not in item_cols:
+                conn.execute(text("ALTER TABLE items ADD COLUMN barcode VARCHAR"))
             if "category_id" not in item_cols:
                 conn.execute(text("ALTER TABLE items ADD COLUMN category_id VARCHAR"))
             if "branch_id" not in item_cols:
@@ -141,6 +147,12 @@ def run_migrations() -> None:
                 conn.execute(text("ALTER TABLE items ADD COLUMN min_qty REAL DEFAULT 0"))
             if "unit" not in item_cols:
                 conn.execute(text("ALTER TABLE items ADD COLUMN unit VARCHAR DEFAULT 'قطعة'"))
+            if "is_taxable" not in item_cols:
+                conn.execute(text("ALTER TABLE items ADD COLUMN is_taxable INTEGER DEFAULT 1"))
+            if "tax_rate" not in item_cols:
+                conn.execute(text("ALTER TABLE items ADD COLUMN tax_rate REAL DEFAULT 0"))
+            if "is_active" not in item_cols:
+                conn.execute(text("ALTER TABLE items ADD COLUMN is_active INTEGER DEFAULT 1"))
 
         r_purchase = conn.execute(text("PRAGMA table_info(purchases)"))
         purchase_cols = [row[1] for row in r_purchase.fetchall()]

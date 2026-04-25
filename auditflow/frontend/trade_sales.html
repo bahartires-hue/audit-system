@@ -48,16 +48,22 @@
             <div class="head-grid">
               <div><div class="lbl">رقم الفاتورة</div><input id="no" class="field w-full" placeholder="14916" /></div>
               <div><div class="lbl">التاريخ</div><input id="date" type="date" class="field w-full" /></div>
-              <div><div class="lbl">طريقة الدفع</div><select id="pay" class="field w-full"><option value="cash">نقد</option><option value="transfer">تحويل</option><option value="credit">آجل</option></select></div>
+              <div><div class="lbl">طريقة الدفع</div><select id="pay" class="field w-full"><option value="cash">نقد</option><option value="network">شبكة</option><option value="transfer">تحويل</option><option value="credit">آجل</option><option value="mixed">مختلط</option></select></div>
               <div><div class="lbl">العميل</div><input id="customer" class="field w-full" placeholder="عميل عام" /></div>
               <div><div class="lbl">الرقم الضريبي</div><input id="customerTaxNo" class="field w-full" placeholder="VAT/TIN" /></div>
               <div><div class="lbl">الهاتف</div><input id="customerPhone" class="field w-full" placeholder="05xxxxxxxx" /></div>
               <div><div class="lbl">العنوان</div><input id="customerAddress" class="field w-full" placeholder="عنوان العميل" /></div>
             </div>
+            <div id="mixedPayBox" class="line-grid mt-2 hidden">
+              <div><div class="lbl">مختلط: نقد</div><input id="mixCash" type="number" step="0.01" class="field w-full" /></div>
+              <div><div class="lbl">مختلط: شبكة</div><input id="mixNetwork" type="number" step="0.01" class="field w-full" /></div>
+              <div><div class="lbl">مختلط: تحويل</div><input id="mixTransfer" type="number" step="0.01" class="field w-full" /></div>
+              <div><div class="lbl">المدفوع</div><input id="paidAmount" type="number" step="0.01" class="field w-full" /></div>
+            </div>
             <div class="line-grid mt-2">
               <div>
                 <div class="lbl">بحث الصنف</div>
-                <input id="itemSearchLine" class="field w-full" list="itemOptions" placeholder="اكتب الكود أو الاسم" />
+                <input id="itemSearchLine" class="field w-full" list="itemOptions" placeholder="اكتب الكود أو الاسم أو الباركود" />
                 <datalist id="itemOptions"></datalist>
                 <select id="item" class="hidden"></select>
               </div>
@@ -94,10 +100,20 @@
             <div class="pad-title">أوامر سريعة</div>
             <div class="quick-actions">
               <button class="k" id="quickCash">دفع نقدي</button>
+              <button class="k" id="quickNetwork">شبكة</button>
               <button class="k" id="quickTransfer">تحويل</button>
               <button class="k" id="quickCredit">آجل</button>
+              <button class="k" id="quickMixed">مختلط</button>
               <button class="k" id="quickAdd">إضافة بند</button>
             </div>
+          </div>
+          <div class="pad-box">
+            <div class="pad-title">الفواتير المعلقة</div>
+            <div class="quick-actions mb-2">
+              <button class="k" id="suspendBtn">تعليق الفاتورة</button>
+              <button class="k" id="reloadSuspBtn">تحديث</button>
+            </div>
+            <div id="suspendedHost" class="text-xs text-slate-200 max-h-48 overflow-auto"></div>
           </div>
           <div class="pad-box">
             <div class="pad-title">لوحة الأرقام</div>
@@ -125,7 +141,7 @@
 
       function esc(s) { return String(s == null ? "" : s); }
       function money(n) { return Number(n || 0).toFixed(2); }
-      function paymentLabel(v) { if (v === "cash") return "نقد"; if (v === "transfer") return "تحويل"; if (v === "credit") return "آجل"; return v || ""; }
+      function paymentLabel(v) { if (v === "cash") return "نقد"; if (v === "network") return "شبكة"; if (v === "transfer") return "تحويل"; if (v === "credit") return "آجل"; if (v === "mixed") return "مختلط"; return v || ""; }
 
       async function apiPutJson(url, body) {
         const csrf = localStorage.getItem("csrf_token") || "";
@@ -229,24 +245,54 @@
         document.getElementById("customerAddress").value = "";
         document.getElementById("date").value = new Date().toISOString().slice(0, 10);
         document.getElementById("pay").value = "cash";
+        document.getElementById("mixCash").value = "";
+        document.getElementById("mixNetwork").value = "";
+        document.getElementById("mixTransfer").value = "";
+        document.getElementById("paidAmount").value = "";
         document.getElementById("discount").value = "";
         document.getElementById("qty").value = "1";
         document.getElementById("tax").value = Number(appSettings.tax_rate || 0).toFixed(2);
         document.getElementById("finalTotal").value = "";
         document.getElementById("itemSearchLine").value = "";
         renderCart();
+        toggleMixedPay();
+      }
+
+      function toggleMixedPay() {
+        const isMixed = (document.getElementById("pay").value || "") === "mixed";
+        document.getElementById("mixedPayBox").classList.toggle("hidden", !isMixed);
+      }
+
+      function syncMixedPaid() {
+        if ((document.getElementById("pay").value || "") !== "mixed") return;
+        const v = round2(
+          Number(document.getElementById("mixCash").value || 0) +
+          Number(document.getElementById("mixNetwork").value || 0) +
+          Number(document.getElementById("mixTransfer").value || 0)
+        );
+        document.getElementById("paidAmount").value = money(v);
       }
 
       function payloadFromForm() {
+        const payType = document.getElementById("pay").value || "cash";
+        const mixCash = Number(document.getElementById("mixCash").value || 0);
+        const mixNetwork = Number(document.getElementById("mixNetwork").value || 0);
+        const mixTransfer = Number(document.getElementById("mixTransfer").value || 0);
+        const mixedTotal = round2(mixCash + mixNetwork + mixTransfer);
+        const paidAmount = payType === "mixed" ? mixedTotal : Number(document.getElementById("paidAmount").value || 0);
+        const notesParts = [];
+        if (payType === "mixed") notesParts.push(`mixed: cash=${mixCash}, network=${mixNetwork}, transfer=${mixTransfer}`);
         return {
           invoice_no: document.getElementById("no").value || `S-${Date.now()}`,
-          customer_name: document.getElementById("customer").value || "عميل نقدي",
+          customer_name: document.getElementById("customer").value || "",
           customer_tax_no: document.getElementById("customerTaxNo").value || "",
           customer_phone: document.getElementById("customerPhone").value || "",
           customer_address: document.getElementById("customerAddress").value || "",
           sale_date: document.getElementById("date").value || new Date().toISOString().slice(0, 10),
-          payment_type: document.getElementById("pay").value || "cash",
+          payment_type: payType,
           discount: Number(document.getElementById("discount").value || 0),
+          paid_amount: Number(paidAmount || 0),
+          notes: notesParts.join(" | "),
           lines: cart.map((x) => ({
             item_id: x.item_id,
             qty: Number(x.qty),
@@ -259,7 +305,7 @@
       function printInvoice(d) {
         const lines = d.lines || [];
         const thermal = String(appSettings.print_size || "A4").toLowerCase() === "80mm";
-        const html = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>فاتورة ${esc(d.invoice_no)}</title><style>body{font-family:Arial;padding:${thermal ? "6px" : "14px"};font-size:${thermal ? "12px" : "14px"}}.invoice{max-width:${thermal ? "280px" : "900px"};margin:0 auto}.invoice-head{text-align:center;margin-bottom:8px}.meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;direction:ltr;margin:8px 0}.meta-box{border:1px solid #ddd;border-radius:8px;padding:${thermal ? "4px" : "8px"};direction:rtl;text-align:right}.meta-title{font-weight:700;margin-bottom:4px}.meta-line{margin:2px 0}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ddd;padding:${thermal ? "4px" : "6px"};text-align:right}.thanks{margin-top:10px;text-align:center;font-weight:700}.sub{font-size:${thermal ? "11px" : "13px"};opacity:.85}@media print{.invoice{max-width:100%}}</style></head><body><div class="invoice"><div class="invoice-head"><h2>${esc(appSettings.shop_name || "SmartPOS")}</h2><div class="sub">${esc(appSettings.thermal_header || "")}</div><div>رقم الفاتورة: <b>${esc(d.invoice_no)}</b> | التاريخ: <b>${esc(d.sale_date)}</b> | الدفع: <b>${esc(paymentLabel(d.payment_type))}</b></div></div><div class="meta-grid"><div class="meta-box"><div class="meta-title">بيانات الشركة</div><div class="meta-line">الاسم: <b>${esc(appSettings.shop_name || "SmartPOS")}</b></div><div class="meta-line">الرقم الضريبي: <b>${esc(appSettings.tax_number || "")}</b></div><div class="meta-line">السجل التجاري: <b>${esc(appSettings.commercial_register || "")}</b></div><div class="meta-line">العنوان: <b>${esc([appSettings.city || "", appSettings.country || "", appSettings.address || ""].filter(Boolean).join(" - "))}</b></div></div><div class="meta-box"><div class="meta-title">بيانات العميل</div><div class="meta-line">الاسم: <b>${esc(d.customer_name)}</b></div><div class="meta-line">الرقم الضريبي: <b>${esc(d.customer_tax_no || "")}</b></div><div class="meta-line">الهاتف: <b>${esc(d.customer_phone || "")}</b></div><div class="meta-line">العنوان: <b>${esc(d.customer_address || "")}</b></div></div></div><table><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر قبل الضريبة</th><th>الضريبة</th><th>الإجمالي</th></tr></thead><tbody>${lines.map((x)=>`<tr><td>${esc(x.item_code)} - ${esc(x.item_name)}</td><td>${esc(x.qty)}</td><td>${money(x.sale_price)}</td><td>${money(x.tax_amount)}</td><td>${money(x.line_total)}</td></tr>`).join("")}</tbody></table><h3>الإجمالي النهائي: ${money(d.total_amount)} ${esc(appSettings.currency || "SAR")}</h3><div class="thanks">شكراً لزيارتكم لنا</div></div></body></html>`;
+        const html = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>فاتورة ${esc(d.invoice_no)}</title><style>body{font-family:Arial;padding:${thermal ? "6px" : "14px"};font-size:${thermal ? "12px" : "14px"}}.invoice{max-width:${thermal ? "280px" : "900px"};margin:0 auto}.invoice-head{text-align:center;margin-bottom:8px}.meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;direction:ltr;margin:8px 0}.meta-box{border:1px solid #ddd;border-radius:8px;padding:${thermal ? "4px" : "8px"};direction:rtl;text-align:right}.meta-title{font-weight:700;margin-bottom:4px}.meta-line{margin:2px 0}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ddd;padding:${thermal ? "4px" : "6px"};text-align:right}.thanks{margin-top:10px;text-align:center;font-weight:700}.sub{font-size:${thermal ? "11px" : "13px"};opacity:.85}@media print{.invoice{max-width:100%}}</style></head><body><div class="invoice"><div class="invoice-head"><h2>${esc(appSettings.shop_name || "SmartPOS")}</h2><div class="sub">${esc(appSettings.thermal_header || "")}</div><div>رقم الفاتورة: <b>${esc(d.invoice_no)}</b> | التاريخ: <b>${esc(d.sale_date)}</b> | الدفع: <b>${esc(paymentLabel(d.payment_type))}</b></div><div>الإجمالي: <b>${money(d.total_amount)}</b> | المدفوع: <b>${money(d.paid_amount)}</b> | المتبقي: <b>${money(d.due_amount)}</b></div></div><div class="meta-grid"><div class="meta-box"><div class="meta-title">بيانات الشركة</div><div class="meta-line">الاسم: <b>${esc(appSettings.shop_name || "SmartPOS")}</b></div><div class="meta-line">الرقم الضريبي: <b>${esc(appSettings.tax_number || "")}</b></div><div class="meta-line">السجل التجاري: <b>${esc(appSettings.commercial_register || "")}</b></div><div class="meta-line">العنوان: <b>${esc([appSettings.city || "", appSettings.country || "", appSettings.address || ""].filter(Boolean).join(" - "))}</b></div></div><div class="meta-box"><div class="meta-title">بيانات العميل</div><div class="meta-line">الاسم: <b>${esc(d.customer_name)}</b></div><div class="meta-line">الرقم الضريبي: <b>${esc(d.customer_tax_no || "")}</b></div><div class="meta-line">الهاتف: <b>${esc(d.customer_phone || "")}</b></div><div class="meta-line">العنوان: <b>${esc(d.customer_address || "")}</b></div></div></div><table><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر قبل الضريبة</th><th>الضريبة</th><th>الإجمالي</th></tr></thead><tbody>${lines.map((x)=>`<tr><td>${esc(x.item_code)} - ${esc(x.item_name)}</td><td>${esc(x.qty)}</td><td>${money(x.sale_price)}</td><td>${money(x.tax_amount)}</td><td>${money(x.line_total)}</td></tr>`).join("")}</tbody></table><h3>الإجمالي النهائي: ${money(d.total_amount)} ${esc(appSettings.currency || "SAR")}</h3><div class="thanks">شكراً لزيارتكم لنا</div></div></body></html>`;
         const w = window.open("", "_blank");
         if (!w) return;
         w.document.open();
@@ -284,27 +330,33 @@
       function pickItemFromSearch() {
         const raw = (document.getElementById("itemSearchLine").value || "").trim();
         if (!raw) return null;
-        const exact = items.find((x) => `${x.code} - ${x.name}` === raw);
+        const exact = items.find((x) => `${x.code} - ${x.name}` === raw || `${x.barcode || ""}` === raw);
         if (exact) return exact;
         const q = raw.toLowerCase();
-        return items.find((x) => `${x.code} ${x.name}`.toLowerCase().includes(q)) || null;
+        return items.find((x) => `${x.code} ${x.barcode || ""} ${x.name}`.toLowerCase().includes(q)) || null;
       }
       async function loadItems() {
         const d = await apiGet("/api/trade/items");
-        items = d.items || [];
+        items = (d.items || []).filter((x) => x.is_active !== false);
         const sel = document.getElementById("item");
         sel.innerHTML = items.map((x) => `<option value="${esc(x.id)}">${esc(x.code)} - ${esc(x.name)} | متاح: ${esc(x.quantity)}</option>`).join("");
         const datalist = document.getElementById("itemOptions");
-        datalist.innerHTML = items.map((x) => `<option value="${esc(x.code)} - ${esc(x.name)}"></option>`).join("");
+        datalist.innerHTML = items.map((x) => `<option value="${esc(x.code)} - ${esc(x.name)}"></option><option value="${esc(x.barcode || "")}"></option>`).join("");
         sel.addEventListener("change", () => {
           const it = items.find((x) => x.id === sel.value);
-          if (it) document.getElementById("price").value = money(it.default_sale_price);
+          if (it) {
+            document.getElementById("price").value = money(it.default_sale_price);
+            document.getElementById("tax").value = Number(it.is_taxable ? (it.tax_rate || appSettings.tax_rate || 0) : 0).toFixed(2);
+            recalcCartByRate();
+            renderCart();
+          }
         });
         document.getElementById("itemSearchLine").oninput = () => {
           const it = pickItemFromSearch();
           if (!it) return;
           sel.value = it.id;
           document.getElementById("price").value = money(it.default_sale_price);
+          document.getElementById("tax").value = Number(it.is_taxable ? (it.tax_rate || appSettings.tax_rate || 0) : 0).toFixed(2);
         };
       }
 
@@ -317,6 +369,72 @@
         renderSales();
       }
 
+      async function loadSuspended() {
+        const d = await apiGet("/api/trade/sales/suspended?limit=50");
+        const rows = d.items || [];
+        const host = document.getElementById("suspendedHost");
+        if (!rows.length) {
+          host.innerHTML = '<div class="opacity-80">لا توجد فواتير معلقة</div>';
+          return;
+        }
+        host.innerHTML = rows.map((x)=>`<div class="rounded border border-slate-600 p-2 mb-1"><div class="font-bold">${esc(x.invoice_no)} - ${esc(x.customer_name || "عميل نقدي")}</div><div>${esc(x.sale_date)} | ${money(x.paid_amount || 0)}</div><div class="flex gap-1 mt-1"><button class="rounded border px-2 py-1" data-load-s="${esc(x.id)}">استرجاع</button><button class="rounded border px-2 py-1 text-emerald-300" data-checkout-s="${esc(x.id)}">بيع مباشر</button><button class="rounded border px-2 py-1 text-red-300" data-del-s="${esc(x.id)}">حذف</button></div></div>`).join("");
+        host.querySelectorAll("[data-load-s]").forEach((b)=>b.addEventListener("click", ()=>loadSuspendedToForm(b.getAttribute("data-load-s"))));
+        host.querySelectorAll("[data-checkout-s]").forEach((b)=>b.addEventListener("click", ()=>checkoutSuspended(b.getAttribute("data-checkout-s"))));
+        host.querySelectorAll("[data-del-s]").forEach((b)=>b.addEventListener("click", ()=>deleteSuspended(b.getAttribute("data-del-s"))));
+      }
+
+      async function checkoutSuspended(id) {
+        if (!confirm("تحويل الفاتورة المعلقة إلى بيع مباشر الآن؟")) return;
+        try {
+          const r = await apiPostJson(`/api/trade/sales/suspended/${encodeURIComponent(id)}/checkout`, {});
+          showToast("تم تحويل الفاتورة المعلقة إلى بيع ✔️", "#10b981");
+          if (r && r.sale_id) lastPrintedId = r.sale_id;
+          await Promise.all([loadSales(), loadItems(), loadSuspended()]);
+          resetForm();
+        } catch (e) {
+          showToast(e.message || "فشل البيع المباشر للفواتير المعلقة", "#ef4444");
+        }
+      }
+
+      async function loadSuspendedToForm(id) {
+        try {
+          const d = await apiGet(`/api/trade/sales/suspended/${encodeURIComponent(id)}`);
+          editingId = null;
+          document.getElementById("formMode").textContent = `وضع: استرجاع فاتورة معلقة ${d.invoice_no || ""}`;
+          document.getElementById("saveBtn").textContent = "حفظ الفاتورة";
+          document.getElementById("no").value = d.invoice_no || "";
+          document.getElementById("customer").value = d.customer_name || "";
+          document.getElementById("date").value = d.sale_date || new Date().toISOString().slice(0, 10);
+          document.getElementById("pay").value = d.payment_type || "cash";
+          document.getElementById("discount").value = String(d.discount || 0);
+          document.getElementById("paidAmount").value = String(d.paid_amount || 0);
+          cart = (d.lines || []).map((x) => ({
+            item_id: x.item_id,
+            item_label: `${x.item_code || ""} - ${x.item_name || ""}`,
+            qty: Number(x.qty || 0),
+            sale_price: Number(x.sale_price || 0),
+            tax_amount: Number(x.tax_amount || 0),
+            unit_gross: Number(x.qty || 0) > 0 ? round4((Number(x.qty || 0) * Number(x.sale_price || 0) + Number(x.tax_amount || 0)) / Number(x.qty || 0)) : Number(x.sale_price || 0),
+          }));
+          toggleMixedPay();
+          renderCart();
+          showToast("تم استرجاع الفاتورة المعلقة", "#10b981");
+        } catch (e) {
+          showToast(e.message || "فشل استرجاع الفاتورة المعلقة", "#ef4444");
+        }
+      }
+
+      async function deleteSuspended(id) {
+        if (!confirm("تأكيد حذف الفاتورة المعلقة؟")) return;
+        try {
+          await apiDelete(`/api/trade/sales/suspended/${encodeURIComponent(id)}`);
+          showToast("تم حذف الفاتورة المعلقة ✔️", "#10b981");
+          await loadSuspended();
+        } catch (e) {
+          showToast(e.message || "فشل حذف الفاتورة المعلقة", "#ef4444");
+        }
+      }
+
       function renderSales() {
         const q = (document.getElementById("searchInput").value || "").trim().toLowerCase();
         const rows = q ? salesRows.filter((x) => `${x.invoice_no} ${x.customer_name} ${x.sale_date} ${x.payment_type}`.toLowerCase().includes(q)) : salesRows;
@@ -325,7 +443,7 @@
           host.innerHTML = '<div class="opacity-70">لا توجد مبيعات</div>';
           return;
         }
-        host.innerHTML = `<table class="w-full min-w-[1000px] text-sm"><thead class="bg-slate-100 dark:bg-slate-800"><tr><th class="px-2 py-2 text-right">التاريخ</th><th class="px-2 py-2 text-right">الفاتورة</th><th class="px-2 py-2 text-right">العميل</th><th class="px-2 py-2 text-right">الدفع</th><th class="px-2 py-2 text-right">الإجمالي</th><th class="px-2 py-2 text-right">الإجراءات</th></tr></thead><tbody>${rows.map((x)=>`<tr class="border-t"><td class="px-2 py-2">${esc(x.sale_date)}</td><td class="px-2 py-2">${esc(x.invoice_no)}</td><td class="px-2 py-2">${esc(x.customer_name)}</td><td class="px-2 py-2">${esc(paymentLabel(x.payment_type))}</td><td class="px-2 py-2 font-bold">${money(x.total_amount)}</td><td class="px-2 py-2"><div class="flex gap-1"><button class="rounded-lg border px-2 py-1 font-bold" data-edit="${x.id}">تعديل</button><button class="rounded-lg border px-2 py-1 font-bold" data-print="${x.id}">طباعة</button><button class="rounded-lg border px-2 py-1 font-bold text-red-600" data-del="${x.id}">حذف</button></div></td></tr>`).join("")}</tbody></table>`;
+        host.innerHTML = `<table class="w-full min-w-[1100px] text-sm"><thead class="bg-slate-100 dark:bg-slate-800"><tr><th class="px-2 py-2 text-right">التاريخ</th><th class="px-2 py-2 text-right">الفاتورة</th><th class="px-2 py-2 text-right">العميل</th><th class="px-2 py-2 text-right">الدفع</th><th class="px-2 py-2 text-right">الإجمالي</th><th class="px-2 py-2 text-right">المدفوع</th><th class="px-2 py-2 text-right">المتبقي</th><th class="px-2 py-2 text-right">الإجراءات</th></tr></thead><tbody>${rows.map((x)=>`<tr class="border-t"><td class="px-2 py-2">${esc(x.sale_date)}</td><td class="px-2 py-2">${esc(x.invoice_no)}</td><td class="px-2 py-2">${esc(x.customer_name)}</td><td class="px-2 py-2">${esc(paymentLabel(x.payment_type))}</td><td class="px-2 py-2 font-bold">${money(x.total_amount)}</td><td class="px-2 py-2">${money(x.paid_amount)}</td><td class="px-2 py-2 ${Number(x.due_amount||0)>0?"text-red-600 font-bold":""}">${money(x.due_amount)}</td><td class="px-2 py-2"><div class="flex gap-1"><button class="rounded-lg border px-2 py-1 font-bold" data-edit="${x.id}">تعديل</button><button class="rounded-lg border px-2 py-1 font-bold" data-print="${x.id}">طباعة</button><button class="rounded-lg border px-2 py-1 font-bold text-red-600" data-del="${x.id}">حذف</button></div></td></tr>`).join("")}</tbody></table>`;
         host.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => editSale(b.getAttribute("data-edit"))));
         host.querySelectorAll("[data-print]").forEach((b) => b.addEventListener("click", () => printSale(b.getAttribute("data-print"))));
         host.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", () => removeSale(b.getAttribute("data-del"))));
@@ -345,6 +463,7 @@
           document.getElementById("date").value = d.sale_date || new Date().toISOString().slice(0, 10);
           document.getElementById("pay").value = d.payment_type || "cash";
           document.getElementById("discount").value = String(d.discount || 0);
+          document.getElementById("paidAmount").value = String(d.paid_amount || 0);
           const netBase = (d.lines || []).reduce((s, x) => s + (Number(x.qty || 0) * Number(x.sale_price || 0)), 0);
           const taxBase = (d.lines || []).reduce((s, x) => s + Number(x.tax_amount || 0), 0);
           const guessedRate = netBase > 0 ? (taxBase / netBase) * 100 : Number(appSettings.tax_rate || 0);
@@ -358,6 +477,7 @@
             unit_gross: Number(x.qty || 0) > 0 ? round4((Number(x.qty || 0) * Number(x.sale_price || 0) + Number(x.tax_amount || 0)) / Number(x.qty || 0)) : Number(x.sale_price || 0),
           }));
           renderCart();
+          toggleMixedPay();
           window.scrollTo({ top: 0, behavior: "smooth" });
         } catch (e) {
           showToast(e.message || "فشل تحميل الفاتورة", "#ef4444");
@@ -410,6 +530,13 @@
       document.getElementById("saveBtn").addEventListener("click", async () => {
         try {
           if (!cart.length) { showToast("أضف بند واحد على الأقل", "#ef4444"); return; }
+          const payType = document.getElementById("pay").value || "cash";
+          const customerName = (document.getElementById("customer").value || "").trim();
+          if (payType === "credit" && !customerName) {
+            showToast("في البيع الآجل يجب إدخال اسم العميل", "#ef4444");
+            document.getElementById("customer").focus();
+            return;
+          }
           const payload = payloadFromForm();
           let savedId = null;
           if (editingId) {
@@ -429,6 +556,7 @@
           await loadSales();
           resetForm();
           await loadItems();
+          await loadSuspended();
         } catch (e) {
           showToast(e.message || "فشل الحفظ", "#ef4444");
         }
@@ -448,10 +576,27 @@
       document.getElementById("searchInput").addEventListener("input", renderSales);
       document.getElementById("discount").addEventListener("input", renderCart);
       document.getElementById("tax").addEventListener("input", () => { recalcCartByRate(); renderCart(); });
-      document.getElementById("quickCash").addEventListener("click", () => { document.getElementById("pay").value = "cash"; });
-      document.getElementById("quickTransfer").addEventListener("click", () => { document.getElementById("pay").value = "transfer"; });
-      document.getElementById("quickCredit").addEventListener("click", () => { document.getElementById("pay").value = "credit"; });
+      document.getElementById("quickCash").addEventListener("click", () => { document.getElementById("pay").value = "cash"; toggleMixedPay(); });
+      document.getElementById("quickNetwork").addEventListener("click", () => { document.getElementById("pay").value = "network"; toggleMixedPay(); });
+      document.getElementById("quickTransfer").addEventListener("click", () => { document.getElementById("pay").value = "transfer"; toggleMixedPay(); });
+      document.getElementById("quickCredit").addEventListener("click", () => { document.getElementById("pay").value = "credit"; toggleMixedPay(); });
+      document.getElementById("quickMixed").addEventListener("click", () => { document.getElementById("pay").value = "mixed"; toggleMixedPay(); });
       document.getElementById("quickAdd").addEventListener("click", () => { document.getElementById("addLineBtn").click(); });
+      document.getElementById("pay").addEventListener("change", () => { toggleMixedPay(); syncMixedPaid(); });
+      ["mixCash", "mixNetwork", "mixTransfer"].forEach((id) => document.getElementById(id).addEventListener("input", syncMixedPaid));
+      document.getElementById("suspendBtn").addEventListener("click", async () => {
+        try {
+          if (!cart.length) { showToast("أضف بند واحد على الأقل", "#ef4444"); return; }
+          const payload = payloadFromForm();
+          await apiPostJson("/api/trade/sales/suspend", payload);
+          showToast("تم تعليق الفاتورة ✔️", "#10b981");
+          resetForm();
+          await loadSuspended();
+        } catch (e) {
+          showToast(e.message || "فشل تعليق الفاتورة", "#ef4444");
+        }
+      });
+      document.getElementById("reloadSuspBtn").addEventListener("click", loadSuspended);
       document.querySelectorAll("[data-key]").forEach((btn) => btn.addEventListener("click", () => {
         const el = document.activeElement;
         if (!el || !(el instanceof HTMLInputElement) || el.type === "date") return;
@@ -469,7 +614,7 @@
       });
 
       try {
-        await Promise.all([loadItems(), loadSettings(), loadSales()]);
+        await Promise.all([loadItems(), loadSettings(), loadSales(), loadSuspended()]);
         resetForm();
       } catch (e) {
         showToast(e.message || "فشل تحميل شاشة المبيعات", "#ef4444");

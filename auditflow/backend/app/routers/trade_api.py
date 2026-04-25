@@ -19,6 +19,7 @@ router = APIRouter(prefix="/api/trade", tags=["trade"])
 
 class ItemCreate(BaseModel):
     code: str = Field(min_length=1, max_length=60)
+    barcode: str = ""
     name: str = Field(min_length=1, max_length=200)
     category: str = "rim"
     brand: str = ""
@@ -30,12 +31,16 @@ class ItemCreate(BaseModel):
     unit: str = "قطعة"
     is_set: bool = False
     default_sale_price: float = 0.0
+    is_taxable: bool = True
+    tax_rate: float = 0.0
+    is_active: bool = True
     notes: str = ""
     image_url: str = ""
 
 
 class ItemUpdate(BaseModel):
     code: Optional[str] = None
+    barcode: Optional[str] = None
     name: Optional[str] = None
     category: Optional[str] = None
     brand: Optional[str] = None
@@ -47,6 +52,9 @@ class ItemUpdate(BaseModel):
     unit: Optional[str] = None
     is_set: Optional[bool] = None
     default_sale_price: Optional[float] = None
+    is_taxable: Optional[bool] = None
+    tax_rate: Optional[float] = None
+    is_active: Optional[bool] = None
     notes: Optional[str] = None
     image_url: Optional[str] = None
 
@@ -241,15 +249,28 @@ def _reverse_sale_effects(db: Any, user_id: str, sale_id: str) -> None:
 
 
 @router.get("/items")
-def list_items(request: Request, q: str = Query("")):
+def list_items(
+    request: Request,
+    q: str = Query(""),
+    category: str = Query(""),
+    is_active: str = Query(""),
+):
     db = SessionLocal()
     try:
         user = require_user(db, request)
         query = db.query(Item).filter(Item.user_id == user.id)
+        cat = (category or "").strip().lower()
+        if cat:
+            query = query.filter(Item.category == cat)
+        active_flag = (is_active or "").strip().lower()
+        if active_flag in {"1", "true", "yes", "active"}:
+            query = query.filter(Item.is_active == 1)
+        elif active_flag in {"0", "false", "no", "inactive"}:
+            query = query.filter(Item.is_active == 0)
         qn = (q or "").strip().lower()
         if qn:
             rows = query.order_by(Item.created_at.desc()).all()
-            rows = [r for r in rows if qn in (f"{r.code} {r.name} {r.brand or ''} {r.size or ''}").lower()]
+            rows = [r for r in rows if qn in (f"{r.code} {r.barcode or ''} {r.name} {r.brand or ''} {r.size or ''}").lower()]
         else:
             rows = query.order_by(Item.created_at.desc()).all()
         return {
@@ -257,6 +278,7 @@ def list_items(request: Request, q: str = Query("")):
                 {
                     "id": r.id,
                     "code": r.code,
+                    "barcode": r.barcode or "",
                     "name": r.name,
                     "category": r.category,
                     "brand": r.brand or "",
@@ -274,6 +296,9 @@ def list_items(request: Request, q: str = Query("")):
                     "quantity": round(float(r.quantity or 0.0), 4),
                     "min_qty": round(float(r.min_qty or 0.0), 4),
                     "default_sale_price": round(float(r.default_sale_price or 0.0), 2),
+                    "is_taxable": bool(int(r.is_taxable or 0)),
+                    "tax_rate": round(float(r.tax_rate or 0.0), 4),
+                    "is_active": bool(int(r.is_active or 0)),
                     "last_cost": round(float(r.last_cost or 0.0), 2),
                     "notes": r.notes or "",
                     "image_url": r.image_url or "",
@@ -298,6 +323,7 @@ def create_item(request: Request, body: ItemCreate = Body(...)):
             id=uuid.uuid4().hex,
             user_id=user.id,
             code=code,
+            barcode=(body.barcode or "").strip() or None,
             name=body.name.strip(),
             category=(body.category or "rim").strip().lower(),
             brand=(body.brand or "").strip() or None,
@@ -310,6 +336,9 @@ def create_item(request: Request, body: ItemCreate = Body(...)):
             is_set=1 if body.is_set else 0,
             quantity=0.0,
             default_sale_price=round(abs(float(body.default_sale_price or 0.0)), 2),
+            is_taxable=1 if body.is_taxable else 0,
+            tax_rate=round(abs(float(body.tax_rate or 0.0)), 4),
+            is_active=1 if body.is_active else 0,
             last_cost=0.0,
             notes=(body.notes or "").strip() or None,
             image_url=(body.image_url or "").strip() or None,
@@ -338,7 +367,7 @@ def update_item(item_id: str, request: Request, body: ItemUpdate = Body(...)):
             if dup:
                 raise HTTPException(400, "كود الصنف مستخدم مسبقاً")
             rec.code = code
-        for k in ("name", "category", "brand", "size", "pcd", "color", "item_condition", "location", "unit", "notes", "image_url"):
+        for k in ("barcode", "name", "category", "brand", "size", "pcd", "color", "item_condition", "location", "unit", "notes", "image_url"):
             v = getattr(body, k)
             if v is not None:
                 vv = str(v).strip()
@@ -354,6 +383,12 @@ def update_item(item_id: str, request: Request, body: ItemUpdate = Body(...)):
             rec.is_set = 1 if body.is_set else 0
         if body.default_sale_price is not None:
             rec.default_sale_price = round(abs(float(body.default_sale_price or 0.0)), 2)
+        if body.is_taxable is not None:
+            rec.is_taxable = 1 if body.is_taxable else 0
+        if body.tax_rate is not None:
+            rec.tax_rate = round(abs(float(body.tax_rate or 0.0)), 4)
+        if body.is_active is not None:
+            rec.is_active = 1 if body.is_active else 0
         db.commit()
         return {"ok": True}
     finally:
@@ -500,7 +535,15 @@ def create_sale(request: Request, body: SaleCreate = Body(...)):
         if len(items) != len(item_ids):
             raise HTTPException(400, "يوجد صنف غير صالح")
         item_by_id = {x.id: x for x in items}
+        pay_type = (body.payment_type or "cash").strip().lower()
         customer_name = body.customer_name.strip()
+        if pay_type == "credit":
+            if not customer_name and not (body.customer_id or "").strip():
+                raise HTTPException(400, "في البيع الآجل يجب تحديد عميل")
+            if customer_name in {"عميل نقدي", "cash customer"} and not (body.customer_id or "").strip():
+                raise HTTPException(400, "في البيع الآجل يجب إدخال اسم عميل صحيح")
+        elif not customer_name:
+            customer_name = "عميل نقدي"
         customer_tax_no = (body.customer_tax_no or "").strip()
         customer_phone = (body.customer_phone or "").strip()
         customer_address = (body.customer_address or "").strip()
@@ -525,7 +568,7 @@ def create_sale(request: Request, body: SaleCreate = Body(...)):
             customer_phone=customer_phone or None,
             customer_address=customer_address or None,
             sale_date=s_date,
-            payment_type=(body.payment_type or "cash").strip().lower(),
+            payment_type=pay_type,
             discount=round(abs(float(body.discount or 0.0)), 2),
             paid_amount=round(abs(float(body.paid_amount or 0.0)), 2),
             tax_amount=0.0,
@@ -633,6 +676,42 @@ def list_suspended_sales(request: Request, limit: int = Query(200, ge=1, le=1000
                 }
                 for x in rows
             ]
+        }
+    finally:
+        db.close()
+
+
+@router.get("/sales/suspended/{suspended_id}")
+def suspended_sale_details(suspended_id: str, request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        s = db.query(SuspendedSale).filter(SuspendedSale.user_id == user.id, SuspendedSale.id == suspended_id).first()
+        if not s:
+            raise HTTPException(404, "الفاتورة المعلقة غير موجودة")
+        lines = db.query(SuspendedSaleLine, Item).join(Item, Item.id == SuspendedSaleLine.item_id).filter(SuspendedSaleLine.suspended_sale_id == s.id).all()
+        return {
+            "id": s.id,
+            "invoice_no": s.invoice_no,
+            "customer_name": s.customer_name,
+            "sale_date": _fmt_date(s.sale_date),
+            "payment_type": s.payment_type,
+            "discount": round(float(s.discount or 0.0), 2),
+            "paid_amount": round(float(s.paid_amount or 0.0), 2),
+            "notes": s.notes or "",
+            "seller_name": s.seller_name or "",
+            "branch_name": s.branch_name or "",
+            "lines": [
+                {
+                    "item_id": item.id,
+                    "item_code": item.code,
+                    "item_name": item.name,
+                    "qty": round(float(ln.qty or 0.0), 4),
+                    "sale_price": round(float(ln.sale_price or 0.0), 2),
+                    "tax_amount": round(float(ln.tax_amount or 0.0), 2),
+                }
+                for ln, item in lines
+            ],
         }
     finally:
         db.close()
@@ -980,8 +1059,18 @@ def update_sale(sale_id: str, request: Request, body: SaleUpdate = Body(...)):
             raise HTTPException(400, "يوجد صنف غير صالح")
         item_by_id = {x.id: x for x in items}
 
+        pay_type = (body.payment_type or "cash").strip().lower()
+        customer_name = body.customer_name.strip()
+        if pay_type == "credit":
+            if not customer_name and not (body.customer_id or "").strip():
+                raise HTTPException(400, "في البيع الآجل يجب تحديد عميل")
+            if customer_name in {"عميل نقدي", "cash customer"} and not (body.customer_id or "").strip():
+                raise HTTPException(400, "في البيع الآجل يجب إدخال اسم عميل صحيح")
+        elif not customer_name:
+            customer_name = "عميل نقدي"
+
         sale.invoice_no = body.invoice_no.strip()
-        sale.customer_name = body.customer_name.strip()
+        sale.customer_name = customer_name
         sale.customer_tax_no = (body.customer_tax_no or "").strip() or None
         sale.customer_phone = (body.customer_phone or "").strip() or None
         sale.customer_address = (body.customer_address or "").strip() or None
@@ -993,7 +1082,7 @@ def update_sale(sale_id: str, request: Request, body: SaleUpdate = Body(...)):
                 sale.customer_phone = (c.phone or "").strip() or None
                 sale.customer_address = (c.address or "").strip() or None
         sale.sale_date = s_date
-        sale.payment_type = (body.payment_type or "cash").strip().lower()
+        sale.payment_type = pay_type
         sale.discount = round(abs(float(body.discount or 0.0)), 2)
         sale.paid_amount = round(abs(float(body.paid_amount or 0.0)), 2)
         sale.notes = (body.notes or "").strip() or None

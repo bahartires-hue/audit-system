@@ -8,18 +8,37 @@
       </div>
       <div class="rounded-xl border p-4 bg-white dark:bg-slate-950">
         <h1 class="text-xl font-extrabold mb-2">إضافة صنف</h1>
-        <div class="grid grid-cols-1 md:grid-cols-7 gap-2">
+        <div class="grid grid-cols-1 md:grid-cols-10 gap-2">
           <input id="code" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الكود" />
+          <input id="barcode" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الباركود" />
           <input id="name" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم الصنف" />
           <input id="brand" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الماركة" />
           <input id="size" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="المقاس" />
           <select id="unit" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
+          <select id="isTaxable" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"><option value="1">خاضع ضريبة</option><option value="0">غير خاضع</option></select>
+          <input id="taxRate" type="number" step="0.01" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="نسبة الضريبة %" />
+          <select id="isActive" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"><option value="1">نشط</option><option value="0">معطل</option></select>
           <select id="category" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"><option value="rim">جنط</option><option value="set">طقم</option><option value="accessory">اكسسوار</option></select>
           <button id="addBtn" class="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2">إضافة</button>
         </div>
       </div>
       <div class="rounded-xl border p-4 bg-white dark:bg-slate-950">
         <h2 class="font-extrabold mb-2">قائمة الأصناف</h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
+          <input id="searchQ" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="بحث: كود / باركود / اسم" />
+          <select id="filterCategory" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
+            <option value="">كل التصنيفات</option>
+            <option value="rim">جنط</option>
+            <option value="set">طقم</option>
+            <option value="accessory">اكسسوار</option>
+          </select>
+          <select id="filterActive" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
+            <option value="">كل الحالات</option>
+            <option value="1">نشط فقط</option>
+            <option value="0">معطل فقط</option>
+          </select>
+          <button id="applyFiltersBtn" class="rounded-xl border font-extrabold px-4 py-2">تطبيق الفلاتر</button>
+        </div>
         <div id="host"></div>
       </div>
     </div>
@@ -34,16 +53,56 @@
           const opts = rows.length ? rows : [{name:"قطعة"}];
           document.getElementById("unit").innerHTML = opts.map((x)=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join("");
         }
+        async function apiPatchJson(url, body){
+          const csrf = localStorage.getItem("csrf_token") || "";
+          const r = await fetch(url, { method:"PATCH", credentials:"include", headers:{ Accept:"application/json", "Content-Type":"application/json", "X-CSRF-Token":csrf }, body: JSON.stringify(body||{}) });
+          if(!r.ok) throw new Error(await readErrorMessage(r));
+          return r.json();
+        }
         async function load(){
-          const d=await apiGet("/api/trade/items"); const rows=d.items||[];
-          document.getElementById("host").innerHTML=rows.length?`<div class="grid gap-1">${rows.map(x=>`<div class="rounded-lg border px-3 py-2">${esc(x.code)} — ${esc(x.name)} | ${esc(x.brand||"")} ${esc(x.size||"")} | الوحدة ${esc(x.unit||"قطعة")} | الكمية ${esc(x.quantity)}</div>`).join("")}</div>`:`<div class="opacity-70">لا توجد أصناف</div>`;
+          const q = document.getElementById("searchQ").value || "";
+          const c = document.getElementById("filterCategory").value || "";
+          const a = document.getElementById("filterActive").value || "";
+          const d=await apiGet(`/api/trade/items?q=${encodeURIComponent(q)}&category=${encodeURIComponent(c)}&is_active=${encodeURIComponent(a)}`); const rows=d.items||[];
+          document.getElementById("host").innerHTML=rows.length?`<div class="grid gap-1">${rows.map(x=>`<div class="rounded-lg border px-3 py-2"><div class="font-bold">${esc(x.code)} — ${esc(x.name)} ${x.is_active?"":"<span class='text-red-600'>(معطل)</span>"}</div><div class="text-sm mt-1">باركود ${esc(x.barcode||"-")} | ${esc(x.brand||"")} ${esc(x.size||"")} | الوحدة ${esc(x.unit||"قطعة")} | ضريبة ${x.is_taxable?"نعم":"لا"} ${esc(x.tax_rate||0)}% | الكمية ${esc(x.quantity)}</div><div class="flex gap-2 mt-2"><button class="rounded-lg border px-3 py-1 font-bold" data-edit="${esc(x.id)}">تعديل</button><button class="rounded-lg border px-3 py-1 font-bold ${x.is_active?"text-amber-700":"text-emerald-700"}" data-toggle="${esc(x.id)}" data-active="${x.is_active?1:0}">${x.is_active?"تعطيل":"تفعيل"}</button></div></div>`).join("")}</div>`:`<div class="opacity-70">لا توجد أصناف</div>`;
+          document.querySelectorAll("[data-toggle]").forEach((btn)=>{
+            btn.addEventListener("click", async ()=>{
+              try{
+                const id = btn.getAttribute("data-toggle");
+                const current = btn.getAttribute("data-active")==="1";
+                await apiPatchJson(`/api/trade/items/${encodeURIComponent(id)}`, { is_active: !current });
+                showToast(current?"تم تعطيل الصنف ✔️":"تم تفعيل الصنف ✔️","#10b981");
+                await load();
+              }catch(e){ showToast(e.message || "فشل تحديث حالة الصنف","#ef4444"); }
+            });
+          });
+          document.querySelectorAll("[data-edit]").forEach((btn)=>{
+            btn.addEventListener("click", async ()=>{
+              const id = btn.getAttribute("data-edit");
+              const row = rows.find((x)=>x.id===id);
+              if(!row) return;
+              const name = prompt("اسم الصنف", row.name || "");
+              if(name==null) return;
+              const price = prompt("سعر البيع", String(row.default_sale_price || 0));
+              if(price==null) return;
+              const barcode = prompt("الباركود", row.barcode || "");
+              if(barcode==null) return;
+              try{
+                await apiPatchJson(`/api/trade/items/${encodeURIComponent(id)}`, { name, default_sale_price: Number(price || 0), barcode });
+                showToast("تم تعديل الصنف ✔️","#10b981");
+                await load();
+              }catch(e){ showToast(e.message || "فشل التعديل","#ef4444"); }
+            });
+          });
         }
         document.getElementById("addBtn").addEventListener("click",async()=>{
           try{
-            await apiPostJson("/api/trade/items",{code:document.getElementById("code").value||"",name:document.getElementById("name").value||"",brand:document.getElementById("brand").value||"",size:document.getElementById("size").value||"",unit:document.getElementById("unit").value||"قطعة",category:document.getElementById("category").value||"rim"});
+            await apiPostJson("/api/trade/items",{code:document.getElementById("code").value||"",barcode:document.getElementById("barcode").value||"",name:document.getElementById("name").value||"",brand:document.getElementById("brand").value||"",size:document.getElementById("size").value||"",unit:document.getElementById("unit").value||"قطعة",is_taxable:document.getElementById("isTaxable").value==="1",tax_rate:Number(document.getElementById("taxRate").value||0),is_active:document.getElementById("isActive").value==="1",category:document.getElementById("category").value||"rim"});
             showToast("تمت الإضافة ✔️","#10b981"); await load();
           }catch(e){showToast(e.message||"فشل الإضافة","#ef4444");}
         });
+        document.getElementById("applyFiltersBtn").addEventListener("click", load);
+        document.getElementById("searchQ").addEventListener("input", load);
         await Promise.all([loadUnits(), load()]);
       })();
     </script>
