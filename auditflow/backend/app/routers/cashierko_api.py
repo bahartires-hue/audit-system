@@ -661,7 +661,7 @@ def get_cashierko_settings(request: Request):
         key = f"cashierko_settings:{user.id}"
         row = db.query(AppSetting).filter(AppSetting.key == key).first()
         defaults = {
-            "shop_name": "كاشيركو",
+            "shop_name": "PrimePOS",
             "logo_url": "",
             "phone": "",
             "address": "",
