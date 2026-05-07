@@ -88,3 +88,16 @@ def importer_image(name: str = Query(...)) -> FileResponse:
         raise HTTPException(404, "الصورة غير موجودة")
     return FileResponse(str(path))
 
+
+@router.get("/csv")
+def importer_csv(request: Request) -> FileResponse:
+    db = SessionLocal()
+    try:
+        require_user(db, request)
+    finally:
+        db.close()
+    csv_path = _uploads_root().parent / "exports" / "tire_products.csv"
+    if not csv_path.exists() or not csv_path.is_file():
+        raise HTTPException(404, "ملف CSV غير موجود. نفّذ السحب أولًا.")
+    return FileResponse(str(csv_path), media_type="text/csv", filename="tire_products.csv")
+

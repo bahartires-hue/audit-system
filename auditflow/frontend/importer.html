@@ -82,6 +82,7 @@
             </div>
             <div class="mt-2">
               <button id="scrapeBtn" class="btn-primary-analyze px-5 py-2 rounded-xl" type="button">سحب المنتجات</button>
+              <button id="downloadCsvBtn" class="px-5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 ms-2" type="button">تحميل CSV</button>
             </div>
             <p id="metaInfo" class="text-xs mt-3 text-slate-500 dark:text-slate-400"></p>
           </div>
@@ -115,6 +116,7 @@
       const rows = document.getElementById("previewRows");
       const metaInfo = document.getElementById("metaInfo");
       const btn = document.getElementById("scrapeBtn");
+      const csvBtn = document.getElementById("downloadCsvBtn");
       const urlInp = document.getElementById("siteUrl");
       const brandInp = document.getElementById("brandInp");
       const sizeInp = document.getElementById("sizeInp");
@@ -176,6 +178,10 @@
         } finally {
           setLoading(btn, false, "سحب المنتجات");
         }
+      });
+
+      csvBtn.addEventListener("click", () => {
+        window.location.href = "/importer/csv";
       });
     </script>
   </body>
