@@ -13,6 +13,7 @@ log = logging.getLogger("importer.tireex")
 
 _UA = {"User-Agent": "Mozilla/5.0"}
 _SIZE_RE = re.compile(r"(\d{3})\s*/\s*(\d{2})\s*(?:ZR|R)?\s*(\d{2})", re.IGNORECASE)
+_GENERIC_TITLE_RE = re.compile(r"(تصنيف|عروض|منتجات|product category|category)", re.IGNORECASE)
 
 
 def _clean(s: str) -> str:
@@ -143,9 +144,11 @@ def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str,
             or a
         )
         name = _clean(name_node.get_text(" ", strip=True) if name_node else "")
-        size_token = _extract_size_token(name)
-        if not size_token:
-            log.info("tireex skip card reason=no_size name=%s", name)
+        if not name:
+            log.info("tireex skip card reason=no_name")
+            continue
+        if _GENERIC_TITLE_RE.search(name):
+            log.info("tireex skip card reason=generic_title name=%s", name)
             continue
         price_node = card_root.select_one(".price") or card_root.select_one(".woocommerce-Price-amount") or card_root.select_one("bdi")
         old_price_node = card_root.select_one(".price del .amount") or card_root.select_one(".old-price") or card_root.select_one(".was-price")
@@ -170,6 +173,7 @@ def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str,
                 "warranty": "",
                 "pattern": "",
                 "description": "",
+                "_size_token": _extract_size_token(name),
             }
         )
     log.info("tireex listing products after size filter=%s url=%s", len(out), base_url)
@@ -196,6 +200,21 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
     if not name:
         name = _pick_attr(doc, ["meta[property='og:title']", "meta[name='twitter:title']"], "content")
     size_token = _extract_size_token(name)
+    if not size_token:
+        size_token = _extract_size_token(
+            " ".join(
+                x
+                for x in [
+                    _pick_text(doc, [".product_meta", ".summary", ".woocommerce-product-details__short-description"]),
+                    _pick_text(doc, ["table.variations", ".woocommerce-product-attributes", ".shop_attributes"]),
+                    _pick_text(doc, [".entry-content", ".product-description"]),
+                    _pick_attr(doc, ["meta[property='og:description']"], "content"),
+                ]
+                if x
+            )
+        )
+    if not size_token:
+        size_token = _extract_size_token(doc.get_text(" ", strip=True))
     price = _pick_text(doc, [".price .amount", ".price", "[class*='price'] .amount"])
     old_price = _pick_text(doc, [".price del .amount", ".price .old", ".was-price"])
     image = _pick_attr(doc, ["meta[property='og:image']"], "content")
@@ -291,7 +310,7 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 5, li
         except Exception as e:
             log.warning("tireex debug html write failed: %s", e)
         links = _extract_product_links(url, _fetch(url))
-        for u in links[: max_items * 2]:
+        for u in links[: max_items * 4]:
             if len(listing_items) >= max_items:
                 break
             try:
@@ -300,5 +319,20 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 5, li
                     listing_items.append(p)
             except Exception as e:
                 log.warning("skip fallback product %s: %s", u, e)
-    return listing_items[:max_items]
+    # إن رجعت من الكروت فقط، نحاول ترقية البيانات بدخول صفحات المنتج.
+    upgraded: List[Dict[str, Any]] = []
+    for item in listing_items:
+        if len(upgraded) >= max_items:
+            break
+        u = item.get("product_url", "")
+        try:
+            p = _parse_product_page(u) if u else {}
+            merged = {**item, **p}
+            if merged.get("name") and merged.get("_size_token") and merged.get("product_url"):
+                upgraded.append(merged)
+            else:
+                log.info("tireex skip upgraded card reason=missing_required url=%s", u)
+        except Exception as e:
+            log.warning("skip upgraded card %s: %s", u, e)
+    return upgraded[:max_items]
 
