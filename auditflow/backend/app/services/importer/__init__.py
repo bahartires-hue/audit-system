@@ -122,7 +122,16 @@ def run_import_pipeline(
             "warranty": item.get("warranty", ""),
             "country": item.get("country", ""),
             "pattern": item.get("pattern", ""),
-            "description": item.get("description", "") or rewrite_description_fallback(parsed),
+            "description": rewrite_description_fallback(
+                {
+                    **parsed,
+                    "year": item.get("year", ""),
+                    "warranty": item.get("warranty", ""),
+                    "country": item.get("country", ""),
+                    "pattern": item.get("pattern", ""),
+                },
+                source_description=item.get("description", ""),
+            ),
             "parse_status": parsed.get("parse_status", ""),
             "seo_title": seo["seo_title"],
             "meta_description": seo["meta_description"],
