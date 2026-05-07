@@ -4,10 +4,11 @@ import os
 from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import quote
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..auth_core import require_csrf, require_user
 from ..db import SessionLocal
@@ -18,6 +19,10 @@ router = APIRouter(prefix="/importer", tags=["importer"])
 
 class ImporterRequest(BaseModel):
     site_url: str
+    brand: str = ""
+    size: str = ""
+    limit: int = Field(default=20, ge=1, le=500)
+    multi_pages: bool = False
 
 
 def _uploads_root() -> Path:
@@ -38,9 +43,23 @@ def scrape_importer(request: Request, body: ImporterRequest) -> Dict[str, Any]:
     site_url = (body.site_url or "").strip()
     if not site_url.startswith("http://") and not site_url.startswith("https://"):
         raise HTTPException(400, "أدخل رابطًا صحيحًا يبدأ بـ http:// أو https://")
+    brand = (body.brand or "").strip()
+    size = (body.size or "").strip()
+    limit = int(body.limit or 20)
+    multi_pages = bool(body.multi_pages)
+    path = (urlparse(site_url).path or "").strip("/")
+    if not path and not brand and not size:
+        raise HTTPException(400, "يرجى إدخال رابط صفحة ماركة أو تحديد ماركة/مقاس قبل السحب.")
 
     try:
-        out = run_import_pipeline(site_url, _uploads_root())
+        out = run_import_pipeline(
+            site_url,
+            _uploads_root(),
+            brand=brand,
+            size=size,
+            limit=limit,
+            multi_pages=multi_pages,
+        )
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception:

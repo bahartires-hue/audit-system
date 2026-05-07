@@ -67,6 +67,22 @@ def _extract_product_links(base_url: str, soup: BeautifulSoup) -> List[str]:
     return out
 
 
+def _next_page_url(base_url: str, soup: BeautifulSoup) -> str:
+    candidates = [
+        "a.next.page-numbers",
+        ".pagination a.next",
+        "a[rel='next']",
+        ".woocommerce-pagination a.next",
+    ]
+    for sel in candidates:
+        a = soup.select_one(sel)
+        if a and a.get("href"):
+            u = urljoin(base_url, a.get("href"))
+            if urlparse(u).netloc == urlparse(base_url).netloc:
+                return u
+    return ""
+
+
 def _parse_product_page(product_url: str) -> Dict[str, Any]:
     doc = _fetch(product_url)
     name = _pick_text(doc, ["h1", ".product_title", ".product-title", "h2"])
@@ -93,13 +109,35 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
     }
 
 
-def scrape_tireex(url: str) -> List[Dict[str, Any]]:
-    base_doc = _fetch(url)
-    links: List[str]
+def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 5) -> List[Dict[str, Any]]:
+    links: List[str] = []
     if _is_product_url(url):
         links = [url]
     else:
-        links = _extract_product_links(url, base_doc)
+        current = url
+        visited_pages: Set[str] = set()
+        page_count = 0
+        while current and current not in visited_pages and page_count < max_pages:
+            visited_pages.add(current)
+            page_count += 1
+            try:
+                doc = _fetch(current)
+            except Exception as e:
+                log.warning("skip listing page %s: %s", current, e)
+                break
+            for u in _extract_product_links(current, doc):
+                if u not in links:
+                    links.append(u)
+            if not multi_pages:
+                break
+            nxt = _next_page_url(current, doc)
+            if not nxt:
+                break
+            cur_path = (urlparse(url).path or "").strip("/")
+            nxt_path = (urlparse(nxt).path or "").strip("/")
+            if cur_path and not nxt_path.startswith(cur_path.split("/")[0]):
+                break
+            current = nxt
     products: List[Dict[str, Any]] = []
     for u in links[:250]:
         try:

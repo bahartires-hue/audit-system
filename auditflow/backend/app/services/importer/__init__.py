@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -14,15 +15,68 @@ from .seo_optimizer import build_seo_fields
 log = logging.getLogger("importer.pipeline")
 
 
-def run_import_pipeline(site_url: str, uploads_root: Path) -> Dict[str, Any]:
-    raw_items = scrape_products(site_url)
+def _norm_brand(s: str) -> str:
+    return re.sub(r"\s+", " ", (s or "").strip().lower())
+
+
+def _norm_size(s: str) -> str:
+    v = (s or "").upper().replace(" ", "")
+    v = v.replace("ZR", "R")
+    return v
+
+
+def filter_products(products: List[Dict[str, Any]], brand: str = "", size: str = "", limit: int = 20) -> List[Dict[str, Any]]:
+    b = _norm_brand(brand)
+    sz = _norm_size(size)
+    out: List[Dict[str, Any]] = []
+    for item in products:
+        if len(out) >= max(1, limit):
+            break
+        parsed = item.get("_parsed") or {}
+        name = _norm_brand(item.get("name", ""))
+        p_brand = _norm_brand(parsed.get("brand", ""))
+        p_size = _norm_size(parsed.get("size", ""))
+        if b and (b not in name and b != p_brand):
+            continue
+        if sz and sz != p_size:
+            continue
+        out.append(item)
+    return out
+
+
+def run_import_pipeline(
+    site_url: str,
+    uploads_root: Path,
+    *,
+    brand: str = "",
+    size: str = "",
+    limit: int = 20,
+    multi_pages: bool = False,
+) -> Dict[str, Any]:
+    raw_items = scrape_products(site_url, multi_pages=multi_pages)
     products: List[Dict[str, Any]] = []
     seen = set()
     image_dir = uploads_root / "products"
     exports_dir = uploads_root.parent / "exports"
+    prepared: List[Dict[str, Any]] = []
 
     for item in raw_items:
         parsed = parse_tire_name(item.get("name") or "")
+        prepared.append({**item, "_parsed": parsed})
+
+    scoped_items = filter_products(prepared, brand=brand, size=size, limit=limit)
+    log.info(
+        "importer filter applied raw=%s scoped=%s brand=%s size=%s limit=%s multi_pages=%s",
+        len(raw_items),
+        len(scoped_items),
+        brand,
+        size,
+        limit,
+        multi_pages,
+    )
+
+    for item in scoped_items:
+        parsed = item.get("_parsed") or parse_tire_name(item.get("name") or "")
         seo = build_seo_fields(parsed)
         key = (
             parsed.get("brand", "").lower(),

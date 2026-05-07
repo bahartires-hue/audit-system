@@ -69,9 +69,18 @@
       <main class="erp-main">
         <div class="max-w-7xl mx-auto w-full px-4 py-6 md:px-6 space-y-4">
           <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-5">
-            <label class="block text-sm font-extrabold mb-2">رابط الموقع</label>
-            <div class="flex flex-col md:flex-row gap-2">
-              <input id="siteUrl" class="flex-1 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" placeholder="https://tireex.com/" />
+            <label class="block text-sm font-extrabold mb-2">رابط صفحة الماركة أو نتائج البحث</label>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <input id="siteUrl" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 md:col-span-2" placeholder="https://tireex.com/brands/michelin" />
+              <input id="brandInp" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" placeholder="اسم الماركة (مثال: Michelin)" />
+              <input id="sizeInp" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" placeholder="المقاس اختياري (مثال: 215/55R16)" />
+              <input id="limitInp" type="number" min="1" max="500" value="20" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" />
+              <select id="pageMode" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2">
+                <option value="single">صفحة واحدة فقط</option>
+                <option value="multi">عدة صفحات</option>
+              </select>
+            </div>
+            <div class="mt-2">
               <button id="scrapeBtn" class="btn-primary-analyze px-5 py-2 rounded-xl" type="button">سحب المنتجات</button>
             </div>
             <p id="metaInfo" class="text-xs mt-3 text-slate-500 dark:text-slate-400"></p>
@@ -107,6 +116,10 @@
       const metaInfo = document.getElementById("metaInfo");
       const btn = document.getElementById("scrapeBtn");
       const urlInp = document.getElementById("siteUrl");
+      const brandInp = document.getElementById("brandInp");
+      const sizeInp = document.getElementById("sizeInp");
+      const limitInp = document.getElementById("limitInp");
+      const pageMode = document.getElementById("pageMode");
 
       function esc(s) {
         return String(s || "").replace(/[&<>"']/g, (m) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]));
@@ -135,8 +148,12 @@
 
       btn.addEventListener("click", async () => {
         const site_url = (urlInp.value || "").trim();
+        const brand = (brandInp.value || "").trim();
+        const size = (sizeInp.value || "").trim();
+        const limit = Math.max(1, Number(limitInp.value || 20));
+        const multi_pages = pageMode.value === "multi";
         if (!site_url) {
-          showToast("أدخل رابط الموقع", "#ef4444");
+          showToast("أدخل رابط صفحة الماركة أو البحث", "#ef4444");
           return;
         }
         setLoading(btn, true, "جارٍ السحب...");
@@ -147,7 +164,7 @@
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token": csrf },
-            body: JSON.stringify({ site_url }),
+            body: JSON.stringify({ site_url, brand, size, limit, multi_pages }),
           });
           if (!res.ok) throw new Error(await readErrorMessage(res));
           const data = await res.json();

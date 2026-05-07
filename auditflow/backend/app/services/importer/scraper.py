@@ -18,11 +18,11 @@ def classify_url(url: str) -> str:
     return "site"
 
 
-def scrape_products(site_url: str) -> List[Dict[str, Any]]:
+def scrape_products(site_url: str, *, multi_pages: bool = False, max_pages: int = 5) -> List[Dict[str, Any]]:
     domain = (urlparse(site_url).netloc or "").lower()
     kind = classify_url(site_url)
-    log.info("importer domain=%s kind=%s url=%s", domain, kind, site_url)
+    log.info("importer domain=%s kind=%s multi_pages=%s url=%s", domain, kind, multi_pages, site_url)
     if "tireex.com" in domain or "tireex" in domain:
-        return scrape_tireex(site_url)
+        return scrape_tireex(site_url, multi_pages=multi_pages, max_pages=max_pages)
     raise ValueError("هذا الموقع غير مدعوم حاليًا. المتاح الآن: tireex.com")
 
