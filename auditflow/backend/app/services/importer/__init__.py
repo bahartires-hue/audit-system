@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from .ai_rewriter import rewrite_description_fallback
-from .csv_exporter import export_products_csv
+from .csv_exporter import export_products_files
 from .image_downloader import download_image
 from .parser import parse_tire_name
 from .scraper import scrape_products
@@ -136,7 +136,13 @@ def run_import_pipeline(
         products.append(row)
 
     csv_path = exports_dir / "tire_products.csv"
-    csv_out = export_products_csv(products, csv_path)
-    log.info("importer done count=%s csv=%s", len(products), csv_out)
-    return {"count": len(products), "csv_path": csv_out, "items": products}
+    xlsx_path = exports_dir / "tire_products.xlsx"
+    exports = export_products_files(products, csv_path, xlsx_path)
+    log.info("importer done count=%s csv=%s xlsx=%s", len(products), exports["csv_path"], exports["xlsx_path"])
+    return {
+        "count": len(products),
+        "csv_path": exports["csv_path"],
+        "xlsx_path": exports["xlsx_path"],
+        "items": products,
+    }
 

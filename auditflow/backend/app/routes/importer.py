@@ -76,6 +76,7 @@ def scrape_importer(request: Request, body: ImporterRequest) -> Dict[str, Any]:
         "ok": True,
         "count": out.get("count", 0),
         "csv_path": out.get("csv_path", ""),
+        "xlsx_path": out.get("xlsx_path", ""),
         "items": items,
     }
 
@@ -100,4 +101,21 @@ def importer_csv(request: Request) -> FileResponse:
     if not csv_path.exists() or not csv_path.is_file():
         raise HTTPException(404, "ملف CSV غير موجود. نفّذ السحب أولًا.")
     return FileResponse(str(csv_path), media_type="text/csv", filename="tire_products.csv")
+
+
+@router.get("/xlsx")
+def importer_xlsx(request: Request) -> FileResponse:
+    db = SessionLocal()
+    try:
+        require_user(db, request)
+    finally:
+        db.close()
+    xlsx_path = _uploads_root().parent / "exports" / "tire_products.xlsx"
+    if not xlsx_path.exists() or not xlsx_path.is_file():
+        raise HTTPException(404, "ملف Excel غير موجود. نفّذ السحب أولًا.")
+    return FileResponse(
+        str(xlsx_path),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename="tire_products.xlsx",
+    )
 
