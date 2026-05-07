@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from .ai_rewriter import rewrite_description_fallback
+from .cloudinary_uploader import upload_to_cloudinary
 from .csv_exporter import export_products_files
 from .image_downloader import download_image
 from .parser import normalize_brand_name, parse_tire_name
@@ -115,6 +116,12 @@ def run_import_pipeline(
         seen.add(key)
 
         local_image, image_status = download_image(item.get("image_url", ""), image_dir, seo["image_slug"])
+        cloud_url = ""
+        cloud_status = ""
+        if local_image:
+            cloud_url, cloud_status = upload_to_cloudinary(local_image, seo["image_slug"])
+            if not cloud_url:
+                image_status = "needs_review"
         price = (item.get("price") or "").strip()
         price_status = "ok" if price else "price_missing"
         seo_status = "ok" if parsed.get("size") else "needs_review"
@@ -135,6 +142,8 @@ def run_import_pipeline(
             "source_image_url": item.get("image_url", ""),
             "image_url": local_image,
             "image_local": local_image,
+            "image_cloudinary": cloud_url,
+            "cloudinary_status": cloud_status,
             "year": item.get("year", ""),
             "warranty": item.get("warranty", ""),
             "country": item.get("country", ""),

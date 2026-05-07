@@ -65,17 +65,9 @@ def build_public_image_url(filename: str) -> str:
 
 
 def _to_public_image_value(p: Dict[str, Any]) -> str:
-    local = str(p.get("image_local") or "").strip()
-    if local:
-        lower_local = local.lower()
-        if lower_local.startswith("/opt/render/") or lower_local.startswith("c:\\") or lower_local.startswith("d:\\"):
-            return build_public_image_url(Path(local).name)
-        if lower_local.startswith("http://") or lower_local.startswith("https://"):
-            return local
-        return build_public_image_url(Path(local).name)
-    src = str(p.get("image_url") or "").strip()
-    if src.lower().startswith("https://"):
-        return src
+    cloud = str(p.get("image_cloudinary") or "").strip()
+    if cloud.startswith("https://res.cloudinary.com/"):
+        return cloud
     return ""
 
 
@@ -85,6 +77,10 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
     columns = [str(c) for c in template_df.columns]
     output_rows: List[Dict[str, Any]] = []
     for p in products:
+        image_value = _to_public_image_value(p)
+        if not image_value:
+            # skip from salla export when cloudinary upload failed
+            continue
         row = {col: "" for col in columns}
         promo_bits = []
         if p.get("year"):
@@ -92,8 +88,6 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
         if p.get("warranty"):
             promo_bits.append(f"الضمان {p.get('warranty')}")
         promo = " - ".join(promo_bits)
-        image_value = _to_public_image_value(p)
-
         safe_set(row, columns, "النوع ", "منتج")
         safe_set(row, columns, "أسم المنتج", p.get("product_title", ""))
         safe_set(row, columns, "تصنيف المنتج", "قسم الإطارات")

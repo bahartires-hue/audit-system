@@ -16,3 +16,4 @@ arabic-reshaper
 python-bidi==0.4.2
 pytest
 httpx
+cloudinary
