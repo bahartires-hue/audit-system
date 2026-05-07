@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
 from typing import Tuple
 
 log = logging.getLogger("importer.cloudinary")
@@ -16,9 +15,9 @@ def _cloudinary_ready() -> bool:
     )
 
 
-def upload_to_cloudinary(local_image_path: str, public_id: str) -> Tuple[str, str]:
-    if not local_image_path:
-        return "", "no_local_image"
+def upload_to_cloudinary(asset_path_or_url: str, public_id: str) -> Tuple[str, str]:
+    if not asset_path_or_url:
+        return "", "no_asset"
     if not _cloudinary_ready():
         return "", "cloudinary_not_configured"
     try:
@@ -36,10 +35,11 @@ def upload_to_cloudinary(local_image_path: str, public_id: str) -> Tuple[str, st
         pid = "".join(ch if (ch.isalnum() or ch in "-/") else "-" for ch in pid)
         pid = "-".join(x for x in pid.split("-") if x)
         if not pid:
-            pid = Path(local_image_path).stem
+            tail = asset_path_or_url.replace("\\", "/").split("/")[-1]
+            pid = tail.rsplit(".", 1)[0] if "." in tail else tail or "tire-product"
 
         res = cloudinary.uploader.upload(
-            local_image_path,
+            asset_path_or_url,
             public_id=pid,
             folder="products",
             resource_type="image",
@@ -52,6 +52,6 @@ def upload_to_cloudinary(local_image_path: str, public_id: str) -> Tuple[str, st
             return "", "cloudinary_invalid_url"
         return url, "uploaded"
     except Exception as e:
-        log.warning("cloudinary upload failed path=%s err=%s", local_image_path, e)
+        log.warning("cloudinary upload failed asset=%s err=%s", asset_path_or_url, e)
         return "", "upload_failed"
 

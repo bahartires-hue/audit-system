@@ -120,8 +120,11 @@ def run_import_pipeline(
         cloud_status = ""
         if local_image:
             cloud_url, cloud_status = upload_to_cloudinary(local_image, seo["image_slug"])
-            if not cloud_url:
-                image_status = "needs_review"
+        elif (item.get("image_url") or "").startswith("http"):
+            # fallback: ask Cloudinary to fetch source URL directly
+            cloud_url, cloud_status = upload_to_cloudinary(item.get("image_url", ""), seo["image_slug"])
+        if not cloud_url:
+            image_status = "needs_review"
         price = (item.get("price") or "").strip()
         price_status = "ok" if price else "price_missing"
         seo_status = "ok" if parsed.get("size") else "needs_review"
