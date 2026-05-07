@@ -59,6 +59,9 @@ def normalize_model_name(raw: str) -> str:
         return ""
     for ar, en in MODEL_TRANSLATIONS.items():
         s = s.replace(ar, en)
+    # remove any remaining Arabic tokens to keep model in English-only form
+    s = re.sub(r"[\u0600-\u06FF]+", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
     s = re.sub(r"\bRUN\s*FLAT\b", "RF", s, flags=re.IGNORECASE)
     return s.title()
 

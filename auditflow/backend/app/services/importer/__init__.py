@@ -77,6 +77,15 @@ def run_import_pipeline(
         prepared.append({**item, "_parsed": parsed})
 
     scoped_items = filter_products(prepared, brand=brand, size=size, limit=limit)
+    if not scoped_items and prepared:
+        # avoid hard-zero output when strict filter input is mismatched
+        scoped_items = prepared[: max(1, limit)]
+        log.warning(
+            "importer relaxed filters because scoped=0 raw=%s brand=%s size=%s",
+            len(prepared),
+            brand,
+            size,
+        )
     log.info(
         "importer filter applied raw=%s scoped=%s brand=%s size=%s limit=%s multi_pages=%s",
         len(raw_items),
@@ -90,8 +99,10 @@ def run_import_pipeline(
     for item in scoped_items:
         parsed = item.get("_parsed") or parse_tire_name(item.get("name") or "")
         if parsed.get("parse_status") == "non_english_name" or re.search(r"[\u0600-\u06FF]", f"{parsed.get('brand','')} {parsed.get('model','')}"):
-            log.info("skip non-english brand/model name=%s", item.get("name", ""))
-            continue
+            # final fallback: keep product but clear non-English fragments
+            parsed["brand"] = re.sub(r"[\u0600-\u06FF]+", "", parsed.get("brand", "")).strip() or parsed.get("brand", "")
+            parsed["model"] = re.sub(r"[\u0600-\u06FF]+", "", parsed.get("model", "")).strip() or "Standard"
+            parsed["parse_status"] = "ok" if parsed.get("size") else "size_missing"
         seo = build_seo_fields(parsed)
         key = (
             parsed.get("brand", "").lower(),
