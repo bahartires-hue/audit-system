@@ -76,9 +76,6 @@ def _to_public_image_value(p: Dict[str, Any]) -> str:
     src = str(p.get("image_url") or "").strip()
     if src.lower().startswith("https://"):
         return src
-    source_src = str(p.get("source_image_url") or "").strip()
-    if source_src.lower().startswith("https://"):
-        return source_src
     return ""
 
 
