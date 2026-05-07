@@ -24,6 +24,7 @@ BRAND_TRANSLATIONS = {
     "دنلوب": "Dunlop",
     "نيكسن": "Nexen",
     "نكسان": "Nexen",
+    "الفا": "Alpha",
 }
 
 MODEL_TRANSLATIONS = {

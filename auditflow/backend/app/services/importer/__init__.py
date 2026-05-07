@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 from .ai_rewriter import rewrite_description_fallback
 from .csv_exporter import export_products_files
 from .image_downloader import download_image
-from .parser import parse_tire_name
+from .parser import normalize_brand_name, parse_tire_name
 from .scraper import scrape_products
 from .seo_optimizer import build_seo_fields
 
@@ -33,7 +33,9 @@ def _extract_size_from_text(s: str) -> str:
 
 
 def filter_products(products: List[Dict[str, Any]], brand: str = "", size: str = "", limit: int = 20) -> List[Dict[str, Any]]:
-    b = _norm_brand(brand)
+    b_raw = (brand or "").strip()
+    b_norm = normalize_brand_name(b_raw) if b_raw else ""
+    b = _norm_brand(b_norm or b_raw)
     sz = _norm_size(size)
     out: List[Dict[str, Any]] = []
     for item in products:
