@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 import requests
 import logging
+from PIL import Image
 
 log = logging.getLogger("importer.images")
 _BANNED_TOKENS = {"tireex", "competitor", "img", "image", "photo", "cdn", "site"}
@@ -34,6 +35,15 @@ def _watermark_suspected(image_url: str, file_name: str) -> bool:
     return any(x in blob for x in ["watermark", "logo-overlay", "copyright", "wm-"])
 
 
+def _is_valid_image_file(path: Path) -> bool:
+    try:
+        with Image.open(path) as img:
+            img.verify()
+        return path.stat().st_size > 0
+    except Exception:
+        return False
+
+
 def download_image(image_url: str, target_dir: Path, seo_slug: str) -> tuple[str, str]:
     target_dir.mkdir(parents=True, exist_ok=True)
     ext = _guess_ext(image_url)
@@ -46,14 +56,34 @@ def download_image(image_url: str, target_dir: Path, seo_slug: str) -> tuple[str
     if fpath.exists():
         status = "needs_review" if _watermark_suspected(image_url, fname) else "exists"
         return str(fpath), status
-    try:
-        res = requests.get(image_url, timeout=20, headers={"User-Agent": "Mozilla/5.0"})
-        res.raise_for_status()
-        with open(fpath, "wb") as f:
-            f.write(res.content)
-        status = "needs_review" if _watermark_suspected(image_url, fname) else "downloaded"
-        return str(fpath), status
-    except Exception as e:
-        log.warning("image download failed url=%s err=%s", image_url, e)
-        return "", "failed"
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        "Referer": f"{urlparse(image_url).scheme}://{urlparse(image_url).netloc}/",
+    }
+    last_err = None
+    for timeout_s in (12, 20, 30):
+        try:
+            res = requests.get(image_url, timeout=timeout_s, headers=headers)
+            res.raise_for_status()
+            ctype = (res.headers.get("Content-Type") or "").lower()
+            if ctype and not ctype.startswith("image/"):
+                raise ValueError(f"non-image content-type: {ctype}")
+            if not res.content:
+                raise ValueError("empty image content")
+            with open(fpath, "wb") as f:
+                f.write(res.content)
+            if not _is_valid_image_file(fpath):
+                try:
+                    fpath.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                raise ValueError("invalid image file")
+            status = "needs_review" if _watermark_suspected(image_url, fname) else "downloaded"
+            return str(fpath), status
+        except Exception as e:
+            last_err = e
+            continue
+    log.warning("image download failed url=%s err=%s", image_url, last_err)
+    return "", "failed"
 
