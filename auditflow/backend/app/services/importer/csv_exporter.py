@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -53,6 +54,31 @@ def safe_set(row: Dict[str, Any], columns: List[str], col_name: str, value: Any)
         row[col_name] = value if value is not None else ""
 
 
+def build_public_image_url(filename: str) -> str:
+    base = (os.getenv("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+    safe = (filename or "").strip().replace("\\", "/").split("/")[-1]
+    if not safe:
+        return ""
+    if base:
+        return f"{base}/uploads/products/{safe}"
+    return ""
+
+
+def _to_public_image_value(p: Dict[str, Any]) -> str:
+    local = str(p.get("image_local") or "").strip()
+    if local:
+        lower_local = local.lower()
+        if lower_local.startswith("/opt/render/") or lower_local.startswith("c:\\") or lower_local.startswith("d:\\"):
+            return build_public_image_url(Path(local).name)
+        if lower_local.startswith("http://") or lower_local.startswith("https://"):
+            return local
+        return build_public_image_url(Path(local).name)
+    src = str(p.get("image_url") or "").strip()
+    if src.lower().startswith("https://"):
+        return src
+    return ""
+
+
 def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path | None, output_path: Path) -> Path:
     # external template is intentionally ignored to avoid any runtime dependency.
     template_df = pd.DataFrame(columns=_DEFAULT_SALLA_COLUMNS)
@@ -66,7 +92,7 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
         if p.get("warranty"):
             promo_bits.append(f"الضمان {p.get('warranty')}")
         promo = " - ".join(promo_bits)
-        image_value = p.get("image_local") or p.get("image_url") or ""
+        image_value = _to_public_image_value(p)
 
         safe_set(row, columns, "النوع ", "منتج")
         safe_set(row, columns, "أسم المنتج", p.get("product_title", ""))

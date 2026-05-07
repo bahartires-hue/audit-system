@@ -93,6 +93,7 @@ UPLOAD_DIR = (Path(_data_root) / "uploads") if _data_root else (BASE_DIR / "uplo
 FRONTEND_DIR = BASE_DIR / "frontend"
 
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 app.include_router(auth_router)
 app.include_router(trade_router)
 app.include_router(cashierko_router)
