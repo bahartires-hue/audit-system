@@ -163,6 +163,8 @@ def run_import_pipeline(
                 else "جاهز"
             ),
         }
+        if image_status in {"failed", "no_image_url"} and (item.get("image_url") or "").startswith("https://"):
+            row["status"] = "مراجعة"
         products.append(row)
 
     csv_path = exports_dir / "tire_products.csv"
