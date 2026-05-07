@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import pandas as pd
 
@@ -53,32 +53,9 @@ def safe_set(row: Dict[str, Any], columns: List[str], col_name: str, value: Any)
         row[col_name] = value if value is not None else ""
 
 
-def _load_template_df(template_path: Path) -> pd.DataFrame:
-    if not template_path.exists():
-        raise ValueError(f"قالب سلة غير موجود: {template_path}")
-    template_df = pd.read_excel(template_path)
-    cols = [str(c).strip() for c in template_df.columns]
-    if "أسم المنتج" in cols and "سعر المنتج" in cols and "الوصف" in cols:
-        template_df.columns = cols
-        return template_df
-    raw = pd.read_excel(template_path, header=None)
-    header_idx = None
-    for i in range(min(len(raw), 20)):
-        vals = [str(x).strip() for x in raw.iloc[i].tolist() if str(x).strip() and str(x) != "nan"]
-        if "أسم المنتج" in vals and "سعر المنتج" in vals and "الوصف" in vals:
-            header_idx = i
-            break
-    if header_idx is None:
-        raise ValueError("تعذر تحديد صف الأعمدة داخل قالب سلة")
-    cols = [str(x).strip() if str(x) != "nan" else f"Unnamed: {idx}" for idx, x in enumerate(raw.iloc[header_idx].tolist())]
-    return pd.DataFrame(columns=cols)
-
-
-def export_to_salla_template(products: List[Dict[str, Any]], template_path: Optional[Path], output_path: Path) -> Path:
-    if template_path:
-        template_df = _load_template_df(template_path)
-    else:
-        template_df = pd.DataFrame(columns=_DEFAULT_SALLA_COLUMNS)
+def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path | None, output_path: Path) -> Path:
+    # external template is intentionally ignored to avoid any runtime dependency.
+    template_df = pd.DataFrame(columns=_DEFAULT_SALLA_COLUMNS)
     columns = [str(c) for c in template_df.columns]
     output_rows: List[Dict[str, Any]] = []
     for p in products:
@@ -123,25 +100,10 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Opti
 
     output_df = pd.DataFrame(output_rows, columns=columns)
     if list(output_df.columns) != list(template_df.columns):
-        raise ValueError("أعمدة ملف سلة غير متطابقة مع القالب الأصلي")
+        raise ValueError("أعمدة ملف سلة المدمجة غير متطابقة")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_df.to_excel(output_path, index=False)
     return output_path
-
-
-def _resolve_salla_template_path(output_dir: Path) -> Optional[Path]:
-    candidates = [
-        output_dir / "Salla Products Template.xlsx",
-        output_dir.parent / "Salla Products Template.xlsx",
-        output_dir.parent.parent / "Salla Products Template.xlsx",
-        output_dir / "Salla Products Template (3).xlsx",
-        output_dir.parent / "Salla Products Template (3).xlsx",
-        output_dir.parent.parent / "Salla Products Template (3).xlsx",
-    ]
-    for p in candidates:
-        if p.exists():
-            return p
-    return None
 
 
 def export_products_files(products: List[Dict[str, Any]], csv_path: Path, xlsx_path: Path) -> Dict[str, str]:
@@ -151,8 +113,7 @@ def export_products_files(products: List[Dict[str, Any]], csv_path: Path, xlsx_p
     df.to_csv(csv_path, index=False, encoding="utf-8-sig")
     df.to_excel(xlsx_path, index=False)
     salla_xlsx_path = xlsx_path.parent / "salla_products_ready.xlsx"
-    template_path = _resolve_salla_template_path(xlsx_path.parent)
-    out_path = export_to_salla_template(products, template_path, salla_xlsx_path)
+    out_path = export_to_salla_template(products, None, salla_xlsx_path)
     return {
         "csv_path": str(csv_path),
         "xlsx_path": str(xlsx_path),
