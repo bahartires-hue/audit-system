@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+from pathlib import Path
 from typing import Any, Dict, List, Set
 from urllib.parse import urljoin, urlparse
 
@@ -11,6 +12,7 @@ from bs4 import BeautifulSoup
 log = logging.getLogger("importer.tireex")
 
 _UA = {"User-Agent": "Mozilla/5.0"}
+_SIZE_RE = re.compile(r"(\d{3})\s*/\s*(\d{2})\s*(?:ZR|R)?\s*(\d{2})", re.IGNORECASE)
 
 
 def _clean(s: str) -> str:
@@ -43,54 +45,52 @@ def _pick_attr(doc: BeautifulSoup, selectors: List[str], attr: str) -> str:
     return ""
 
 
+def _pick_largest_srcset(srcset: str) -> str:
+    best_url = ""
+    best_w = -1
+    for part in (srcset or "").split(","):
+        seg = part.strip().split()
+        if not seg:
+            continue
+        u = seg[0].strip()
+        w = 0
+        if len(seg) > 1 and seg[1].endswith("w"):
+            try:
+                w = int(seg[1][:-1])
+            except Exception:
+                w = 0
+        if w >= best_w:
+            best_w = w
+            best_url = u
+    return best_url
+
+
 def _is_product_url(url: str) -> bool:
     p = (urlparse(url).path or "").lower()
     return "/product" in p or "/products/" in p or "/shop/" in p
 
 
-def _looks_like_product_link(base_url: str, u: str) -> bool:
-    p = (urlparse(u).path or "").lower().strip("/")
-    if not p:
-        return False
-    if urlparse(u).netloc != urlparse(base_url).netloc:
-        return False
-    blocked = ("cart", "checkout", "account", "login", "register", "category", "tag", "search", "brands", "brand")
-    if any(x in p for x in blocked):
-        return False
-    # product pages عادة تكون صفحات داخلية وليست أقسام عامة.
-    return len(p.split("/")) >= 2
+def _extract_size_token(text: str) -> str:
+    m = _SIZE_RE.search(text or "")
+    if not m:
+        return ""
+    return f"{m.group(1)}/{m.group(2)}R{m.group(3)}"
 
 
 def _extract_product_links(base_url: str, soup: BeautifulSoup) -> List[str]:
     out: List[str] = []
     seen: Set[str] = set()
-    selectors = [
-        "a.woocommerce-LoopProduct-link[href]",
-        "li.product a[href]",
-        ".products .product a[href]",
-        ".product-item a[href]",
-        ".shop-item a[href]",
-        "article.product a[href]",
-    ]
-
-    def _add(href: str) -> None:
-        if not href:
-            return
+    for a in soup.select("a[href]"):
+        href = a.get("href") or ""
         u = urljoin(base_url, href)
+        if urlparse(u).netloc != urlparse(base_url).netloc:
+            continue
+        if "/product/" not in (urlparse(u).path or "").lower():
+            continue
         if u in seen:
-            return
-        if _is_product_url(u) or _looks_like_product_link(base_url, u):
-            seen.add(u)
-            out.append(u)
-
-    for sel in selectors:
-        for a in soup.select(sel):
-            _add(a.get("href") or "")
-
-    # fallback شامل إذا لم نجد عبر selectors المعروفة.
-    if not out:
-        for a in soup.select("a[href]"):
-            _add(a.get("href") or "")
+            continue
+        seen.add(u)
+        out.append(u)
     return out
 
 
@@ -113,27 +113,51 @@ def _next_page_url(base_url: str, soup: BeautifulSoup) -> str:
 def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     seen: Set[str] = set()
-    cards = soup.select("li.product, .product-item, article.product, .products .product")
+    cards = soup.select(
+        "li.product, .product, .products .product, .wc-block-grid__product, .woocommerce-LoopProduct-link, a.woocommerce-LoopProduct-link"
+    )
+    log.info("tireex detected listing cards=%s url=%s", len(cards), base_url)
     for card in cards:
-        a = card.select_one("a[href]")
+        if card.name == "a":
+            a = card
+            card_root = card.parent or card
+        else:
+            a = card.select_one("a.woocommerce-LoopProduct-link[href]") or card.select_one("a[href]")
+            card_root = card
         if not a or not a.get("href"):
+            log.info("tireex skip card reason=no_link")
             continue
         product_url = urljoin(base_url, a.get("href"))
         if product_url in seen:
             continue
+        if "/product/" not in (urlparse(product_url).path or "").lower():
+            log.info("tireex skip card reason=not_product_url url=%s", product_url)
+            continue
         seen.add(product_url)
-        name = _clean(
-            (card.select_one(".woocommerce-loop-product__title, .product-title, h2, h3") or a).get_text(" ", strip=True)
+        name_node = (
+            card_root.select_one("h2.woocommerce-loop-product__title")
+            or card_root.select_one(".woocommerce-loop-product__title")
+            or card_root.select_one(".product-title")
+            or card_root.select_one("h2")
+            or card_root.select_one("h3")
+            or a
         )
-        price = _clean((card.select_one(".price .amount, .price, [class*='price']") or {}).get_text(" ", strip=True) if card.select_one(".price .amount, .price, [class*='price']") else "")
-        old_price = _clean((card.select_one(".price del .amount, .old-price, .was-price") or {}).get_text(" ", strip=True) if card.select_one(".price del .amount, .old-price, .was-price") else "")
-        img = card.select_one("img")
+        name = _clean(name_node.get_text(" ", strip=True) if name_node else "")
+        size_token = _extract_size_token(name)
+        if not size_token:
+            log.info("tireex skip card reason=no_size name=%s", name)
+            continue
+        price_node = card_root.select_one(".price") or card_root.select_one(".woocommerce-Price-amount") or card_root.select_one("bdi")
+        old_price_node = card_root.select_one(".price del .amount") or card_root.select_one(".old-price") or card_root.select_one(".was-price")
+        price = _clean(price_node.get_text(" ", strip=True) if price_node else "")
+        old_price = _clean(old_price_node.get_text(" ", strip=True) if old_price_node else "")
+        img = card_root.select_one("img")
         image_url = ""
         if img:
-            raw = img.get("data-src") or img.get("data-lazy-src") or img.get("src") or ""
+            raw = _pick_largest_srcset(img.get("srcset") or "")
+            if not raw:
+                raw = img.get("data-src") or img.get("data-lazy-src") or img.get("src") or ""
             image_url = urljoin(base_url, raw) if raw else ""
-        if not name:
-            continue
         out.append(
             {
                 "name": name,
@@ -148,6 +172,7 @@ def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str,
                 "description": "",
             }
         )
+    log.info("tireex listing products after size filter=%s url=%s", len(out), base_url)
     return out
 
 
@@ -167,12 +192,17 @@ def _in_same_scope(seed_url: str, candidate_url: str) -> bool:
 
 def _parse_product_page(product_url: str) -> Dict[str, Any]:
     doc = _fetch(product_url)
-    name = _pick_text(doc, ["h1", ".product_title", ".product-title", "h2"])
+    name = _pick_text(doc, ["h1.product_title", ".product_title", ".product-title", "h1", "h2"])
     if not name:
         name = _pick_attr(doc, ["meta[property='og:title']", "meta[name='twitter:title']"], "content")
+    size_token = _extract_size_token(name)
     price = _pick_text(doc, [".price .amount", ".price", "[class*='price'] .amount"])
     old_price = _pick_text(doc, [".price del .amount", ".price .old", ".was-price"])
-    image = _pick_attr(doc, ["img.wp-post-image", ".product img", "img"], "data-src") or _pick_attr(doc, ["img.wp-post-image", ".product img", "img"], "src")
+    image = _pick_attr(doc, ["meta[property='og:image']"], "content")
+    if not image:
+        image = _pick_attr(doc, [".woocommerce-product-gallery img", "img.wp-post-image", ".product img", "img"], "data-src")
+    if not image:
+        image = _pick_attr(doc, [".woocommerce-product-gallery img", "img.wp-post-image", ".product img", "img"], "src")
     image = urljoin(product_url, image) if image else ""
     year = _pick_text(doc, [".year", "[data-year]", ".manufacture-year"])
     warranty = _pick_text(doc, [".warranty", "[class*='warranty']"])
@@ -190,6 +220,7 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
         "warranty": warranty,
         "pattern": pattern,
         "description": desc,
+        "_size_token": size_token,
     }
 
 
@@ -234,12 +265,40 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 5, li
             break
         try:
             p = _parse_product_page(u)
-            if p.get("name"):
-                products.append(p)
+            if not p.get("name"):
+                log.info("tireex skip product reason=no_name url=%s", u)
+                continue
+            if not p.get("_size_token"):
+                log.info("tireex skip product reason=no_size name=%s url=%s", p.get("name", ""), u)
+                continue
+            if not p.get("product_url"):
+                log.info("tireex skip product reason=no_product_url url=%s", u)
+                continue
+            if not p.get("image_url"):
+                log.info("tireex product has no image url=%s", u)
+            products.append(p)
         except Exception as e:
             log.warning("skip product %s: %s", u, e)
     if products:
         return products[:max_items]
     # fallback إذا فشل parsing صفحات المنتج: نعيد منتجات الكروت من صفحة الماركة/البحث.
+    if not listing_items:
+        try:
+            doc = _fetch(url)
+            html = doc.prettify()[:5000]
+            Path("debug_tireex.html").write_text(html, encoding="utf-8")
+            log.warning("tireex no products found; wrote debug_tireex.html")
+        except Exception as e:
+            log.warning("tireex debug html write failed: %s", e)
+        links = _extract_product_links(url, _fetch(url))
+        for u in links[: max_items * 2]:
+            if len(listing_items) >= max_items:
+                break
+            try:
+                p = _parse_product_page(u)
+                if p.get("name") and p.get("_size_token") and p.get("product_url"):
+                    listing_items.append(p)
+            except Exception as e:
+                log.warning("skip fallback product %s: %s", u, e)
     return listing_items[:max_items]
 
