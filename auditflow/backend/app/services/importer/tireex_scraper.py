@@ -151,6 +151,20 @@ def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str,
     return out
 
 
+def _in_same_scope(seed_url: str, candidate_url: str) -> bool:
+    seed = urlparse(seed_url)
+    cand = urlparse(candidate_url)
+    if seed.netloc != cand.netloc:
+        return False
+    seed_path = (seed.path or "").strip("/")
+    cand_path = (cand.path or "").strip("/")
+    if not seed_path:
+        # للرابط الجذري: نسمح فقط بروابط pagination المعروفة.
+        return ("page/" in cand_path) or ("paged=" in cand.query) or (cand_path == "")
+    base_prefix = seed_path.split("/")[0]
+    return cand_path.startswith(base_prefix)
+
+
 def _parse_product_page(product_url: str) -> Dict[str, Any]:
     doc = _fetch(product_url)
     name = _pick_text(doc, ["h1", ".product_title", ".product-title", "h2"])
@@ -179,9 +193,10 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
     }
 
 
-def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 5) -> List[Dict[str, Any]]:
+def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 5, limit: int = 20) -> List[Dict[str, Any]]:
     links: List[str] = []
     listing_items: List[Dict[str, Any]] = []
+    max_items = max(1, int(limit or 20))
     if _is_product_url(url):
         links = [url]
     else:
@@ -200,18 +215,23 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 5) ->
             for u in _extract_product_links(current, doc):
                 if u not in links:
                     links.append(u)
+                if len(links) >= max_items:
+                    break
+            if len(links) >= max_items:
+                break
             if not multi_pages:
                 break
             nxt = _next_page_url(current, doc)
             if not nxt:
                 break
-            cur_path = (urlparse(url).path or "").strip("/")
-            nxt_path = (urlparse(nxt).path or "").strip("/")
-            if cur_path and not nxt_path.startswith(cur_path.split("/")[0]):
+            if not _in_same_scope(url, nxt):
+                log.info("stop pagination outside scope seed=%s next=%s", url, nxt)
                 break
             current = nxt
     products: List[Dict[str, Any]] = []
-    for u in links[:250]:
+    for u in links[: max_items * 2]:
+        if len(products) >= max_items:
+            break
         try:
             p = _parse_product_page(u)
             if p.get("name"):
@@ -219,7 +239,7 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 5) ->
         except Exception as e:
             log.warning("skip product %s: %s", u, e)
     if products:
-        return products
+        return products[:max_items]
     # fallback إذا فشل parsing صفحات المنتج: نعيد منتجات الكروت من صفحة الماركة/البحث.
-    return listing_items
+    return listing_items[:max_items]
 

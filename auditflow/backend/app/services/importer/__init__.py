@@ -25,6 +25,13 @@ def _norm_size(s: str) -> str:
     return v
 
 
+def _extract_size_from_text(s: str) -> str:
+    m = re.search(r"(\d{3})\s*/\s*(\d{2,3})\s*Z?R\s*(\d{2})", (s or ""), flags=re.IGNORECASE)
+    if not m:
+        return ""
+    return _norm_size(f"{m.group(1)}/{m.group(2)}R{m.group(3)}")
+
+
 def filter_products(products: List[Dict[str, Any]], brand: str = "", size: str = "", limit: int = 20) -> List[Dict[str, Any]]:
     b = _norm_brand(brand)
     sz = _norm_size(size)
@@ -34,10 +41,13 @@ def filter_products(products: List[Dict[str, Any]], brand: str = "", size: str =
             break
         parsed = item.get("_parsed") or {}
         name = _norm_brand(item.get("name", ""))
+        url = _norm_brand(item.get("product_url", ""))
         p_brand = _norm_brand(parsed.get("brand", ""))
         p_size = _norm_size(parsed.get("size", ""))
-        if b and (b not in name and b != p_brand):
+        if b and not (b in name or b in url or b == p_brand):
             continue
+        if sz and not p_size:
+            p_size = _extract_size_from_text(item.get("name", ""))
         if sz and sz != p_size:
             continue
         out.append(item)
@@ -53,7 +63,7 @@ def run_import_pipeline(
     limit: int = 20,
     multi_pages: bool = False,
 ) -> Dict[str, Any]:
-    raw_items = scrape_products(site_url, multi_pages=multi_pages)
+    raw_items = scrape_products(site_url, multi_pages=multi_pages, limit=limit)
     products: List[Dict[str, Any]] = []
     seen = set()
     image_dir = uploads_root / "products"
