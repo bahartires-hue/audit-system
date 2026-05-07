@@ -84,6 +84,18 @@ def _extract_price_value(text: str) -> str:
     return str(int(v)) if v.is_integer() else str(v)
 
 
+def _has_tire_size(text: str) -> bool:
+    return bool(_SIZE_RE.search(_clean(text).upper()))
+
+
+def _find_detail(page_text: str, labels: List[str]) -> str:
+    for label in labels:
+        m = re.search(rf"{re.escape(label)}\s*[:：]?\s*([^\n\r|]+)", page_text, flags=re.IGNORECASE)
+        if m:
+            return _clean(m.group(1))
+    return ""
+
+
 def _is_product_url(url: str) -> bool:
     p = (urlparse(url).path or "").lower()
     return "/product" in p or "/products/" in p or "/shop/" in p
@@ -111,6 +123,33 @@ def _extract_product_links(base_url: str, soup: BeautifulSoup) -> List[str]:
         seen.add(u)
         out.append(u)
     return out
+
+
+def _extract_product_links_by_anchor_text(base_url: str, soup: BeautifulSoup) -> List[Dict[str, str]]:
+    products: List[Dict[str, str]] = []
+    seen: Set[str] = set()
+    bad_words = ("add-to-cart", "cart", "checkout", "category", "tag")
+    all_links = soup.select("a[href]")
+    log.info("tireex total anchors=%s url=%s", len(all_links), base_url)
+    for a in all_links:
+        text = _clean(a.get_text(" ", strip=True))
+        href = (a.get("href") or "").strip()
+        if not text or not href:
+            continue
+        if not _has_tire_size(text):
+            continue
+        product_url = urljoin(base_url, href)
+        lower_u = product_url.lower()
+        if any(w in lower_u for w in bad_words):
+            continue
+        if urlparse(product_url).netloc != urlparse(base_url).netloc:
+            continue
+        if product_url in seen:
+            continue
+        seen.add(product_url)
+        products.append({"name": text, "product_url": product_url})
+    log.info("tireex anchors-with-size=%s url=%s", len(products), base_url)
+    return products
 
 
 def _next_page_url(base_url: str, soup: BeautifulSoup) -> str:
@@ -233,7 +272,10 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
         )
     if not size_token:
         size_token = _extract_size_token(doc.get_text(" ", strip=True))
+    page_text = _clean(doc.get_text(" ", strip=True))
     price = _extract_price_value(_pick_text(doc, [".price .amount", ".price", "[class*='price'] .amount", "bdi"]))
+    if not price:
+        price = _extract_price_value(page_text)
     old_price = _extract_price_value(_pick_text(doc, [".price del .amount", ".price .old", ".was-price"]))
     image = _pick_attr(doc, ["meta[property='og:image']"], "content")
     if not image:
@@ -241,10 +283,15 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
     if not image:
         image = _pick_attr(doc, [".woocommerce-product-gallery img", "img.wp-post-image", ".product img", "img"], "src")
     image = urljoin(product_url, image) if image else ""
-    year = _pick_text(doc, [".year", "[data-year]", ".manufacture-year"])
-    warranty = _pick_text(doc, [".warranty", "[class*='warranty']"])
-    country = _pick_text(doc, [".country", "[class*='origin']", ".origin"])
-    pattern = _pick_text(doc, [".pattern", "[class*='pattern']"])
+    year = ""
+    ym = re.search(r"(20[2-9][0-9])", page_text)
+    if ym:
+        year = ym.group(1)
+    if not year:
+        year = _pick_text(doc, [".year", "[data-year]", ".manufacture-year"])
+    warranty = _pick_text(doc, [".warranty", "[class*='warranty']"]) or _find_detail(page_text, ["الضمان", "Warranty"])
+    country = _pick_text(doc, [".country", "[class*='origin']", ".origin"]) or _find_detail(page_text, ["بلد المنشأ", "الصنع", "Origin", "Country"])
+    pattern = _pick_text(doc, [".pattern", "[class*='pattern']"]) or _find_detail(page_text, ["النقشة", "Pattern", "Tread"])
     desc = _pick_text(doc, [".product-description", ".woocommerce-product-details__short-description", ".entry-content"])
     return {
         "name": name,
@@ -280,6 +327,24 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 5, li
                 log.warning("skip listing page %s: %s", current, e)
                 break
             listing_items.extend(_extract_list_products(current, doc))
+            # fallback سريع: روابط a التي تحمل مقاسًا في النص.
+            for p in _extract_product_links_by_anchor_text(current, doc):
+                if p.get("product_url") and all(x.get("product_url") != p["product_url"] for x in listing_items):
+                    listing_items.append(
+                        {
+                            "name": p.get("name", ""),
+                            "price": "",
+                            "old_price": "",
+                            "product_url": p["product_url"],
+                            "image_url": "",
+                            "year": "",
+                            "country": "",
+                            "warranty": "",
+                            "pattern": "",
+                            "description": "",
+                            "_size_token": _extract_size_token(p.get("name", "")),
+                        }
+                    )
             for u in _extract_product_links(current, doc):
                 if u not in links:
                     links.append(u)
