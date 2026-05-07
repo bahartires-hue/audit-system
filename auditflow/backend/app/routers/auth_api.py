@@ -95,9 +95,14 @@ def _consume_invite_if_db(db, code: str, user_id: str) -> None:
 
 
 def _is_bootstrap_admin_registration(db, username: str, email: str) -> bool:
-    # First account becomes admin automatically.
+    # Bootstrap rule:
+    # - If there are no users, first account is admin.
+    # - If users exist but no admin account exists, allow bootstrap admin registration too.
     any_user = db.query(User.id).first()
     if not any_user:
+        return True
+    any_admin = db.query(User.id).filter(User.is_admin == 1).first()
+    if not any_admin:
         return True
     admin_email = (os.getenv("AUDITFLOW_ADMIN_EMAIL") or "").strip().lower()
     admin_username = (os.getenv("AUDITFLOW_ADMIN_USERNAME") or "").strip()
