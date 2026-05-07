@@ -91,6 +91,7 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 _data_root = (os.getenv("AUDITFLOW_DATA_ROOT") or "").strip()
 UPLOAD_DIR = (Path(_data_root) / "uploads") if _data_root else (BASE_DIR / "uploads")
 FRONTEND_DIR = BASE_DIR / "frontend"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
