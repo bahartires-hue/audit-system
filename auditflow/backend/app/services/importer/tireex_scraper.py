@@ -48,22 +48,49 @@ def _is_product_url(url: str) -> bool:
     return "/product" in p or "/products/" in p or "/shop/" in p
 
 
+def _looks_like_product_link(base_url: str, u: str) -> bool:
+    p = (urlparse(u).path or "").lower().strip("/")
+    if not p:
+        return False
+    if urlparse(u).netloc != urlparse(base_url).netloc:
+        return False
+    blocked = ("cart", "checkout", "account", "login", "register", "category", "tag", "search", "brands", "brand")
+    if any(x in p for x in blocked):
+        return False
+    # product pages عادة تكون صفحات داخلية وليست أقسام عامة.
+    return len(p.split("/")) >= 2
+
+
 def _extract_product_links(base_url: str, soup: BeautifulSoup) -> List[str]:
     out: List[str] = []
     seen: Set[str] = set()
-    for a in soup.select("a[href]"):
-        href = a.get("href") or ""
+    selectors = [
+        "a.woocommerce-LoopProduct-link[href]",
+        "li.product a[href]",
+        ".products .product a[href]",
+        ".product-item a[href]",
+        ".shop-item a[href]",
+        "article.product a[href]",
+    ]
+
+    def _add(href: str) -> None:
         if not href:
-            continue
+            return
         u = urljoin(base_url, href)
-        if urlparse(u).netloc != urlparse(base_url).netloc:
-            continue
-        if not _is_product_url(u):
-            continue
         if u in seen:
-            continue
-        seen.add(u)
-        out.append(u)
+            return
+        if _is_product_url(u) or _looks_like_product_link(base_url, u):
+            seen.add(u)
+            out.append(u)
+
+    for sel in selectors:
+        for a in soup.select(sel):
+            _add(a.get("href") or "")
+
+    # fallback شامل إذا لم نجد عبر selectors المعروفة.
+    if not out:
+        for a in soup.select("a[href]"):
+            _add(a.get("href") or "")
     return out
 
 
