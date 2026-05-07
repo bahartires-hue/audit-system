@@ -97,8 +97,21 @@ def _find_detail(page_text: str, labels: List[str]) -> str:
 
 
 def _is_product_url(url: str) -> bool:
-    p = (urlparse(url).path or "").lower()
-    return "/product" in p or "/products/" in p or "/shop/" in p
+    p = (urlparse(url).path or "").lower().strip("/")
+    if not p:
+        return False
+    if p.startswith("product-category/") or p == "product-category":
+        return False
+    if p == "shop":
+        return False
+    if p.startswith("product/"):
+        return True
+    if p.startswith("products/"):
+        return True
+    if p.startswith("shop/"):
+        # في Tireex صفحات المنتج غالبًا تحت /shop/<slug>/
+        return len(p.split("/")) >= 2
+    return False
 
 
 def _extract_size_token(text: str) -> str:
@@ -116,7 +129,8 @@ def _extract_product_links(base_url: str, soup: BeautifulSoup) -> List[str]:
         u = urljoin(base_url, href)
         if urlparse(u).netloc != urlparse(base_url).netloc:
             continue
-        if "/product/" not in (urlparse(u).path or "").lower():
+        path = (urlparse(u).path or "").lower()
+        if "/product/" not in path and "/shop/" not in path:
             continue
         if u in seen:
             continue
@@ -141,6 +155,8 @@ def _extract_product_links_by_anchor_text(base_url: str, soup: BeautifulSoup) ->
         product_url = urljoin(base_url, href)
         lower_u = product_url.lower()
         if any(w in lower_u for w in bad_words):
+            continue
+        if "/product/" not in lower_u and "/shop/" not in lower_u:
             continue
         if urlparse(product_url).netloc != urlparse(base_url).netloc:
             continue
@@ -172,15 +188,25 @@ def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str,
     out: List[Dict[str, Any]] = []
     seen: Set[str] = set()
     cards = soup.select(
-        "li.product, .product, .products .product, .wc-block-grid__product, .woocommerce-LoopProduct-link, a.woocommerce-LoopProduct-link"
+        "li.product, .product, .products .product, .wc-block-grid__product, .woocommerce-LoopProduct-link, a.woocommerce-LoopProduct-link, .product-card"
     )
+    # Tireex theme specific: cards can be represented primarily by title anchors.
+    if not cards:
+        cards = soup.select("a.product-card-content-title")
     log.info("tireex detected listing cards=%s url=%s", len(cards), base_url)
     for card in cards:
-        if card.name == "a":
+        if card.name == "a" and "product-card-content-title" in ((card.get("class") or [])):
+            a = card
+            card_root = card.find_parent(class_=re.compile(r"product-card", re.I)) or card.parent or card
+        elif card.name == "a":
             a = card
             card_root = card.parent or card
         else:
-            a = card.select_one("a.woocommerce-LoopProduct-link[href]") or card.select_one("a[href]")
+            a = (
+                card.select_one("a.product-card-content-title[href]")
+                or card.select_one("a.woocommerce-LoopProduct-link[href]")
+                or card.select_one("a[href]")
+            )
             card_root = card
         if not a or not a.get("href"):
             log.info("tireex skip card reason=no_link")
@@ -188,12 +214,14 @@ def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str,
         product_url = urljoin(base_url, a.get("href"))
         if product_url in seen:
             continue
-        if "/product/" not in (urlparse(product_url).path or "").lower():
+        pth = (urlparse(product_url).path or "").lower()
+        if "/product/" not in pth and "/shop/" not in pth:
             log.info("tireex skip card reason=not_product_url url=%s", product_url)
             continue
         seen.add(product_url)
         name_node = (
-            card_root.select_one("h2.woocommerce-loop-product__title")
+            card_root.select_one("a.product-card-content-title")
+            or card_root.select_one("h2.woocommerce-loop-product__title")
             or card_root.select_one(".woocommerce-loop-product__title")
             or card_root.select_one(".product-title")
             or card_root.select_one("h2")
@@ -207,7 +235,12 @@ def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str,
         if _GENERIC_TITLE_RE.search(name):
             log.info("tireex skip card reason=generic_title name=%s", name)
             continue
-        price_node = card_root.select_one(".price") or card_root.select_one(".woocommerce-Price-amount") or card_root.select_one("bdi")
+        price_node = (
+            card_root.select_one(".price")
+            or card_root.select_one(".woocommerce-Price-amount")
+            or card_root.select_one("bdi")
+            or card_root.select_one(".product-card-price")
+        )
         old_price_node = card_root.select_one(".price del .amount") or card_root.select_one(".old-price") or card_root.select_one(".was-price")
         price = _extract_price_value(price_node.get_text(" ", strip=True) if price_node else "")
         old_price = _extract_price_value(old_price_node.get_text(" ", strip=True) if old_price_node else "")
@@ -225,10 +258,10 @@ def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str,
                 "old_price": old_price,
                 "product_url": product_url,
                 "image_url": image_url,
-                "year": "",
+                "year": _pick_text(card_root, [".product-card-year .content", ".product-card-year"]),
                 "country": "",
                 "warranty": "",
-                "pattern": "",
+                "pattern": _pick_text(card_root, [".product-card-pattern"]),
                 "description": "",
                 "_size_token": _extract_size_token(name),
             }
