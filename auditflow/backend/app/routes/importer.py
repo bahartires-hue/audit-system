@@ -138,3 +138,27 @@ def importer_salla_xlsx(request: Request) -> FileResponse:
         filename="salla_products_ready.xlsx",
     )
 
+
+@router.get("/uploads-debug")
+def importer_uploads_debug(request: Request) -> Dict[str, Any]:
+    db = SessionLocal()
+    try:
+        require_user(db, request)
+    finally:
+        db.close()
+    root = _uploads_root()
+    products_dir = root / "products"
+    products_dir.mkdir(parents=True, exist_ok=True)
+    files = sorted([p for p in products_dir.iterdir() if p.is_file()], key=lambda x: x.stat().st_mtime, reverse=True)
+    base = (os.getenv("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+    first5 = [p.name for p in files[:5]]
+    return {
+        "uploads_dir": str(root),
+        "uploads_exists": root.exists(),
+        "products_dir": str(products_dir),
+        "products_exists": products_dir.exists(),
+        "products_count": len(files),
+        "first_5_images": first5,
+        "first_5_public_urls": [f"{base}/uploads/products/{name}" if base else f"/uploads/products/{name}" for name in first5],
+    }
+
