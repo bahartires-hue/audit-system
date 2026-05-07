@@ -150,7 +150,22 @@ def scrape_products(site_url: str, *, multi_pages: bool = False, max_pages: int 
     kind = classify_url(site_url)
     log.info("importer domain=%s kind=%s multi_pages=%s limit=%s url=%s", domain, kind, multi_pages, limit, site_url)
     if "tireex.com" in domain or "tireex" in domain:
-        return scrape_tireex(site_url, multi_pages=multi_pages, max_pages=max_pages, limit=limit)
+        primary = scrape_tireex(site_url, multi_pages=multi_pages, max_pages=max_pages, limit=limit)
+        if primary:
+            return primary
+        log.warning("tireex primary scraper returned 0; trying multi-page fallback")
+        secondary = scrape_tireex(site_url, multi_pages=True, max_pages=max(5, max_pages), limit=max(limit * 2, 40))
+        if secondary:
+            return secondary[:limit]
+        log.warning("tireex multi-page scraper returned 0; trying generic fallback")
+        generic = scrape_generic(site_url, multi_pages=True, max_pages=max(5, max_pages), limit=max(limit * 2, 40))
+        return generic[:limit]
     # fallback عام لأي موقع شبيه بمتاجر المنتجات.
-    return scrape_generic(site_url, multi_pages=multi_pages, max_pages=max_pages, limit=limit)
+    primary_generic = scrape_generic(site_url, multi_pages=multi_pages, max_pages=max_pages, limit=limit)
+    if primary_generic:
+        return primary_generic
+    if not multi_pages:
+        log.warning("generic primary scraper returned 0; retrying with multi-pages")
+        return scrape_generic(site_url, multi_pages=True, max_pages=max(5, max_pages), limit=max(limit * 2, 40))[:limit]
+    return primary_generic
 
