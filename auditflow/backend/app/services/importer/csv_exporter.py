@@ -110,8 +110,8 @@ def export_products_files(products: List[Dict[str, Any]], csv_path: Path, xlsx_p
     df = pd.DataFrame(products)
     df.to_csv(csv_path, index=False, encoding="utf-8-sig")
     df.to_excel(xlsx_path, index=False)
-    salla_csv_path = csv_path.parent / "salla_products_ready.csv"
-    salla_xlsx_path = xlsx_path.parent / "salla_products_ready.xlsx"
+    salla_csv_path = csv_path.parent / "Salla Products Template (3).csv"
+    salla_xlsx_path = xlsx_path.parent / "Salla Products Template (3).xlsx"
     salla_df = pd.DataFrame([_to_salla_row(p) for p in products], columns=_SALLA_COLUMNS)
     salla_df.to_csv(salla_csv_path, index=False, encoding="utf-8-sig")
     salla_df.to_excel(salla_xlsx_path, index=False)

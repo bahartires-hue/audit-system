@@ -129,12 +129,12 @@ def importer_salla_xlsx(request: Request) -> FileResponse:
         require_user(db, request)
     finally:
         db.close()
-    xlsx_path = _uploads_root().parent / "exports" / "salla_products_ready.xlsx"
+    xlsx_path = _uploads_root().parent / "exports" / "Salla Products Template (3).xlsx"
     if not xlsx_path.exists() or not xlsx_path.is_file():
         raise HTTPException(404, "ملف Salla Excel غير موجود. نفّذ السحب أولًا.")
     return FileResponse(
         str(xlsx_path),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        filename="salla_products_ready.xlsx",
+        filename="Salla Products Template (3).xlsx",
     )
 
