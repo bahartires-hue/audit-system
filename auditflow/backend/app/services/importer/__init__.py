@@ -143,6 +143,8 @@ def run_import_pipeline(
         "count": len(products),
         "csv_path": exports["csv_path"],
         "xlsx_path": exports["xlsx_path"],
+        "salla_csv_path": exports["salla_csv_path"],
+        "salla_xlsx_path": exports["salla_xlsx_path"],
         "items": products,
     }
 

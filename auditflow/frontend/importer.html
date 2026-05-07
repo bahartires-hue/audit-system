@@ -84,6 +84,7 @@
               <button id="scrapeBtn" class="btn-primary-analyze px-5 py-2 rounded-xl" type="button">سحب المنتجات</button>
               <button id="downloadCsvBtn" class="px-5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 ms-2" type="button">تحميل CSV</button>
               <button id="downloadXlsxBtn" class="px-5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 ms-2" type="button">تحميل Excel</button>
+              <button id="downloadSallaBtn" class="px-5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 ms-2" type="button">تحميل Excel سلة</button>
             </div>
             <p id="metaInfo" class="text-xs mt-3 text-slate-500 dark:text-slate-400"></p>
           </div>
@@ -119,6 +120,7 @@
       const btn = document.getElementById("scrapeBtn");
       const csvBtn = document.getElementById("downloadCsvBtn");
       const xlsxBtn = document.getElementById("downloadXlsxBtn");
+      const sallaBtn = document.getElementById("downloadSallaBtn");
       const urlInp = document.getElementById("siteUrl");
       const brandInp = document.getElementById("brandInp");
       const sizeInp = document.getElementById("sizeInp");
@@ -173,7 +175,7 @@
           if (!res.ok) throw new Error(await readErrorMessage(res));
           const data = await res.json();
           render(data.items || []);
-          metaInfo.textContent = `تم جلب ${data.count || 0} منتج - CSV: ${data.csv_path || ""} - XLSX: ${data.xlsx_path || ""}`;
+          metaInfo.textContent = `تم جلب ${data.count || 0} منتج - CSV: ${data.csv_path || ""} - XLSX: ${data.xlsx_path || ""} - Salla XLSX: ${data.salla_xlsx_path || ""}`;
           showToast("تم سحب المنتجات بنجاح", "#10b981");
         } catch (e) {
           showToast(e.message || "فشل سحب المنتجات", "#ef4444");
@@ -188,6 +190,10 @@
 
       xlsxBtn.addEventListener("click", () => {
         window.location.href = "/importer/xlsx";
+      });
+
+      sallaBtn.addEventListener("click", () => {
+        window.location.href = "/importer/salla-xlsx";
       });
     </script>
   </body>

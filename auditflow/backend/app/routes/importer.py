@@ -77,6 +77,8 @@ def scrape_importer(request: Request, body: ImporterRequest) -> Dict[str, Any]:
         "count": out.get("count", 0),
         "csv_path": out.get("csv_path", ""),
         "xlsx_path": out.get("xlsx_path", ""),
+        "salla_csv_path": out.get("salla_csv_path", ""),
+        "salla_xlsx_path": out.get("salla_xlsx_path", ""),
         "items": items,
     }
 
@@ -117,5 +119,22 @@ def importer_xlsx(request: Request) -> FileResponse:
         str(xlsx_path),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename="tire_products.xlsx",
+    )
+
+
+@router.get("/salla-xlsx")
+def importer_salla_xlsx(request: Request) -> FileResponse:
+    db = SessionLocal()
+    try:
+        require_user(db, request)
+    finally:
+        db.close()
+    xlsx_path = _uploads_root().parent / "exports" / "salla_products_ready.xlsx"
+    if not xlsx_path.exists() or not xlsx_path.is_file():
+        raise HTTPException(404, "ملف Salla Excel غير موجود. نفّذ السحب أولًا.")
+    return FileResponse(
+        str(xlsx_path),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename="salla_products_ready.xlsx",
     )
 
