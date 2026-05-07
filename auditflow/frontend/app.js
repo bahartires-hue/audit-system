@@ -838,7 +838,16 @@ function initNavAndTheme() {
 
   const sidebar = document.querySelector(".erp-sidebar__nav");
   const mobileDrawer = document.getElementById("mobileNavDrawer");
-  const coreLinks = [];
+  const coreLinks = [
+    {
+      href: "/importer",
+      nav: "importer",
+      title: "مستورد المنتجات",
+      text: "مستورد المنتجات",
+      icon:
+        '<svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h10M7 12h10M7 17h10"/><path stroke-linecap="round" stroke-linejoin="round" d="M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg>',
+    },
+  ];
   const legalLinks = [
     { href: "/terms", nav: "terms", title: "شروط الاستخدام", text: "شروط الاستخدام" },
     { href: "/privacy", nav: "privacy", title: "سياسة الخصوصية", text: "سياسة الخصوصية" },
@@ -852,8 +861,7 @@ function initNavAndTheme() {
         a.className = "erp-side-link nav-link";
         a.setAttribute("data-nav", x.nav);
         a.setAttribute("title", x.title);
-        a.innerHTML =
-          '<svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7h18M6 3v4m12-4v4M5 11h14a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2z"/><path stroke-linecap="round" stroke-linejoin="round" d="M8 15h3m5 0h-3"/></svg>';
+        a.innerHTML = x.icon;
         sidebar.insertBefore(a, sidebar.querySelector('a[data-nav="settings"]') || null);
       }
     });
