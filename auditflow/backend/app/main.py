@@ -23,6 +23,7 @@ from .models import AnalysisReport, User, init_db
 from .rate_limit import limiter
 from .routers.auth_api import router as auth_router
 from .routers.cashierko_api import router as cashierko_router
+from .routes.importer import router as importer_router
 from .routers.smartpos_v2_api import router as smartpos_v2_router
 from .routers.trade_api import router as trade_router
 from .services.analyzer import analyze as analyze_pairs
@@ -65,7 +66,7 @@ async def ui_cache_headers(request: Request, call_next):
     if path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-store, max-age=0, must-revalidate"
         response.headers["Pragma"] = "no-cache"
-    elif path in ("/", "/analyze", "/convert", "/settings", "/login", "/reports", "/help", "/terms", "/privacy", "/user-agreement", "/about", "/contact", "/social") or path.startswith("/report"):
+    elif path in ("/", "/analyze", "/convert", "/importer", "/settings", "/login", "/reports", "/help", "/terms", "/privacy", "/user-agreement", "/about", "/contact", "/social") or path.startswith("/report"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
@@ -96,6 +97,7 @@ app.include_router(auth_router)
 app.include_router(trade_router)
 app.include_router(cashierko_router)
 app.include_router(smartpos_v2_router)
+app.include_router(importer_router)
 
 init_db()
 
@@ -140,6 +142,11 @@ def ui_analyze(request: Request):
 @app.get("/convert", response_class=HTMLResponse)
 def ui_convert(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "convert.html")
+
+
+@app.get("/importer", response_class=HTMLResponse)
+def ui_importer(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "importer.html")
 
 
 @app.get("/trade", response_class=HTMLResponse)

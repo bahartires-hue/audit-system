@@ -4,6 +4,9 @@ sqlalchemy
 psycopg2-binary
 pandas
 pdfplumber
+requests
+beautifulsoup4
+lxml
 openpyxl
 reportlab
 python-multipart

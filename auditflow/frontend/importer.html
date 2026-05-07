@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
+    <title>مستورد المنتجات | التطابق الأمثل</title>
+    <link rel="icon" href="/static/favicon.svg?v=15" type="image/svg+xml" />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/tailwind.css?v=15" />
+    <link rel="stylesheet" href="/static/dark.css?v=15" />
+    <style>
+      body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+      .preview-img { width: 62px; height: 62px; object-fit: cover; border-radius: 10px; border: 1px solid rgba(148, 163, 184, 0.35); }
+    </style>
+  </head>
+  <body class="erp-shell bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
+    <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
+
+    <aside class="erp-sidebar" aria-label="القائمة الرئيسية">
+      <a href="/" class="erp-sidebar__brand app-brand flex-col items-center gap-1" aria-label="التطابق الأمثل OptimalMatch">
+        <span class="app-brand__mark" style="width: 2.35rem; height: 2.35rem">
+          <svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 16l5 5 11-11" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+        </span>
+      </a>
+      <nav class="erp-sidebar__nav" aria-label="تنقل">
+        <a href="/" class="erp-side-link nav-link" data-nav="home" title="الرئيسية"></a>
+        <a href="/analyze" class="erp-side-link nav-link" data-nav="analyze" title="تحليل"></a>
+        <a href="/convert" class="erp-side-link nav-link" data-nav="convert" title="PDF إلى Excel"></a>
+        <a href="/importer" class="erp-side-link nav-link" data-nav="importer" title="مستورد المنتجات"></a>
+        <a href="/reports" class="erp-side-link nav-link" data-nav="reports" title="التقارير"></a>
+        <a href="/settings" class="erp-side-link nav-link" data-nav="settings" title="لوحة التحكم"></a>
+        <a href="/help" class="erp-side-link nav-link" data-nav="help" title="مساعدة"></a>
+      </nav>
+    </aside>
+
+    <div class="erp-content min-h-0">
+      <header class="erp-topbar">
+        <button type="button" id="navMenuBtn" class="nav-toggle-btn nav-burger-only" aria-controls="mobileNavDrawer" aria-expanded="false" aria-label="فتح القائمة">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" /></svg>
+        </button>
+        <div class="min-w-0 flex flex-col">
+          <span class="erp-topbar__title truncate">المستورد الذكي</span>
+          <span class="text-[0.65rem] font-extrabold text-slate-500 dark:text-slate-400 truncate">استيراد منتجات الإطارات + تحسين SEO</span>
+        </div>
+        <div class="flex items-center gap-2 shrink-0 ms-auto">
+          <div id="authArea"></div>
+          <button type="button" id="themeToggle" class="theme-toggle-btn"></button>
+        </div>
+      </header>
+      <div id="mobileNavDrawer" class="mobile-nav-drawer md:hidden" role="navigation" aria-label="قائمة الجوال">
+        <a href="/" data-nav="home">الرئيسية</a>
+        <a href="/analyze" data-nav="analyze">تحليل</a>
+        <a href="/convert" data-nav="convert">PDF إلى Excel</a>
+        <a href="/importer" data-nav="importer">مستورد المنتجات</a>
+        <a href="/reports" data-nav="reports">التقارير</a>
+        <a href="/settings" data-nav="settings">لوحة التحكم</a>
+        <a href="/help" data-nav="help">مساعدة</a>
+      </div>
+
+      <main class="erp-main">
+        <div class="max-w-7xl mx-auto w-full px-4 py-6 md:px-6 space-y-4">
+          <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-5">
+            <label class="block text-sm font-extrabold mb-2">رابط الموقع</label>
+            <div class="flex flex-col md:flex-row gap-2">
+              <input id="siteUrl" class="flex-1 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" placeholder="https://tireex.com/" />
+              <button id="scrapeBtn" class="btn-primary-analyze px-5 py-2 rounded-xl" type="button">سحب المنتجات</button>
+            </div>
+            <p id="metaInfo" class="text-xs mt-3 text-slate-500 dark:text-slate-400"></p>
+          </div>
+
+          <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-3 overflow-auto">
+            <table class="min-w-full text-sm">
+              <thead>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <th class="p-2">الصورة</th>
+                  <th class="p-2">الاسم الأصلي</th>
+                  <th class="p-2">الاسم المحسن</th>
+                  <th class="p-2">الماركة</th>
+                  <th class="p-2">الموديل</th>
+                  <th class="p-2">المقاس</th>
+                  <th class="p-2">السعر</th>
+                  <th class="p-2">سنة الصنع</th>
+                  <th class="p-2">حالة الصورة</th>
+                  <th class="p-2">حالة SEO</th>
+                </tr>
+              </thead>
+              <tbody id="previewRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="/static/app.js?v=15"></script>
+    <script>
+      initAuthUI();
+      const rows = document.getElementById("previewRows");
+      const metaInfo = document.getElementById("metaInfo");
+      const btn = document.getElementById("scrapeBtn");
+      const urlInp = document.getElementById("siteUrl");
+
+      function esc(s) {
+        return String(s || "").replace(/[&<>"']/g, (m) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]));
+      }
+
+      function render(items) {
+        rows.innerHTML = "";
+        items.forEach((x) => {
+          const tr = document.createElement("tr");
+          tr.className = "border-b border-slate-100 dark:border-slate-800";
+          tr.innerHTML = `
+            <td class="p-2">${x.image_preview ? `<img class="preview-img" src="${esc(x.image_preview)}" />` : ""}</td>
+            <td class="p-2">${esc(x.name)}</td>
+            <td class="p-2">${esc(x.product_title)}</td>
+            <td class="p-2">${esc(x.brand)}</td>
+            <td class="p-2">${esc(x.model)}</td>
+            <td class="p-2">${esc(x.size)}</td>
+            <td class="p-2">${esc(x.price)}</td>
+            <td class="p-2">${esc(x.year)}</td>
+            <td class="p-2">${esc(x.image_status || "")}</td>
+            <td class="p-2">${esc(x.seo_status || "")}</td>
+          `;
+          rows.appendChild(tr);
+        });
+      }
+
+      btn.addEventListener("click", async () => {
+        const site_url = (urlInp.value || "").trim();
+        if (!site_url) {
+          showToast("أدخل رابط الموقع", "#ef4444");
+          return;
+        }
+        setLoading(btn, true, "جارٍ السحب...");
+        try {
+          syncCsrfFromCookie();
+          const csrf = localStorage.getItem("csrf_token") || "";
+          const res = await fetch("/importer/scrape", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token": csrf },
+            body: JSON.stringify({ site_url }),
+          });
+          if (!res.ok) throw new Error(await readErrorMessage(res));
+          const data = await res.json();
+          render(data.items || []);
+          metaInfo.textContent = `تم جلب ${data.count || 0} منتج - CSV: ${data.csv_path || ""}`;
+          showToast("تم سحب المنتجات بنجاح", "#10b981");
+        } catch (e) {
+          showToast(e.message || "فشل سحب المنتجات", "#ef4444");
+        } finally {
+          setLoading(btn, false, "سحب المنتجات");
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -824,6 +824,7 @@ function initNavAndTheme() {
   let key = "home";
   if (path.startsWith("/analyze")) key = "analyze";
   else if (path.startsWith("/convert")) key = "convert";
+  else if (path.startsWith("/importer")) key = "importer";
   else if (path.startsWith("/reports")) key = "reports";
   else if (path.startsWith("/report")) key = "reports";
   else if (path.startsWith("/settings")) key = "settings";
