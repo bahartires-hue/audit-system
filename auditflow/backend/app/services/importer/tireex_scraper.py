@@ -66,6 +66,24 @@ def _pick_largest_srcset(srcset: str) -> str:
     return best_url
 
 
+def _extract_price_value(text: str) -> str:
+    raw = _clean(text)
+    nums = re.findall(r"(\d+(?:\.\d+)?)\s*(?:ر\.س|SAR|ريال)?", raw, flags=re.IGNORECASE)
+    vals: List[float] = []
+    for n in nums:
+        try:
+            v = float(n)
+            if 10 <= v <= 100000:
+                vals.append(v)
+        except Exception:
+            continue
+    if not vals:
+        return raw
+    # نرجع أول قيمة صالحة كنص للحفاظ على تنسيق الحقول الحالية.
+    v = vals[0]
+    return str(int(v)) if v.is_integer() else str(v)
+
+
 def _is_product_url(url: str) -> bool:
     p = (urlparse(url).path or "").lower()
     return "/product" in p or "/products/" in p or "/shop/" in p
@@ -152,8 +170,8 @@ def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str,
             continue
         price_node = card_root.select_one(".price") or card_root.select_one(".woocommerce-Price-amount") or card_root.select_one("bdi")
         old_price_node = card_root.select_one(".price del .amount") or card_root.select_one(".old-price") or card_root.select_one(".was-price")
-        price = _clean(price_node.get_text(" ", strip=True) if price_node else "")
-        old_price = _clean(old_price_node.get_text(" ", strip=True) if old_price_node else "")
+        price = _extract_price_value(price_node.get_text(" ", strip=True) if price_node else "")
+        old_price = _extract_price_value(old_price_node.get_text(" ", strip=True) if old_price_node else "")
         img = card_root.select_one("img")
         image_url = ""
         if img:
@@ -215,8 +233,8 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
         )
     if not size_token:
         size_token = _extract_size_token(doc.get_text(" ", strip=True))
-    price = _pick_text(doc, [".price .amount", ".price", "[class*='price'] .amount"])
-    old_price = _pick_text(doc, [".price del .amount", ".price .old", ".was-price"])
+    price = _extract_price_value(_pick_text(doc, [".price .amount", ".price", "[class*='price'] .amount", "bdi"]))
+    old_price = _extract_price_value(_pick_text(doc, [".price del .amount", ".price .old", ".was-price"]))
     image = _pick_attr(doc, ["meta[property='og:image']"], "content")
     if not image:
         image = _pick_attr(doc, [".woocommerce-product-gallery img", "img.wp-post-image", ".product img", "img"], "data-src")
