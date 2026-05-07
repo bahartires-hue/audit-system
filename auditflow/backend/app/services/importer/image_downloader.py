@@ -7,7 +7,6 @@ from urllib.parse import urlparse
 
 import requests
 import logging
-from PIL import Image
 
 log = logging.getLogger("importer.images")
 _BANNED_TOKENS = {"tireex", "competitor", "img", "image", "photo", "cdn", "site"}
@@ -35,11 +34,29 @@ def _watermark_suspected(image_url: str, file_name: str) -> bool:
     return any(x in blob for x in ["watermark", "logo-overlay", "copyright", "wm-"])
 
 
+def _is_valid_image_bytes(blob: bytes) -> bool:
+    if not blob or len(blob) < 256:
+        return False
+    head = blob[:32]
+    if head.startswith(b"\xff\xd8\xff"):  # jpg
+        return True
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):  # png
+        return True
+    if head.startswith(b"RIFF") and b"WEBP" in blob[:16]:  # webp
+        return True
+    if head.startswith(b"GIF87a") or head.startswith(b"GIF89a"):  # gif
+        return True
+    # avif/heif signatures
+    if len(blob) > 16 and blob[4:8] == b"ftyp" and (b"avif" in blob[:32] or b"heic" in blob[:32] or b"heif" in blob[:32]):
+        return True
+    # fallback: accept sufficiently large binary payload
+    return len(blob) > 1024
+
+
 def _is_valid_image_file(path: Path) -> bool:
     try:
-        with Image.open(path) as img:
-            img.verify()
-        return path.stat().st_size > 0
+        blob = path.read_bytes()
+        return _is_valid_image_bytes(blob)
     except Exception:
         return False
 
@@ -58,7 +75,7 @@ def download_image(image_url: str, target_dir: Path, seo_slug: str) -> tuple[str
         return str(fpath), status
     headers = {
         "User-Agent": "Mozilla/5.0",
-        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
         "Referer": f"{urlparse(image_url).scheme}://{urlparse(image_url).netloc}/",
     }
     last_err = None
@@ -66,10 +83,9 @@ def download_image(image_url: str, target_dir: Path, seo_slug: str) -> tuple[str
         try:
             res = requests.get(image_url, timeout=timeout_s, headers=headers)
             res.raise_for_status()
-            ctype = (res.headers.get("Content-Type") or "").lower()
-            if ctype and not ctype.startswith("image/"):
-                raise ValueError(f"non-image content-type: {ctype}")
-            if not res.content:
+            # بعض المواقع ترجع image payload مع content-type غير دقيق (octet-stream)،
+            # لذلك نعتمد على فحص الباينري بدل الرفض المباشر.
+            if not _is_valid_image_bytes(res.content):
                 raise ValueError("empty image content")
             with open(fpath, "wb") as f:
                 f.write(res.content)
