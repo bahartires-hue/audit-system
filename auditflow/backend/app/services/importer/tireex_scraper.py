@@ -110,9 +110,52 @@ def _next_page_url(base_url: str, soup: BeautifulSoup) -> str:
     return ""
 
 
+def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    seen: Set[str] = set()
+    cards = soup.select("li.product, .product-item, article.product, .products .product")
+    for card in cards:
+        a = card.select_one("a[href]")
+        if not a or not a.get("href"):
+            continue
+        product_url = urljoin(base_url, a.get("href"))
+        if product_url in seen:
+            continue
+        seen.add(product_url)
+        name = _clean(
+            (card.select_one(".woocommerce-loop-product__title, .product-title, h2, h3") or a).get_text(" ", strip=True)
+        )
+        price = _clean((card.select_one(".price .amount, .price, [class*='price']") or {}).get_text(" ", strip=True) if card.select_one(".price .amount, .price, [class*='price']") else "")
+        old_price = _clean((card.select_one(".price del .amount, .old-price, .was-price") or {}).get_text(" ", strip=True) if card.select_one(".price del .amount, .old-price, .was-price") else "")
+        img = card.select_one("img")
+        image_url = ""
+        if img:
+            raw = img.get("data-src") or img.get("data-lazy-src") or img.get("src") or ""
+            image_url = urljoin(base_url, raw) if raw else ""
+        if not name:
+            continue
+        out.append(
+            {
+                "name": name,
+                "price": price,
+                "old_price": old_price,
+                "product_url": product_url,
+                "image_url": image_url,
+                "year": "",
+                "country": "",
+                "warranty": "",
+                "pattern": "",
+                "description": "",
+            }
+        )
+    return out
+
+
 def _parse_product_page(product_url: str) -> Dict[str, Any]:
     doc = _fetch(product_url)
     name = _pick_text(doc, ["h1", ".product_title", ".product-title", "h2"])
+    if not name:
+        name = _pick_attr(doc, ["meta[property='og:title']", "meta[name='twitter:title']"], "content")
     price = _pick_text(doc, [".price .amount", ".price", "[class*='price'] .amount"])
     old_price = _pick_text(doc, [".price del .amount", ".price .old", ".was-price"])
     image = _pick_attr(doc, ["img.wp-post-image", ".product img", "img"], "data-src") or _pick_attr(doc, ["img.wp-post-image", ".product img", "img"], "src")
@@ -138,6 +181,7 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
 
 def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 5) -> List[Dict[str, Any]]:
     links: List[str] = []
+    listing_items: List[Dict[str, Any]] = []
     if _is_product_url(url):
         links = [url]
     else:
@@ -152,6 +196,7 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 5) ->
             except Exception as e:
                 log.warning("skip listing page %s: %s", current, e)
                 break
+            listing_items.extend(_extract_list_products(current, doc))
             for u in _extract_product_links(current, doc):
                 if u not in links:
                     links.append(u)
@@ -173,5 +218,8 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 5) ->
                 products.append(p)
         except Exception as e:
             log.warning("skip product %s: %s", u, e)
-    return products
+    if products:
+        return products
+    # fallback إذا فشل parsing صفحات المنتج: نعيد منتجات الكروت من صفحة الماركة/البحث.
+    return listing_items
 
