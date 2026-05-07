@@ -87,6 +87,9 @@ def run_import_pipeline(
 
     for item in scoped_items:
         parsed = item.get("_parsed") or parse_tire_name(item.get("name") or "")
+        if parsed.get("parse_status") == "non_english_name" or re.search(r"[\u0600-\u06FF]", f"{parsed.get('brand','')} {parsed.get('model','')}"):
+            log.info("skip non-english brand/model name=%s", item.get("name", ""))
+            continue
         seo = build_seo_fields(parsed)
         key = (
             parsed.get("brand", "").lower(),
@@ -116,7 +119,8 @@ def run_import_pipeline(
             "price": price,
             "old_price": item.get("old_price", ""),
             "product_url": item.get("product_url", ""),
-            "image_url": item.get("image_url", ""),
+            "source_image_url": item.get("image_url", ""),
+            "image_url": local_image,
             "image_local": local_image,
             "year": item.get("year", ""),
             "warranty": item.get("warranty", ""),
@@ -140,7 +144,11 @@ def run_import_pipeline(
             "image_status": image_status,
             "seo_status": seo_status,
             "price_status": price_status,
-            "status": "جاهز" if seo_status == "ok" and image_status != "failed" else "مراجعة",
+            "status": (
+                "مراجعة"
+                if image_status in {"failed", "needs_review"} or seo_status != "ok" or price_status != "ok"
+                else "جاهز"
+            ),
         }
         products.append(row)
 

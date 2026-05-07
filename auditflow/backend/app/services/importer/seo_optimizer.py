@@ -30,7 +30,7 @@ def build_seo_fields(prod: Dict[str, Any]) -> Dict[str, str]:
         if x
     )
     image_slug = slugify(f"{brand} {model} {size}".strip())
-    image_alt_text = f"{brand} {model} {size}".strip()
+    image_alt_text = f"كفر {brand} {model} مقاس {size}".strip()
     return {
         "product_title": title,
         "seo_title": title,
