@@ -1,10 +1,52 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
+_DEFAULT_SALLA_COLUMNS = [
+    "النوع ",
+    "أسم المنتج",
+    "تصنيف المنتج",
+    "صورة المنتج",
+    "وصف صورة المنتج",
+    "نوع المنتج",
+    "سعر المنتج",
+    "الوصف",
+    "هل يتطلب شحن؟",
+    "رمز المنتج sku",
+    "سعر التكلفة",
+    "السعر المخفض",
+    "تاريخ بداية التخفيض",
+    "تاريخ نهاية التخفيض",
+    "اقصي كمية لكل عميل",
+    "إخفاء خيار تحديد الكمية",
+    "اضافة صورة عند الطلب",
+    "الوزن",
+    "وحدة الوزن",
+    "الماركة",
+    "العنوان الترويجي",
+    "تثبيت المنتج",
+    "الباركود",
+    "السعرات الحرارية",
+    "MPN",
+    "GTIN",
+    "خاضع للضريبة ؟",
+    "سبب عدم الخضوع للضريبة",
+    "[1] الاسم",
+    "[1] النوع",
+    "[1] القيمة",
+    "[1] الصورة / اللون",
+    "[2] الاسم",
+    "[2] النوع",
+    "[2] القيمة",
+    "[2] الصورة / اللون",
+    "[3] الاسم",
+    "[3] النوع",
+    "[3] القيمة",
+    "[3] الصورة / اللون",
+]
 
 def safe_set(row: Dict[str, Any], columns: List[str], col_name: str, value: Any) -> None:
     if col_name in columns:
@@ -32,8 +74,11 @@ def _load_template_df(template_path: Path) -> pd.DataFrame:
     return pd.DataFrame(columns=cols)
 
 
-def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path, output_path: Path) -> Path:
-    template_df = _load_template_df(template_path)
+def export_to_salla_template(products: List[Dict[str, Any]], template_path: Optional[Path], output_path: Path) -> Path:
+    if template_path:
+        template_df = _load_template_df(template_path)
+    else:
+        template_df = pd.DataFrame(columns=_DEFAULT_SALLA_COLUMNS)
     columns = [str(c) for c in template_df.columns]
     output_rows: List[Dict[str, Any]] = []
     for p in products:
@@ -84,7 +129,7 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
     return output_path
 
 
-def _resolve_salla_template_path(output_dir: Path) -> Path:
+def _resolve_salla_template_path(output_dir: Path) -> Optional[Path]:
     candidates = [
         output_dir / "Salla Products Template.xlsx",
         output_dir.parent / "Salla Products Template.xlsx",
@@ -96,7 +141,7 @@ def _resolve_salla_template_path(output_dir: Path) -> Path:
     for p in candidates:
         if p.exists():
             return p
-    raise ValueError("تعذر العثور على ملف القالب Salla Products Template.xlsx داخل المشروع")
+    return None
 
 
 def export_products_files(products: List[Dict[str, Any]], csv_path: Path, xlsx_path: Path) -> Dict[str, str]:
