@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import re
 import time
-from pathlib import Path
 from typing import Any, Dict, List, Set
 from urllib.parse import urljoin, urlparse
 
@@ -487,58 +486,13 @@ def scrape_tireex(
             products.append(p)
         except Exception as e:
             log.warning("skip product %s: %s", u, e)
-    if products:
-        elapsed = time.perf_counter() - started_at
-        log.info(
-            "tireex scrape done cards=%s accepted=%s ignored=%s total_seconds=%.2f",
-            len(listing_items),
-            len(products),
-            ignored_links,
-            elapsed,
-        )
-        return products[:max_items]
-    # fallback إذا فشل parsing صفحات المنتج: نعيد منتجات الكروت من صفحة الماركة/البحث.
-    if not listing_items:
-        try:
-            doc = _fetch(url)
-            html = doc.prettify()[:5000]
-            Path("debug_tireex.html").write_text(html, encoding="utf-8")
-            log.warning("tireex no products found; wrote debug_tireex.html")
-        except Exception as e:
-            log.warning("tireex debug html write failed: %s", e)
-        links = _extract_product_links(url, _fetch(url))
-        for u in links[: max_items * 4]:
-            if len(listing_items) >= max_items:
-                break
-            try:
-                p = _parse_product_page(u)
-                if p.get("name") and p.get("_size_token") and p.get("product_url"):
-                    listing_items.append(p)
-            except Exception as e:
-                log.warning("skip fallback product %s: %s", u, e)
-    # إن رجعت من الكروت فقط، نحاول ترقية البيانات بدخول صفحات المنتج.
-    upgraded: List[Dict[str, Any]] = []
-    for item in listing_items:
-        if len(upgraded) >= max_items:
-            break
-        u = item.get("product_url", "")
-        try:
-            time.sleep(0.2)
-            p = _parse_product_page(u) if u else {}
-            merged = {**item, **p}
-            if merged.get("name") and merged.get("_size_token") and merged.get("product_url"):
-                upgraded.append(merged)
-            else:
-                log.info("tireex skip upgraded card reason=missing_required url=%s", u)
-        except Exception as e:
-            log.warning("skip upgraded card %s: %s", u, e)
     elapsed = time.perf_counter() - started_at
     log.info(
         "tireex scrape done cards=%s accepted=%s ignored=%s total_seconds=%.2f",
         len(listing_items),
-        len(upgraded),
+        len(products),
         ignored_links,
         elapsed,
     )
-    return upgraded[:max_items]
+    return products[:max_items]
 

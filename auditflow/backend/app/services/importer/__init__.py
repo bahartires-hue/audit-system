@@ -72,21 +72,15 @@ def run_import_pipeline(
     image_dir = uploads_root / "products"
     exports_dir = uploads_root.parent / "exports"
     prepared: List[Dict[str, Any]] = []
+    accepted_products_count = 0
+    skipped_wrong_brand_count = 0
+    skipped_image_failed_count = 0
 
     for item in raw_items:
         parsed = parse_tire_name(item.get("name") or "")
         prepared.append({**item, "_parsed": parsed})
 
     scoped_items = filter_products(prepared, brand=brand, size=size, limit=limit)
-    if not scoped_items and prepared:
-        # avoid hard-zero output when strict filter input is mismatched
-        scoped_items = prepared[: max(1, limit)]
-        log.warning(
-            "importer relaxed filters because scoped=0 raw=%s brand=%s size=%s",
-            len(prepared),
-            brand,
-            size,
-        )
     log.info(
         "importer filter applied raw=%s scoped=%s brand=%s size=%s limit=%s multi_pages=%s",
         len(raw_items),
@@ -108,8 +102,23 @@ def run_import_pipeline(
         if brand:
             selected = normalize_brand_name(brand).lower().strip()
             parsed_brand = str(parsed.get("brand", "")).lower().strip()
-            if selected and selected not in parsed_brand:
+            name_text = str(item.get("name", "")).lower()
+            if selected and selected not in parsed_brand and selected not in name_text:
                 log.info("SKIPPED_WRONG_BRAND selected=%s parsed=%s name=%s", selected, parsed_brand, item.get("name", ""))
+                skipped_wrong_brand_count += 1
+                continue
+        # strict Alpha mode: never allow non-Alpha products
+        alpha_mode = (
+            normalize_brand_name(brand).lower().strip() == "alpha"
+            or bool(re.search(r"alpha|ألفا|الفا", site_url, flags=re.IGNORECASE))
+        )
+        if alpha_mode:
+            parsed_brand = normalize_brand_name(str(parsed.get("brand", ""))).lower().strip()
+            name_text = str(item.get("name", "")).lower()
+            name_has_alpha = ("alpha" in name_text) or ("ألفا" in name_text) or ("الفا" in name_text)
+            if not (name_has_alpha or parsed_brand == "alpha"):
+                log.info("SKIPPED_WRONG_BRAND selected=alpha parsed=%s name=%s", parsed_brand, item.get("name", ""))
+                skipped_wrong_brand_count += 1
                 continue
         if parsed.get("parse_status") == "non_english_name" or re.search(r"[\u0600-\u06FF]", f"{parsed.get('brand','')} {parsed.get('model','')}"):
             # final fallback: keep product but clear non-English fragments
@@ -135,8 +144,9 @@ def run_import_pipeline(
         elif (item.get("image_url") or "").startswith("http"):
             # fallback: ask Cloudinary to fetch source URL directly
             cloud_url, cloud_status = upload_to_cloudinary(item.get("image_url", ""), seo["image_slug"])
-        if not cloud_url:
-            image_status = "needs_review"
+        image_status = "ok" if (cloud_url and str(cloud_url).startswith("https://res.cloudinary.com/")) else "failed"
+        if image_status != "ok":
+            skipped_image_failed_count += 1
         price = (item.get("price") or "").strip()
         price_status = "ok" if price else "price_missing"
         seo_status = "ok" if parsed.get("size") else "needs_review"
@@ -183,13 +193,29 @@ def run_import_pipeline(
             "price_status": price_status,
             "status": (
                 "مراجعة"
-                if image_status in {"failed", "needs_review"} or seo_status != "ok" or price_status != "ok"
+                if image_status != "ok" or seo_status != "ok" or price_status != "ok"
                 else "جاهز"
             ),
         }
         if image_status in {"failed", "no_image_url"} and (item.get("image_url") or "").startswith("https://"):
             row["status"] = "مراجعة"
         products.append(row)
+        accepted_products_count += 1
+
+    # hard stop for wrong brands in Alpha export
+    alpha_mode = (
+        normalize_brand_name(brand).lower().strip() == "alpha"
+        or bool(re.search(r"alpha|ألفا|الفا", site_url, flags=re.IGNORECASE))
+    )
+    if alpha_mode:
+        for p in products:
+            b = normalize_brand_name(str(p.get("brand", ""))).lower().strip()
+            if b != "alpha":
+                raise ValueError("Wrong brand detected in Alpha export")
+
+    log.info("accepted_products_count=%s", accepted_products_count)
+    log.info("skipped_wrong_brand_count=%s", skipped_wrong_brand_count)
+    log.info("skipped_image_failed_count=%s", skipped_image_failed_count)
 
     csv_path = exports_dir / "tire_products.csv"
     xlsx_path = exports_dir / "tire_products.xlsx"

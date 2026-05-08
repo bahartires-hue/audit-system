@@ -105,6 +105,8 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
             continue
         if not str(p.get("price", "")).strip():
             continue
+        if str(p.get("image_status", "")).strip().lower() != "ok":
+            continue
         public_image_url = str(p.get("image_cloudinary") or "").strip()
         if not public_image_url.startswith("https://res.cloudinary.com/"):
             continue
@@ -146,9 +148,17 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
             }
         )
 
-    start_row = 2
-    # Preserve template styling for newly added rows when available.
-    template_style_row = 2 if ws.max_row >= 2 else 1
+    # Detect real header row in case template has intro/colored rows.
+    header_row = 1
+    for r in range(1, min(ws.max_row, 20) + 1):
+        c1 = str(ws.cell(row=r, column=1).value or "").strip()
+        c2 = str(ws.cell(row=r, column=2).value or "").strip()
+        if c1 in {"النوع", "النوع "} and c2 == "أسم المنتج":
+            header_row = r
+            break
+    start_row = header_row + 1
+    # Preserve template styling for data rows when available.
+    template_style_row = start_row if ws.max_row >= start_row else header_row
     base_height = ws.row_dimensions[template_style_row].height
     base_styles = {c: copy(ws.cell(row=template_style_row, column=c)._style) for c in range(1, ws.max_column + 1)}
     base_num_formats = {c: ws.cell(row=template_style_row, column=c).number_format for c in range(1, ws.max_column + 1)}
