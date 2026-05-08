@@ -207,3 +207,10 @@ def export_products_files(products: List[Dict[str, Any]], csv_path: Path, xlsx_p
         "salla_xlsx_path": str(out_path),
     }
 
+
+def export_salla_only(products: List[Dict[str, Any]], exports_dir: Path) -> Path:
+    exports_dir.mkdir(parents=True, exist_ok=True)
+    salla_xlsx_path = exports_dir / "salla_products_ready.xlsx"
+    template_path = _resolve_template_path(exports_dir)
+    return export_to_salla_template(products, template_path, salla_xlsx_path)
+

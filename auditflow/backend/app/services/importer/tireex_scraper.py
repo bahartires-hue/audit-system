@@ -36,6 +36,7 @@ _NAME_RE = re.compile(
     r"([A-Za-z\u0600-\u06FF][A-Za-z0-9\u0600-\u06FF\s\-]{1,60}?\s+\d{3}\s*/\s*\d{2,3}\s*R?\s*\d{2}(?:\s+\d{2,3}(?:/\d{2,3})?[A-Z])?)",
     re.IGNORECASE,
 )
+_BAD_NAME_WORDS = ["وقود", "راحة", "إضافة", "السلة", "للإطار", "الضمان", "النقشة"]
 
 
 def _clean(s: str) -> str:
@@ -231,6 +232,119 @@ def _extract_products_from_listing_text(text: str, selected_brand: str, page_url
     return products
 
 
+def is_real_product_name(name: str, selected_brand: str = "") -> bool:
+    n = _clean(name)
+    if not n:
+        return False
+    if any(w in n for w in _BAD_NAME_WORDS):
+        return False
+    if "R" not in n.upper():
+        return False
+    if selected_brand and selected_brand.strip():
+        return selected_brand.strip().lower() in n.lower()
+    return True
+
+
+def dedupe_products(products: List[Dict[str, Any]], selected_brand: str = "") -> List[Dict[str, Any]]:
+    clean: Dict[str, Dict[str, Any]] = {}
+    for p in products:
+        name = _clean(p.get("name", ""))
+        if not is_real_product_name(name, selected_brand):
+            continue
+        price_raw = clean_price(str(p.get("price", "")))
+        try:
+            price_num = float(price_raw or "0")
+        except Exception:
+            continue
+        if price_num < 100:
+            continue
+        p["name"] = name
+        p["price"] = str(int(price_num)) if price_num.is_integer() else str(price_num)
+        clean[name] = p
+    return list(clean.values())
+
+
+def _extract_products_from_cards(html: str, page_url: str, selected_brand: str) -> List[Dict[str, Any]]:
+    soup = BeautifulSoup(html, "html.parser")
+    cards = soup.select("ul.products li.product, .products .product, .woocommerce ul.products li.product, .product-card")
+    products: List[Dict[str, Any]] = []
+    seen = set()
+    for card in cards:
+        card_text = _clean(card.get_text(" ", strip=True))
+        if not card_text:
+            continue
+        name = ""
+        name_el = card.select_one("h2, h3, a.product-card-content-title, .woocommerce-loop-product__title, a")
+        if name_el:
+            name = _clean(name_el.get_text(" ", strip=True))
+        if not name:
+            m_name = _NAME_RE.search(card_text)
+            if not m_name:
+                continue
+            name = _clean(m_name.group(1))
+        if selected_brand:
+            sb = (selected_brand or "").strip().lower()
+            if sb and sb not in name.lower():
+                continue
+        a = card.select_one("a[href]")
+        product_url = ""
+        if a and a.get("href"):
+            full = urljoin(page_url, a.get("href"))
+            low = full.lower()
+            if "/product/" in low and not any(x in low for x in BAD_LINK_PARTS):
+                product_url = full.split("?")[0].rstrip("/") + "/"
+        img = card.select_one("img")
+        image_url = ""
+        if img:
+            image_url = (img.get("data-src") or img.get("src") or "").strip()
+            if image_url:
+                image_url = urljoin(page_url, image_url)
+        m_price_line = re.search(r"(\d[\d,\.]*)\s+(\d[\d,\.]*)\s+للإطار\s+الواحد", card_text)
+        price = ""
+        old_price = ""
+        if m_price_line:
+            price = clean_price(m_price_line.group(1))
+            old_price = clean_price(m_price_line.group(2))
+        else:
+            nums = re.findall(r"\b\d[\d,\.]*\b", card_text)
+            if nums:
+                price = clean_price(nums[0])
+                old_price = clean_price(nums[1]) if len(nums) > 1 else ""
+        year = ""
+        m_year = re.search(r"سنة\s*الصنع\s*[:：]?\s*(20\d{2})", card_text, flags=re.IGNORECASE)
+        if m_year:
+            year = m_year.group(1)
+        warranty = ""
+        m_w = re.search(r"الضمان\s*[:：]?\s*([^\n\r|]+)", card_text, flags=re.IGNORECASE)
+        if m_w:
+            warranty = _clean(m_w.group(1))
+        pattern = ""
+        m_p = re.search(r"النقشة\s*[:：]?\s*([^\n\r|]+)", card_text, flags=re.IGNORECASE)
+        if m_p:
+            pattern = _clean(m_p.group(1))
+        size_token = _extract_size_token(name) or _extract_size_from_url(product_url)
+        key = ((product_url or name).lower(), size_token, price)
+        if key in seen:
+            continue
+        seen.add(key)
+        products.append(
+            {
+                "name": name,
+                "price": price,
+                "old_price": old_price,
+                "product_url": product_url or page_url,
+                "image_url": image_url,
+                "year": year,
+                "country": "",
+                "warranty": warranty,
+                "pattern": pattern,
+                "description": "",
+                "_size_token": size_token,
+            }
+        )
+    return products
+
+
 def scrape_tireex(
     url: str,
     *,
@@ -245,7 +359,6 @@ def scrape_tireex(
     pages_to_scan = max(1, int(max_pages or 5)) if multi_pages else 1
 
     products: List[Dict[str, Any]] = []
-    all_links: List[str] = []
     for page in range(1, pages_to_scan + 1):
         page_url = f"{base}/" if page == 1 else f"{base}/page/{page}/"
         try:
@@ -265,49 +378,19 @@ def scrape_tireex(
         links = extract_tireex_product_links(html, final_url)
         log.warning("TIREEX PRODUCT LINKS COUNT = %s", len(links))
         log.warning("TIREEX FIRST LINKS = %s", links[:5])
-        all_links.extend(links)
-
-        text_blob = BeautifulSoup(html, "html.parser").get_text("\n", strip=True)
-        page_products = _extract_products_from_listing_text(text_blob, selected_brand, final_url)
-        log.warning("TIREEX PAGE PRODUCTS FROM TEXT = %s", len(page_products))
+        page_products_cards = _extract_products_from_cards(html, final_url, selected_brand)
+        log.warning("TIREEX PAGE PRODUCTS FROM CARDS = %s", len(page_products_cards))
+        page_products = page_products_cards
         if not page_products and page > 1:
             break
         products.extend(page_products)
         if len(products) >= max_items:
             break
 
-    # Enrich listing-text products with real product URLs/images from product pages.
-    unique_links = sorted(set(all_links))
-    detail_items: List[Dict[str, Any]] = []
-    for link in unique_links[: max_items * 3]:
-        try:
-            d = scrape_tireex_product(link)
-            if d.get("name"):
-                detail_items.append(d)
-            time.sleep(0.2)
-        except Exception:
-            continue
-    for p in products:
-        if p.get("image_url"):
-            continue
-        p_size = str(p.get("_size_token") or "")
-        p_name = str(p.get("name") or "").lower()
-        match = None
-        for d in detail_items:
-            d_size = str(d.get("_size_token") or "")
-            d_name = str(d.get("name") or "").lower()
-            if p_size and d_size and p_size == d_size:
-                match = d
-                break
-            if p_name and d_name and p_name.split(" ")[0] in d_name:
-                match = d
-        if match:
-            p["product_url"] = match.get("product_url") or p.get("product_url")
-            p["image_url"] = match.get("image_url") or p.get("image_url")
-            if not p.get("description"):
-                p["description"] = match.get("description", "")
-
-    log.warning("TIREEX FINAL PRODUCTS COUNT = %s", len(products))
+    log.warning("PRODUCTS BEFORE CLEAN = %s", len(products))
+    products = dedupe_products(products, selected_brand)
+    log.warning("PRODUCTS AFTER CLEAN = %s", len(products))
+    log.warning("FINAL EXPORT COUNT = %s", len(products))
     elapsed = time.perf_counter() - started_at
     log.info("tireex scrape done total_seconds=%.2f", elapsed)
     return products[:max_items]

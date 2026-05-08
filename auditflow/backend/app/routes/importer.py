@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any, Dict
@@ -12,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from ..auth_core import require_csrf, require_user
 from ..db import SessionLocal
+from ..services.importer.csv_exporter import export_salla_only
 from ..services.importer import run_import_pipeline
 
 router = APIRouter(prefix="/importer", tags=["importer"])
@@ -29,6 +31,32 @@ def _uploads_root() -> Path:
     data_root = (os.getenv("AUDITFLOW_DATA_ROOT") or "").strip()
     app_root = Path(__file__).resolve().parents[3]  # auditflow/
     return (Path(data_root) / "uploads") if data_root else (app_root / "uploads")
+
+
+def _exports_root() -> Path:
+    root = _uploads_root().parent / "exports"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _latest_products_json() -> Path:
+    return _exports_root() / "latest_scraped_products.json"
+
+
+def save_latest_products(products: list[dict]) -> None:
+    with _latest_products_json().open("w", encoding="utf-8") as f:
+        json.dump(products, f, ensure_ascii=False, indent=2)
+
+
+def load_latest_products() -> list[dict]:
+    p = _latest_products_json()
+    if not p.exists():
+        raise ValueError("لا توجد منتجات محفوظة للتصدير. نفذ الجلب أولاً.")
+    with p.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, list) or not data:
+        raise ValueError("لا توجد منتجات محفوظة للتصدير. نفذ الجلب أولاً.")
+    return data
 
 
 @router.post("/scrape")
@@ -70,6 +98,7 @@ def scrape_importer(request: Request, body: ImporterRequest) -> Dict[str, Any]:
             detail="فشل الجلب: لم يتم استخراج أي منتج من الصفحة المحددة. لا يمكن إنشاء ملف سلة فارغ.",
         )
     items = out.get("items", [])
+    save_latest_products(items)
     for x in items:
         p = (x.get("image_local") or "").strip()
         if p:
@@ -134,9 +163,13 @@ def importer_salla_xlsx(request: Request) -> FileResponse:
         require_user(db, request)
     finally:
         db.close()
-    xlsx_path = _uploads_root().parent / "exports" / "salla_products_ready.xlsx"
-    if not xlsx_path.exists() or not xlsx_path.is_file():
-        raise HTTPException(404, "ملف Salla Excel غير موجود. نفّذ السحب أولًا.")
+    try:
+        products = load_latest_products()
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    if not products:
+        raise HTTPException(422, "لا توجد منتجات محفوظة للتصدير. نفذ الجلب أولاً.")
+    xlsx_path = export_salla_only(products, _exports_root())
     return FileResponse(
         str(xlsx_path),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

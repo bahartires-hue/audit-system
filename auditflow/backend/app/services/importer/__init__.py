@@ -270,6 +270,17 @@ def run_import_pipeline(
     log.info("skipped_wrong_brand_count=%s", skipped_wrong_brand_count)
     log.info("skipped_image_failed_count=%s", skipped_image_failed_count)
 
+    if not products:
+        log.warning("importer no products after processing; skipping file generation")
+        return {
+            "count": 0,
+            "csv_path": "",
+            "xlsx_path": "",
+            "salla_csv_path": "",
+            "salla_xlsx_path": "",
+            "items": [],
+        }
+
     csv_path = exports_dir / "tire_products.csv"
     xlsx_path = exports_dir / "tire_products.xlsx"
     exports = export_products_files(products, csv_path, xlsx_path)
