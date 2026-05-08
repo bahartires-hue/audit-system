@@ -5,6 +5,49 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
+_FALLBACK_TEMPLATE_COLUMNS = [
+    "النوع ",
+    "أسم المنتج",
+    "تصنيف المنتج",
+    "صورة المنتج",
+    "وصف صورة المنتج",
+    "نوع المنتج",
+    "سعر المنتج",
+    "الوصف",
+    "هل يتطلب شحن؟",
+    "رمز المنتج sku",
+    "سعر التكلفة",
+    "السعر المخفض",
+    "تاريخ بداية التخفيض",
+    "تاريخ نهاية التخفيض",
+    "اقصي كمية لكل عميل",
+    "إخفاء خيار تحديد الكمية",
+    "اضافة صورة عند الطلب",
+    "الوزن",
+    "وحدة الوزن",
+    "الماركة",
+    "العنوان الترويجي",
+    "تثبيت المنتج",
+    "الباركود",
+    "السعرات الحرارية",
+    "MPN",
+    "GTIN",
+    "خاضع للضريبة ؟",
+    "سبب عدم الخضوع للضريبة",
+    "[1] الاسم",
+    "[1] النوع",
+    "[1] القيمة",
+    "[1] الصورة / اللون",
+    "[2] الاسم",
+    "[2] النوع",
+    "[2] القيمة",
+    "[2] الصورة / اللون",
+    "[3] الاسم",
+    "[3] النوع",
+    "[3] القيمة",
+    "[3] الصورة / اللون",
+]
+
 
 def safe_set(row: Dict[str, Any], columns: List[str], col_name: str, value: Any) -> None:
     if col_name in columns:
@@ -23,11 +66,14 @@ def _resolve_template_path(base_dir: Path) -> Path:
     for p in candidates:
         if p.exists() and p.is_file():
             return p
-    raise ValueError("تعذر العثور على ملف القالب Salla Products Template.xlsx داخل المشروع")
+    return None
 
 
-def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path, output_path: Path) -> Path:
-    template_df = pd.read_excel(template_path)
+def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path | None, output_path: Path) -> Path:
+    if template_path:
+        template_df = pd.read_excel(template_path)
+    else:
+        template_df = pd.DataFrame(columns=_FALLBACK_TEMPLATE_COLUMNS)
     columns = list(template_df.columns)
     rows: List[Dict[str, Any]] = []
 
