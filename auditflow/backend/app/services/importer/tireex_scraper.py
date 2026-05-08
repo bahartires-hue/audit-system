@@ -16,6 +16,18 @@ _UA = {"User-Agent": "Mozilla/5.0"}
 _SIZE_RE = re.compile(r"(\d{3})\s*/\s*(\d{2})\s*(?:ZR|R)?\s*(\d{2})", re.IGNORECASE)
 _SIZE_URL_RE = re.compile(r"(\d{3})[-_/](\d{2,3})[-_]?r(\d{2})", re.IGNORECASE)
 _GENERIC_TITLE_RE = re.compile(r"(تصنيف|عروض|منتجات|product category|category)", re.IGNORECASE)
+_BAD_LINK_PARTS = [
+    "/cdn-cgi/",
+    "email-protection",
+    "add-to-cart",
+    "product-category",
+    "/cart",
+    "/checkout",
+    "/my-account",
+    "mailto:",
+    "tel:",
+    "#",
+]
 
 
 def _clean(s: str) -> str:
@@ -26,6 +38,12 @@ def _fetch(url: str) -> BeautifulSoup:
     r = requests.get(url, timeout=15, headers=_UA)
     r.raise_for_status()
     return BeautifulSoup(r.text, "lxml")
+
+
+def _fetch_html(url: str) -> str:
+    r = requests.get(url, timeout=15, headers=_UA)
+    r.raise_for_status()
+    return r.text or ""
 
 
 def _pick_text(doc: BeautifulSoup, selectors: List[str]) -> str:
@@ -192,6 +210,27 @@ def _extract_product_links(base_url: str, soup: BeautifulSoup) -> List[str]:
         seen.add(u)
         out.append(u)
     return out
+
+
+def extract_tireex_product_links(html: str, page_url: str) -> List[str]:
+    soup = BeautifulSoup(html, "html.parser")
+    links: Set[str] = set()
+    for a in soup.select("a[href]"):
+        href = (a.get("href") or "").strip()
+        if not href:
+            continue
+        full = urljoin(page_url, href)
+        full = full.split("?")[0].rstrip("/") + "/"
+        if "/product/" not in full:
+            continue
+        low = full.lower()
+        if any(x in low for x in _BAD_LINK_PARTS):
+            continue
+        host = (urlparse(full).netloc or "").lower()
+        if "tireex.com" not in host:
+            continue
+        links.add(full)
+    return sorted(links)
 
 
 def _extract_product_links_by_anchor_text(base_url: str, soup: BeautifulSoup) -> List[Dict[str, str]]:
@@ -411,6 +450,8 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
     name = _pick_text(doc, ["h1.product_title", ".product_title", ".product-title", "h1", "h2"])
     if not name:
         name = _pick_attr(doc, ["meta[property='og:title']", "meta[name='twitter:title']"], "content")
+    if not name:
+        name = _pick_text(doc, ["title"])
     size_token = _extract_size_token(name)
     if not size_token:
         size_token = _extract_size_from_url(product_url)
@@ -498,9 +539,18 @@ def scrape_tireex(
                 if candidate in visited_pages:
                     continue
                 try:
-                    doc = _fetch(candidate)
+                    html = _fetch_html(candidate)
+                    doc = BeautifulSoup(html, "lxml")
                     current = candidate
                     visited_pages.add(candidate)
+                    log.warning("TIREEX HTML LENGTH = %s", len(html))
+                    log.warning("TIREEX HTML START = %s", (html[:300] or "").replace("\n", " "))
+                    p_links = extract_tireex_product_links(html, candidate)
+                    log.warning("TIREEX PRODUCT LINKS COUNT = %s", len(p_links))
+                    log.warning("TIREEX FIRST LINKS = %s", p_links[:5])
+                    for lu in p_links:
+                        if lu not in links:
+                            links.append(lu)
                     break
                 except Exception:
                     continue
