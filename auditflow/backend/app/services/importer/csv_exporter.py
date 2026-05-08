@@ -80,6 +80,16 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
     rows: List[Dict[str, Any]] = []
 
     for p in products:
+        # strict rules for final Salla sheet
+        if not str(p.get("brand", "")).strip():
+            continue
+        if not str(p.get("size", "")).strip():
+            continue
+        if not str(p.get("price", "")).strip():
+            continue
+        public_image_url = str(p.get("image_cloudinary") or "").strip()
+        if not public_image_url.startswith("https://res.cloudinary.com/"):
+            continue
         row = {col: "" for col in columns}
         promo_bits = []
         if p.get("year"):
@@ -87,10 +97,6 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
         if p.get("warranty"):
             promo_bits.append(f"الضمان {p.get('warranty')}")
         promo_title = " - ".join(promo_bits)
-        public_image_url = str(p.get("image_cloudinary") or "").strip()
-        if not public_image_url.startswith("https://res.cloudinary.com/"):
-            public_image_url = ""
-
         safe_set(row, columns, "النوع ", "منتج")
         safe_set(row, columns, "أسم المنتج", p.get("product_title", ""))
         safe_set(row, columns, "تصنيف المنتج", "قسم الإطارات")

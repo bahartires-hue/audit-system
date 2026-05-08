@@ -8,6 +8,7 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+from .parser import normalize_brand_name
 
 log = logging.getLogger("importer.tireex")
 
@@ -68,11 +69,25 @@ def _pick_largest_srcset(srcset: str) -> str:
 
 def _extract_price_value(text: str) -> str:
     raw = _clean(text)
-    nums = re.findall(r"(\d+(?:\.\d+)?)\s*(?:ر\.س|SAR|ريال)?", raw, flags=re.IGNORECASE)
+    compact = re.sub(r"[^\d,\.]", " ", raw)
+    nums = re.findall(r"\d[\d,\.]*", compact)
     vals: List[float] = []
     for n in nums:
         try:
-            v = float(n)
+            token = n.strip()
+            if "," in token and "." in token:
+                if token.rfind(",") > token.rfind("."):
+                    token = token.replace(".", "").replace(",", ".")
+                else:
+                    token = token.replace(",", "")
+            else:
+                if token.count(",") == 1 and token.count(".") == 0:
+                    token = token.replace(",", ".")
+                elif token.count(",") > 1 and token.count(".") == 0:
+                    token = token.replace(",", "")
+                elif token.count(".") > 1 and token.count(",") == 0:
+                    token = token.replace(".", "")
+            v = float(token)
             if 10 <= v <= 100000:
                 vals.append(v)
         except Exception:
@@ -124,7 +139,11 @@ def _extract_size_token(text: str) -> str:
 def _extract_product_links(base_url: str, soup: BeautifulSoup) -> List[str]:
     out: List[str] = []
     seen: Set[str] = set()
-    for a in soup.select("a[href]"):
+    scope = soup.select_one("main") or soup.select_one(".woocommerce") or soup
+    anchors = scope.select("ul.products a[href], .products a[href], li.product a[href], .product-card a[href], a.product-card-content-title[href]")
+    if not anchors:
+        anchors = scope.select("a[href]")
+    for a in anchors:
         href = a.get("href") or ""
         u = urljoin(base_url, href)
         if urlparse(u).netloc != urlparse(base_url).netloc:
@@ -270,6 +289,14 @@ def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str,
     return out
 
 
+def _is_brand_match(name: str, selected_brand: str) -> bool:
+    sb = normalize_brand_name(selected_brand or "").lower().strip()
+    if not sb:
+        return True
+    candidate = normalize_brand_name(name or "").lower()
+    return sb in candidate or sb in (name or "").lower()
+
+
 def _in_same_scope(seed_url: str, candidate_url: str) -> bool:
     seed = urlparse(seed_url)
     cand = urlparse(candidate_url)
@@ -341,10 +368,24 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
     }
 
 
-def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 5, limit: int = 20) -> List[Dict[str, Any]]:
+def scrape_tireex(
+    url: str,
+    *,
+    multi_pages: bool = False,
+    max_pages: int = 5,
+    limit: int = 20,
+    selected_brand: str = "",
+) -> List[Dict[str, Any]]:
     links: List[str] = []
     listing_items: List[Dict[str, Any]] = []
     max_items = max(1, int(limit or 20))
+    inferred_brand = selected_brand
+    if not inferred_brand:
+        p = (urlparse(url).path or "").lower()
+        if "alpha" in p or "ألفا" in p:
+            inferred_brand = "Alpha"
+        elif "laufenn" in p or "لاوفين" in p:
+            inferred_brand = "Laufenn"
     if _is_product_url(url):
         links = [url]
     else:
@@ -362,6 +403,9 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 5, li
             listing_items.extend(_extract_list_products(current, doc))
             # fallback سريع: روابط a التي تحمل مقاسًا في النص.
             for p in _extract_product_links_by_anchor_text(current, doc):
+                if inferred_brand and not _is_brand_match(p.get("name", ""), inferred_brand):
+                    log.info("SKIPPED_WRONG_BRAND anchor=%s selected=%s", p.get("name", ""), inferred_brand)
+                    continue
                 if p.get("product_url") and all(x.get("product_url") != p["product_url"] for x in listing_items):
                     listing_items.append(
                         {
@@ -394,14 +438,32 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 5, li
                 log.info("stop pagination outside scope seed=%s next=%s", url, nxt)
                 break
             current = nxt
+    listing_by_url = {str(x.get("product_url") or "").strip(): x for x in listing_items if (x.get("product_url") or "").strip()}
     products: List[Dict[str, Any]] = []
     for u in links[: max_items * 2]:
         if len(products) >= max_items:
             break
         try:
             p = _parse_product_page(u)
+            # preserve listing values when product page misses fields.
+            base = listing_by_url.get(u, {})
+            merged = {**base, **p}
+            if not merged.get("price"):
+                merged["price"] = base.get("price", "")
+            if not merged.get("old_price"):
+                merged["old_price"] = base.get("old_price", "")
+            if not merged.get("image_url"):
+                merged["image_url"] = base.get("image_url", "")
+            if not merged.get("year"):
+                merged["year"] = base.get("year", "")
+            if not merged.get("pattern"):
+                merged["pattern"] = base.get("pattern", "")
+            p = merged
             if not p.get("name"):
                 log.info("tireex skip product reason=no_name url=%s", u)
+                continue
+            if inferred_brand and not _is_brand_match(p.get("name", ""), inferred_brand):
+                log.info("SKIPPED_WRONG_BRAND product=%s selected=%s", p.get("name", ""), inferred_brand)
                 continue
             if not p.get("_size_token"):
                 log.info("tireex skip product reason=no_size name=%s url=%s", p.get("name", ""), u)

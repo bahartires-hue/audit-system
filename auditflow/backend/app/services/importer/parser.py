@@ -8,6 +8,7 @@ log = logging.getLogger("importer.parser")
 
 _SIZE_RE = re.compile(r"(\d{3})\s*/\s*(\d{2,3})\s*Z?R\s*(\d{2})", re.IGNORECASE)
 _LOAD_SPEED_RE = re.compile(r"\b(\d{2,3}[A-Z])\b")
+_SPEED_ONLY_RE = re.compile(r"\b([HVWYS])\b", re.IGNORECASE)
 _RF_RE = re.compile(r"\b(RF|RUNFLAT|RUN FLAT)\b", re.IGNORECASE)
 _PR_RE = re.compile(r"\b(\d{1,2}\s*PR)\b", re.IGNORECASE)
 _AR_RE = re.compile(r"[\u0600-\u06FF]")
@@ -25,6 +26,8 @@ BRAND_TRANSLATIONS = {
     "نيكسن": "Nexen",
     "نكسان": "Nexen",
     "الفا": "Alpha",
+    "ألفا": "Alpha",
+    "لاوفين": "Laufenn",
 }
 
 MODEL_TRANSLATIONS = {
@@ -96,6 +99,8 @@ def parse_tire_name(raw_name: str) -> Dict[str, Any]:
             if not brand:
                 brand = en
             break
+    if brand.upper() == "A" and re.search(r"\balpha\b|ألفا|الفا", name, flags=re.IGNORECASE):
+        brand = "Alpha"
     m_size = _SIZE_RE.search(name)
     width = m_size.group(1) if m_size else ""
     profile = m_size.group(2) if m_size else ""
@@ -103,6 +108,10 @@ def parse_tire_name(raw_name: str) -> Dict[str, Any]:
     size = f"{width}/{profile}R{rim}" if width and profile and rim else ""
     m_ls = _LOAD_SPEED_RE.search(name)
     load_speed = m_ls.group(1).upper() if m_ls else ""
+    if not load_speed:
+        m_sp = _SPEED_ONLY_RE.findall(name)
+        if m_sp:
+            load_speed = m_sp[-1].upper()
     xl = bool(re.search(r"\bXL\b", name, re.IGNORECASE))
     rf = bool(_RF_RE.search(name))
     pr = (_PR_RE.search(name).group(1).upper().replace(" ", "") if _PR_RE.search(name) else "")

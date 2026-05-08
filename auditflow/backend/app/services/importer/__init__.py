@@ -66,7 +66,7 @@ def run_import_pipeline(
     limit: int = 20,
     multi_pages: bool = False,
 ) -> Dict[str, Any]:
-    raw_items = scrape_products(site_url, multi_pages=multi_pages, limit=limit)
+    raw_items = scrape_products(site_url, multi_pages=multi_pages, limit=limit, selected_brand=brand)
     products: List[Dict[str, Any]] = []
     seen = set()
     image_dir = uploads_root / "products"
@@ -99,6 +99,18 @@ def run_import_pipeline(
 
     for item in scoped_items:
         parsed = item.get("_parsed") or parse_tire_name(item.get("name") or "")
+        if not parsed.get("size"):
+            log.info("skip invalid/no-size product name=%s", item.get("name", ""))
+            continue
+        if re.search(r"ابحث|search", str(item.get("name", "")), flags=re.IGNORECASE):
+            log.info("skip non-product row name=%s", item.get("name", ""))
+            continue
+        if brand:
+            selected = normalize_brand_name(brand).lower().strip()
+            parsed_brand = str(parsed.get("brand", "")).lower().strip()
+            if selected and selected not in parsed_brand:
+                log.info("SKIPPED_WRONG_BRAND selected=%s parsed=%s name=%s", selected, parsed_brand, item.get("name", ""))
+                continue
         if parsed.get("parse_status") == "non_english_name" or re.search(r"[\u0600-\u06FF]", f"{parsed.get('brand','')} {parsed.get('model','')}"):
             # final fallback: keep product but clear non-English fragments
             parsed["brand"] = re.sub(r"[\u0600-\u06FF]+", "", parsed.get("brand", "")).strip() or parsed.get("brand", "")
