@@ -56,6 +56,8 @@ def safe_set(row: Dict[str, Any], columns: List[str], col_name: str, value: Any)
 
 def _resolve_template_path(base_dir: Path) -> Path:
     candidates = [
+        Path(__file__).resolve().parent / "templates" / "Salla Products Template (3).xlsx",
+        Path(__file__).resolve().parent / "templates" / "Salla Products Template.xlsx",
         base_dir / "Salla Products Template.xlsx",
         base_dir.parent / "Salla Products Template.xlsx",
         base_dir.parent.parent / "Salla Products Template.xlsx",
