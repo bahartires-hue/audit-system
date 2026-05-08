@@ -414,7 +414,7 @@ def scrape_tireex(
                     ignored_links += 1
                     continue
                 # pre-filter before entering product page
-                if not _in_same_scope(url, product_url):
+                if urlparse(product_url).netloc != urlparse(url).netloc:
                     ignored_links += 1
                     continue
                 if product_url in visited_product_urls:
