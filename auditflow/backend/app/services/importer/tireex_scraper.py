@@ -245,6 +245,7 @@ def scrape_tireex(
     pages_to_scan = max(1, int(max_pages or 5)) if multi_pages else 1
 
     products: List[Dict[str, Any]] = []
+    all_links: List[str] = []
     for page in range(1, pages_to_scan + 1):
         page_url = f"{base}/" if page == 1 else f"{base}/page/{page}/"
         try:
@@ -264,6 +265,7 @@ def scrape_tireex(
         links = extract_tireex_product_links(html, final_url)
         log.warning("TIREEX PRODUCT LINKS COUNT = %s", len(links))
         log.warning("TIREEX FIRST LINKS = %s", links[:5])
+        all_links.extend(links)
 
         text_blob = BeautifulSoup(html, "html.parser").get_text("\n", strip=True)
         page_products = _extract_products_from_listing_text(text_blob, selected_brand, final_url)
@@ -273,6 +275,37 @@ def scrape_tireex(
         products.extend(page_products)
         if len(products) >= max_items:
             break
+
+    # Enrich listing-text products with real product URLs/images from product pages.
+    unique_links = sorted(set(all_links))
+    detail_items: List[Dict[str, Any]] = []
+    for link in unique_links[: max_items * 3]:
+        try:
+            d = scrape_tireex_product(link)
+            if d.get("name"):
+                detail_items.append(d)
+            time.sleep(0.2)
+        except Exception:
+            continue
+    for p in products:
+        if p.get("image_url"):
+            continue
+        p_size = str(p.get("_size_token") or "")
+        p_name = str(p.get("name") or "").lower()
+        match = None
+        for d in detail_items:
+            d_size = str(d.get("_size_token") or "")
+            d_name = str(d.get("name") or "").lower()
+            if p_size and d_size and p_size == d_size:
+                match = d
+                break
+            if p_name and d_name and p_name.split(" ")[0] in d_name:
+                match = d
+        if match:
+            p["product_url"] = match.get("product_url") or p.get("product_url")
+            p["image_url"] = match.get("image_url") or p.get("image_url")
+            if not p.get("description"):
+                p["description"] = match.get("description", "")
 
     log.warning("TIREEX FINAL PRODUCTS COUNT = %s", len(products))
     elapsed = time.perf_counter() - started_at
