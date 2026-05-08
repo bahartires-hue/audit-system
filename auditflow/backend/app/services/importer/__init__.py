@@ -85,7 +85,9 @@ def filter_products(products: List[Dict[str, Any]], brand: str = "", size: str =
         url = _norm_brand(item.get("product_url", ""))
         p_brand = _norm_brand(parsed.get("brand", ""))
         p_size = _norm_size(parsed.get("size", ""))
-        if b and not (b in name or b in url or b == p_brand):
+        # Do not drop neutral rows when parsed brand is missing.
+        # Reject only explicit brand mismatch.
+        if b and p_brand and (b != p_brand) and (b not in name) and (b not in url):
             continue
         if sz and not p_size:
             p_size = _extract_size_from_text(item.get("name", ""))

@@ -148,7 +148,13 @@ def _is_valid_product_url(url: str) -> bool:
     ]
     if any(x in u for x in bad_parts):
         return False
-    return "tireex.com/product/" in u or "/product/" in (urlparse(u).path or "")
+    path = (urlparse(u).path or "").strip("/")
+    if "tireex.com/product/" in u or path.startswith("product/"):
+        return True
+    # Tireex may expose product pages under /shop/<slug>/
+    if path.startswith("shop/") and len(path.split("/")) >= 2:
+        return True
+    return False
 
 
 def _extract_size_token(text: str) -> str:
