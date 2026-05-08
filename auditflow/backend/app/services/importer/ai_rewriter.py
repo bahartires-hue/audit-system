@@ -9,6 +9,17 @@ def _clean(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip())
 
 
+_BANNED_DESC_PHRASES = [
+    "إضافة إلى السلة",
+    "اشتري الان",
+    "زوار يستعرضون",
+    "تقييم",
+    "سياسة الشحن",
+    "العلامات التجارية",
+    "جميع الحقوق محفوظة",
+]
+
+
 def _load_speed_parts(load_speed: str) -> tuple[str, str]:
     ls = _clean(load_speed).upper()
     m = re.match(r"^(\d{2,3})([A-Z])$", ls)
@@ -125,9 +136,8 @@ def rewrite_description_fallback(prod: Dict[str, Any], source_description: str =
         if _clean(x)
     )
 
-    extra = _clean(source_description)
-    if extra:
-        extra = f"\n\nمعلومات إضافية:\n{extra[:700]}"
+    # Do not inject full page text into description.
+    extra = ""
 
     cta = _pick(
         [
@@ -140,7 +150,7 @@ def rewrite_description_fallback(prod: Dict[str, Any], source_description: str =
         4,
     )
 
-    return (
+    out = (
         f"{intro}\n\n"
         f"{durability}\n\n"
         "المواصفات\n\n"
@@ -150,4 +160,7 @@ def rewrite_description_fallback(prod: Dict[str, Any], source_description: str =
         f"{cta}"
         f"{extra}"
     ).strip()
+    for bad in _BANNED_DESC_PHRASES:
+        out = out.replace(bad, "")
+    return _clean(out)
 

@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import pandas as pd
+from openpyxl import load_workbook
+from copy import copy
 
 _DEFAULT_SALLA_COLUMNS = [
     "النوع ",
@@ -71,15 +73,44 @@ def _to_public_image_value(p: Dict[str, Any]) -> str:
     return ""
 
 
+def _resolve_template_path(base_dir: Path) -> Path | None:
+    candidates = [
+        Path(__file__).resolve().parent / "templates" / "Salla Products Template (3).xlsx",
+        Path(__file__).resolve().parent / "templates" / "Salla Products Template.xlsx",
+        base_dir / "Salla Products Template (3).xlsx",
+        base_dir / "Salla Products Template.xlsx",
+        base_dir.parent / "Salla Products Template (3).xlsx",
+        base_dir.parent / "Salla Products Template.xlsx",
+    ]
+    for p in candidates:
+        if p.exists() and p.is_file():
+            return p
+    return None
+
+
 def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path | None, output_path: Path) -> Path:
-    # external template is intentionally ignored to avoid any runtime dependency.
-    template_df = pd.DataFrame(columns=_DEFAULT_SALLA_COLUMNS)
-    columns = [str(c) for c in template_df.columns]
+    if not template_path:
+        raise ValueError("تعذر العثور على ملف قالب سلة الأصلي.")
+
+    wb = load_workbook(template_path)
+    ws = wb.active
+    columns = [str(ws.cell(row=1, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
+    header_map = {name: idx + 1 for idx, name in enumerate(columns) if name}
     output_rows: List[Dict[str, Any]] = []
+
     for p in products:
         image_value = _to_public_image_value(p)
         if not image_value:
-            # skip from salla export when cloudinary upload failed
+            continue
+        if not str(p.get("brand", "")).strip():
+            continue
+        if not str(p.get("size", "")).strip():
+            continue
+        try:
+            price_num = float(str(p.get("price", "")).replace(",", ""))
+        except Exception:
+            continue
+        if price_num <= 0:
             continue
         row = {col: "" for col in columns}
         promo_bits = []
@@ -104,25 +135,41 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
         safe_set(row, columns, "تثبيت المنتج", "لا")
         safe_set(row, columns, "خاضع للضريبة ؟", "نعم")
 
-        safe_set(row, columns, "[1] الاسم", "Tire Size")
+        safe_set(row, columns, "[1] الاسم", "مقاس الإطار")
         safe_set(row, columns, "[1] النوع", "نص")
         safe_set(row, columns, "[1] القيمة", p.get("size", ""))
-        safe_set(row, columns, "[2] الاسم", "Load / Speed")
-        safe_set(row, columns, "[2] النوع", "نص")
-        safe_set(row, columns, "[2] القيمة", p.get("load_speed", ""))
-        safe_set(row, columns, "[3] الاسم", "Width")
-        safe_set(row, columns, "[3] النوع", "نص")
-        safe_set(row, columns, "[3] القيمة", p.get("width", ""))
-        safe_set(row, columns, "[4] الاسم", "Rim")
-        safe_set(row, columns, "[4] النوع", "نص")
-        safe_set(row, columns, "[4] القيمة", p.get("rim", ""))
+        safe_set(row, columns, "[2] الاسم", "")
+        safe_set(row, columns, "[2] النوع", "")
+        safe_set(row, columns, "[2] القيمة", "")
+        safe_set(row, columns, "[2] الصورة / اللون", "")
+        safe_set(row, columns, "[3] الاسم", "")
+        safe_set(row, columns, "[3] النوع", "")
+        safe_set(row, columns, "[3] القيمة", "")
+        safe_set(row, columns, "[3] الصورة / اللون", "")
         output_rows.append(row)
 
-    output_df = pd.DataFrame(output_rows, columns=columns)
-    if list(output_df.columns) != list(template_df.columns):
-        raise ValueError("أعمدة ملف سلة المدمجة غير متطابقة")
+    start_row = 2
+    style_row = 2 if ws.max_row >= 2 else 1
+    base_height = ws.row_dimensions[style_row].height
+    base_styles = {c: copy(ws.cell(row=style_row, column=c)._style) for c in range(1, ws.max_column + 1)}
+    max_clear_row = max(ws.max_row, start_row + len(output_rows) - 1)
+
+    for r in range(start_row, max_clear_row + 1):
+        if base_height is not None:
+            ws.row_dimensions[r].height = base_height
+        for c in range(1, ws.max_column + 1):
+            cell = ws.cell(row=r, column=c)
+            cell._style = copy(base_styles[c])
+            cell.value = None
+
+    for idx, row in enumerate(output_rows, start=start_row):
+        for k, v in row.items():
+            col = header_map.get(k)
+            if col:
+                ws.cell(row=idx, column=col).value = v
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_df.to_excel(output_path, index=False)
+    wb.save(output_path)
     return output_path
 
 
@@ -133,7 +180,8 @@ def export_products_files(products: List[Dict[str, Any]], csv_path: Path, xlsx_p
     df.to_csv(csv_path, index=False, encoding="utf-8-sig")
     df.to_excel(xlsx_path, index=False)
     salla_xlsx_path = xlsx_path.parent / "salla_products_ready.xlsx"
-    out_path = export_to_salla_template(products, None, salla_xlsx_path)
+    template_path = _resolve_template_path(xlsx_path.parent)
+    out_path = export_to_salla_template(products, template_path, salla_xlsx_path)
     return {
         "csv_path": str(csv_path),
         "xlsx_path": str(xlsx_path),

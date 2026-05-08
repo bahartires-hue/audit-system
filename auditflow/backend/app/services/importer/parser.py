@@ -25,6 +25,8 @@ BRAND_TRANSLATIONS = {
     "نيكسن": "Nexen",
     "نكسان": "Nexen",
     "الفا": "Alpha",
+    "ألفا": "Alpha",
+    "لاوفين": "Laufenn",
 }
 
 MODEL_TRANSLATIONS = {
@@ -89,6 +91,8 @@ def parse_tire_name(raw_name: str) -> Dict[str, Any]:
 
     toks = name.split()
     brand = normalize_brand_name(toks[0] if toks else "")
+    if brand.upper() == "A" and re.search(r"\balpha\b|ألفا|الفا", name, flags=re.IGNORECASE):
+        brand = "Alpha"
     detected_ar_brand = ""
     for ar, en in BRAND_TRANSLATIONS.items():
         if ar in name:

@@ -33,6 +33,31 @@ def _extract_size_from_text(s: str) -> str:
     return _norm_size(f"{m.group(1)}/{m.group(2)}R{m.group(3)}")
 
 
+def _normalize_price(raw: str) -> str:
+    t = re.sub(r"[^\d,\.]", "", str(raw or "").strip())
+    if not t:
+        return ""
+    if "," in t and "." in t:
+        if t.rfind(",") > t.rfind("."):
+            t = t.replace(".", "").replace(",", ".")
+        else:
+            t = t.replace(",", "")
+    else:
+        if t.count(",") == 1 and t.count(".") == 0:
+            t = t.replace(",", ".")
+        elif t.count(",") > 1 and t.count(".") == 0:
+            t = t.replace(",", "")
+        elif t.count(".") > 1 and t.count(",") == 0:
+            t = t.replace(".", "")
+    try:
+        v = float(t)
+    except Exception:
+        return ""
+    if v <= 0:
+        return ""
+    return f"{v:.2f}".rstrip("0").rstrip(".")
+
+
 def filter_products(products: List[Dict[str, Any]], brand: str = "", size: str = "", limit: int = 20) -> List[Dict[str, Any]]:
     b_raw = (brand or "").strip()
     b_norm = normalize_brand_name(b_raw) if b_raw else ""
@@ -99,6 +124,13 @@ def run_import_pipeline(
 
     for item in scoped_items:
         parsed = item.get("_parsed") or parse_tire_name(item.get("name") or "")
+        raw_name = str(item.get("name", "")).strip()
+        if raw_name == "ابحث !":
+            continue
+        if not parsed.get("brand") and re.search(r"\bAL[A-Z0-9\-]*\b", str(item.get("sku", "")), flags=re.IGNORECASE):
+            parsed["brand"] = "Alpha"
+        if not parsed.get("brand") and re.search(r"alpha|ألفا|الفا", f"{raw_name} {item.get('product_url','')}", flags=re.IGNORECASE):
+            parsed["brand"] = "Alpha"
         if parsed.get("parse_status") == "non_english_name" or re.search(r"[\u0600-\u06FF]", f"{parsed.get('brand','')} {parsed.get('model','')}"):
             # final fallback: keep product but clear non-English fragments
             parsed["brand"] = re.sub(r"[\u0600-\u06FF]+", "", parsed.get("brand", "")).strip() or parsed.get("brand", "")
@@ -125,7 +157,14 @@ def run_import_pipeline(
             cloud_url, cloud_status = upload_to_cloudinary(item.get("image_url", ""), seo["image_slug"])
         if not cloud_url:
             image_status = "needs_review"
-        price = (item.get("price") or "").strip()
+        price = _normalize_price(item.get("price", ""))
+        if raw_name == "ابحث !" or not parsed.get("size") or not price:
+            continue
+        if brand:
+            selected = normalize_brand_name(brand).lower().strip()
+            parsed_brand = normalize_brand_name(parsed.get("brand", "")).lower().strip()
+            if selected and parsed_brand and selected != parsed_brand:
+                continue
         price_status = "ok" if price else "price_missing"
         seo_status = "ok" if parsed.get("size") else "needs_review"
         row = {
