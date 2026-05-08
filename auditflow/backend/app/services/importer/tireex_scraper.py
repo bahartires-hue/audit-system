@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Set
 from urllib.parse import urljoin, urlparse
@@ -22,7 +23,7 @@ def _clean(s: str) -> str:
 
 
 def _fetch(url: str) -> BeautifulSoup:
-    r = requests.get(url, timeout=30, headers=_UA)
+    r = requests.get(url, timeout=15, headers=_UA)
     r.raise_for_status()
     return BeautifulSoup(r.text, "lxml")
 
@@ -206,12 +207,10 @@ def _next_page_url(base_url: str, soup: BeautifulSoup) -> str:
 def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     seen: Set[str] = set()
-    cards = soup.select(
-        "li.product, .product, .products .product, .wc-block-grid__product, .woocommerce-LoopProduct-link, a.woocommerce-LoopProduct-link, .product-card"
+    main_scope = soup.select_one("main") or soup
+    cards = main_scope.select(
+        "ul.products li.product, .products .product, .woocommerce ul.products li.product"
     )
-    # Tireex theme specific: cards can be represented primarily by title anchors.
-    if not cards:
-        cards = soup.select("a.product-card-content-title")
     log.info("tireex detected listing cards=%s url=%s", len(cards), base_url)
     for card in cards:
         if card.name == "a" and "product-card-content-title" in ((card.get("class") or [])):
@@ -376,9 +375,14 @@ def scrape_tireex(
     limit: int = 20,
     selected_brand: str = "",
 ) -> List[Dict[str, Any]]:
+    started_at = time.perf_counter()
     links: List[str] = []
     listing_items: List[Dict[str, Any]] = []
     max_items = max(1, int(limit or 20))
+    ignored_links = 0
+    accepted_cards = 0
+    visited_product_urls: Set[str] = set()
+    seen_card_keys: Set[str] = set()
     inferred_brand = selected_brand
     if not inferred_brand:
         p = (urlparse(url).path or "").lower()
@@ -400,34 +404,40 @@ def scrape_tireex(
             except Exception as e:
                 log.warning("skip listing page %s: %s", current, e)
                 break
-            listing_items.extend(_extract_list_products(current, doc))
-            # fallback سريع: روابط a التي تحمل مقاسًا في النص.
-            for p in _extract_product_links_by_anchor_text(current, doc):
-                if inferred_brand and not _is_brand_match(p.get("name", ""), inferred_brand):
-                    log.info("SKIPPED_WRONG_BRAND anchor=%s selected=%s", p.get("name", ""), inferred_brand)
-                    continue
-                if p.get("product_url") and all(x.get("product_url") != p["product_url"] for x in listing_items):
-                    listing_items.append(
-                        {
-                            "name": p.get("name", ""),
-                            "price": "",
-                            "old_price": "",
-                            "product_url": p["product_url"],
-                            "image_url": "",
-                            "year": "",
-                            "country": "",
-                            "warranty": "",
-                            "pattern": "",
-                            "description": "",
-                            "_size_token": _extract_size_token(p.get("name", "")),
-                        }
-                    )
-            for u in _extract_product_links(current, doc):
-                if u not in links:
-                    links.append(u)
-                if len(links) >= max_items:
+            raw_cards = _extract_list_products(current, doc)
+            log.info("tireex product cards count=%s page=%s", len(raw_cards), current)
+            for c in raw_cards:
+                if len(listing_items) >= max_items:
                     break
-            if len(links) >= max_items:
+                product_url = str(c.get("product_url") or "").strip()
+                name = str(c.get("name") or "").strip()
+                if not product_url or not name:
+                    ignored_links += 1
+                    continue
+                # pre-filter before entering product page
+                if not _in_same_scope(url, product_url):
+                    ignored_links += 1
+                    continue
+                if product_url in visited_product_urls:
+                    ignored_links += 1
+                    continue
+                if not c.get("_size_token"):
+                    ignored_links += 1
+                    continue
+                if inferred_brand and not _is_brand_match(name, inferred_brand):
+                    log.info("SKIPPED_WRONG_BRAND card=%s selected=%s", name, inferred_brand)
+                    ignored_links += 1
+                    continue
+                dedup_key = f"{normalize_brand_name(inferred_brand or '').lower()}::{c.get('_size_token','')}::{name.lower()}"
+                if dedup_key in seen_card_keys:
+                    ignored_links += 1
+                    continue
+                seen_card_keys.add(dedup_key)
+                visited_product_urls.add(product_url)
+                listing_items.append(c)
+                links.append(product_url)
+                accepted_cards += 1
+            if len(listing_items) >= max_items:
                 break
             if not multi_pages:
                 break
@@ -444,6 +454,7 @@ def scrape_tireex(
         if len(products) >= max_items:
             break
         try:
+            time.sleep(0.2)
             p = _parse_product_page(u)
             # preserve listing values when product page misses fields.
             base = listing_by_url.get(u, {})
@@ -477,6 +488,14 @@ def scrape_tireex(
         except Exception as e:
             log.warning("skip product %s: %s", u, e)
     if products:
+        elapsed = time.perf_counter() - started_at
+        log.info(
+            "tireex scrape done cards=%s accepted=%s ignored=%s total_seconds=%.2f",
+            len(listing_items),
+            len(products),
+            ignored_links,
+            elapsed,
+        )
         return products[:max_items]
     # fallback إذا فشل parsing صفحات المنتج: نعيد منتجات الكروت من صفحة الماركة/البحث.
     if not listing_items:
@@ -504,6 +523,7 @@ def scrape_tireex(
             break
         u = item.get("product_url", "")
         try:
+            time.sleep(0.2)
             p = _parse_product_page(u) if u else {}
             merged = {**item, **p}
             if merged.get("name") and merged.get("_size_token") and merged.get("product_url"):
@@ -512,5 +532,13 @@ def scrape_tireex(
                 log.info("tireex skip upgraded card reason=missing_required url=%s", u)
         except Exception as e:
             log.warning("skip upgraded card %s: %s", u, e)
+    elapsed = time.perf_counter() - started_at
+    log.info(
+        "tireex scrape done cards=%s accepted=%s ignored=%s total_seconds=%.2f",
+        len(listing_items),
+        len(upgraded),
+        ignored_links,
+        elapsed,
+    )
     return upgraded[:max_items]
 

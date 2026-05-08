@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import pandas as pd
+from openpyxl import load_workbook
+from copy import copy
 
 _FALLBACK_TEMPLATE_COLUMNS = [
     "النوع ",
@@ -72,15 +74,20 @@ def _resolve_template_path(base_dir: Path) -> Path:
 
 
 def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path | None, output_path: Path) -> Path:
-    if template_path:
-        template_df = pd.read_excel(template_path)
-    else:
-        template_df = pd.DataFrame(columns=_FALLBACK_TEMPLATE_COLUMNS)
-    columns = list(template_df.columns)
-    rows: List[Dict[str, Any]] = []
+    if not template_path:
+        raise ValueError("تعذر العثور على ملف قالب سلة الأصلي. يرجى وضعه داخل importer/templates")
 
+    wb = load_workbook(template_path)
+    ws = wb.active
+    header_map: Dict[str, int] = {}
+    for col in range(1, ws.max_column + 1):
+        name = ws.cell(row=1, column=col).value
+        key = str(name).strip() if name is not None else ""
+        if key:
+            header_map[key] = col
+
+    rows: List[Dict[str, Any]] = []
     for p in products:
-        # strict rules for final Salla sheet
         if not str(p.get("brand", "")).strip():
             continue
         if not str(p.get("size", "")).strip():
@@ -90,47 +97,76 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
         public_image_url = str(p.get("image_cloudinary") or "").strip()
         if not public_image_url.startswith("https://res.cloudinary.com/"):
             continue
-        row = {col: "" for col in columns}
+
         promo_bits = []
         if p.get("year"):
             promo_bits.append(f"سنة الصنع {p.get('year')}")
         if p.get("warranty"):
             promo_bits.append(f"الضمان {p.get('warranty')}")
         promo_title = " - ".join(promo_bits)
-        safe_set(row, columns, "النوع ", "منتج")
-        safe_set(row, columns, "أسم المنتج", p.get("product_title", ""))
-        safe_set(row, columns, "تصنيف المنتج", "قسم الإطارات")
-        safe_set(row, columns, "صورة المنتج", public_image_url)
-        safe_set(row, columns, "وصف صورة المنتج", p.get("image_alt_text", ""))
-        safe_set(row, columns, "نوع المنتج", "منتج جاهز")
-        safe_set(row, columns, "سعر المنتج", p.get("price", ""))
-        safe_set(row, columns, "الوصف", p.get("description", ""))
-        safe_set(row, columns, "هل يتطلب شحن؟", "نعم")
-        safe_set(row, columns, "الوزن", 25)
-        safe_set(row, columns, "وحدة الوزن", "kg")
-        safe_set(row, columns, "الماركة", p.get("brand", ""))
-        safe_set(row, columns, "العنوان الترويجي", promo_title)
-        safe_set(row, columns, "تثبيت المنتج", "لا")
-        safe_set(row, columns, "خاضع للضريبة ؟", "نعم")
+        rows.append(
+            {
+                "النوع ": "منتج",
+                "أسم المنتج": p.get("product_title", ""),
+                "تصنيف المنتج": "قسم الإطارات",
+                "صورة المنتج": public_image_url,
+                "وصف صورة المنتج": p.get("image_alt_text", ""),
+                "نوع المنتج": "منتج جاهز",
+                "سعر المنتج": p.get("price", ""),
+                "الوصف": p.get("description", ""),
+                "هل يتطلب شحن؟": "نعم",
+                "الوزن": 25,
+                "وحدة الوزن": "kg",
+                "الماركة": p.get("brand", ""),
+                "العنوان الترويجي": promo_title,
+                "تثبيت المنتج": "لا",
+                "خاضع للضريبة ؟": "نعم",
+                "[1] الاسم": "مقاس الإطار",
+                "[1] النوع": "نص",
+                "[1] القيمة": p.get("size", ""),
+                "[2] الاسم": "",
+                "[2] النوع": "",
+                "[2] القيمة": "",
+                "[2] الصورة / اللون": "",
+                "[3] الاسم": "",
+                "[3] النوع": "",
+                "[3] القيمة": "",
+                "[3] الصورة / اللون": "",
+            }
+        )
 
-        safe_set(row, columns, "[1] الاسم", "Tire Size")
-        safe_set(row, columns, "[1] النوع", "نص")
-        safe_set(row, columns, "[1] القيمة", p.get("size", ""))
+    start_row = 2
+    # Preserve template styling for newly added rows by cloning row 2 styles.
+    template_style_row = 2 if ws.max_row >= 2 else 1
+    base_height = ws.row_dimensions[template_style_row].height
+    base_styles = {c: copy(ws.cell(row=template_style_row, column=c)._style) for c in range(1, ws.max_column + 1)}
+    base_num_formats = {c: ws.cell(row=template_style_row, column=c).number_format for c in range(1, ws.max_column + 1)}
+    base_alignments = {c: copy(ws.cell(row=template_style_row, column=c).alignment) for c in range(1, ws.max_column + 1)}
+    base_fills = {c: copy(ws.cell(row=template_style_row, column=c).fill) for c in range(1, ws.max_column + 1)}
+    base_fonts = {c: copy(ws.cell(row=template_style_row, column=c).font) for c in range(1, ws.max_column + 1)}
+    base_borders = {c: copy(ws.cell(row=template_style_row, column=c).border) for c in range(1, ws.max_column + 1)}
+    max_clear_row = max(ws.max_row, start_row + len(rows) - 1)
+    for r in range(start_row, max_clear_row + 1):
+        if base_height is not None:
+            ws.row_dimensions[r].height = base_height
+        for c in range(1, ws.max_column + 1):
+            cell = ws.cell(row=r, column=c)
+            cell._style = copy(base_styles[c])
+            cell.number_format = base_num_formats[c]
+            cell.alignment = copy(base_alignments[c])
+            cell.fill = copy(base_fills[c])
+            cell.font = copy(base_fonts[c])
+            cell.border = copy(base_borders[c])
+            ws.cell(row=r, column=c).value = None
 
-        safe_set(row, columns, "[2] الاسم", "Load / Speed")
-        safe_set(row, columns, "[2] النوع", "نص")
-        safe_set(row, columns, "[2] القيمة", p.get("load_speed", ""))
+    for idx, row_data in enumerate(rows, start=start_row):
+        for key, value in row_data.items():
+            col = header_map.get(key)
+            if col:
+                ws.cell(row=idx, column=col).value = value
 
-        safe_set(row, columns, "[3] الاسم", "Width")
-        safe_set(row, columns, "[3] النوع", "نص")
-        safe_set(row, columns, "[3] القيمة", p.get("width", ""))
-
-        rows.append(row)
-
-    output_df = pd.DataFrame(rows, columns=columns)
-    assert list(output_df.columns) == list(template_df.columns), "أعمدة ملف سلة غير متطابقة مع القالب الأصلي"
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_df.to_excel(output_path, index=False)
+    wb.save(output_path)
     return output_path
 
 
