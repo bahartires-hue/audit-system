@@ -64,6 +64,11 @@ def scrape_importer(request: Request, body: ImporterRequest) -> Dict[str, Any]:
         raise HTTPException(400, str(e))
     except Exception:
         raise HTTPException(502, "فشل جلب البيانات من الموقع. تأكد من الرابط أو حاول لاحقًا.")
+    if int(out.get("count", 0) or 0) <= 0:
+        raise HTTPException(
+            status_code=422,
+            detail="فشل الجلب: لم يتم استخراج أي منتج من الصفحة المحددة. لا يمكن إنشاء ملف سلة فارغ.",
+        )
     items = out.get("items", [])
     for x in items:
         p = (x.get("image_local") or "").strip()

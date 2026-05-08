@@ -549,6 +549,10 @@ def scrape_tireex(
             # preserve listing values when product page misses fields.
             base = listing_by_url.get(u, {})
             merged = {**base, **p}
+            if not merged.get("name"):
+                merged["name"] = base.get("name", "")
+            if not merged.get("_size_token"):
+                merged["_size_token"] = base.get("_size_token", "")
             if not merged.get("price"):
                 merged["price"] = base.get("price", "")
             if not merged.get("old_price"):
@@ -581,6 +585,13 @@ def scrape_tireex(
                 log.info("tireex product has no image url=%s", u)
             products.append(p)
         except Exception as e:
+            base = listing_by_url.get(u, {})
+            if base.get("name") and base.get("product_url"):
+                if not base.get("_size_token"):
+                    base["_size_token"] = _extract_size_token(base.get("name", "")) or _extract_size_from_url(base.get("product_url", ""))
+                if base.get("_size_token"):
+                    products.append(base)
+                    continue
             log.warning("skip product %s: %s", u, e)
     elapsed = time.perf_counter() - started_at
     log.info(
