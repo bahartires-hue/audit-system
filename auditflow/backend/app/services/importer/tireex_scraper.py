@@ -171,18 +171,19 @@ def scrape_tireex_product(product_url: str) -> Dict[str, Any]:
 
 
 def _extract_products_from_listing_text(text: str, selected_brand: str, page_url: str) -> List[Dict[str, Any]]:
-    chunks = [c.strip() for c in re.split(r"\n{2,}", text) if c.strip()]
+    full = _clean(text or "")
     products: List[Dict[str, Any]] = []
     seen = set()
-    for c in chunks:
-        m_name = _NAME_RE.search(c)
-        if not m_name:
-            continue
+    matches = list(_NAME_RE.finditer(full))
+    for idx, m_name in enumerate(matches):
         name = _clean(m_name.group(1))
         if selected_brand:
             sb = (selected_brand or "").strip().lower()
             if sb and sb not in name.lower():
                 continue
+        start = m_name.end()
+        end = matches[idx + 1].start() if (idx + 1) < len(matches) else min(len(full), start + 500)
+        c = full[start:end]
         # price line around "للإطار الواحد"
         m_price_line = re.search(r"(\d[\d,\.]*)\s+(\d[\d,\.]*)\s+للإطار\s+الواحد", c)
         price = ""
