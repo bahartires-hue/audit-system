@@ -153,23 +153,13 @@ def run_import_pipeline(
         if selected_brand:
             selected = normalize_brand_name(selected_brand).lower().strip()
             parsed_brand = normalize_brand_name(str(parsed.get("brand", ""))).lower().strip()
-            name_text = str(item.get("name", "")).lower()
-            explicit_name_brand = _infer_brand_from_product_name(item.get("name", "")).lower().strip()
+            accepted_by_name = _name_contains_brand(item.get("name", ""), selected_brand)
+            # If parser could not infer brand, trust selected category/input brand.
             if not parsed_brand and selected:
                 parsed["brand"] = selected_brand
                 parsed_brand = selected
-            # Accept if name contains selected OR parsed brand matches.
-            accepted_by_name = _name_contains_brand(item.get("name", ""), selected_brand)
-            accepted_by_parsed = parsed_brand == selected
-            accepted_by_page = bool(selected_brand)  # selected inferred from user input or category URL
-            if not (accepted_by_name or accepted_by_parsed or accepted_by_page):
-                skipped_wrong_brand_count += 1
-                log.info("SKIPPED_WRONG_BRAND selected=%s parsed=%s name=%s", selected, parsed_brand, item.get("name", ""))
-                continue
-            # But reject explicit mismatch brands.
-            if (explicit_name_brand and explicit_name_brand != selected and not accepted_by_name) or (
-                parsed_brand and parsed_brand != selected and not accepted_by_name
-            ) or _is_explicit_other_brand(item.get("name", ""), selected_brand):
+            # Reject only clear mismatches; keep neutral names to avoid false zero results.
+            if parsed_brand and parsed_brand != selected and not accepted_by_name:
                 log.info("SKIPPED_WRONG_BRAND selected=%s parsed=%s name=%s", selected, parsed_brand, item.get("name", ""))
                 skipped_wrong_brand_count += 1
                 continue
