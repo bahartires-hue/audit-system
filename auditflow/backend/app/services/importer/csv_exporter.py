@@ -1,17 +1,12 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Dict, List
 
 import pandas as pd
-from openpyxl import load_workbook
-from openpyxl import Workbook
-from copy import copy
-import logging
 
-log = logging.getLogger("importer.csv_exporter")
-
-_FALLBACK_TEMPLATE_COLUMNS = [
+_DEFAULT_SALLA_COLUMNS = [
     "النوع ",
     "أسم المنتج",
     "تصنيف المنتج",
@@ -54,140 +49,80 @@ _FALLBACK_TEMPLATE_COLUMNS = [
     "[3] الصورة / اللون",
 ]
 
-
 def safe_set(row: Dict[str, Any], columns: List[str], col_name: str, value: Any) -> None:
     if col_name in columns:
         row[col_name] = value if value is not None else ""
 
 
-def _resolve_template_path(base_dir: Path) -> Path:
-    candidates = [
-        Path(__file__).resolve().parent / "templates" / "Salla Products Template (3).xlsx",
-        Path(__file__).resolve().parent / "templates" / "Salla Products Template.xlsx",
-        base_dir / "Salla Products Template.xlsx",
-        base_dir.parent / "Salla Products Template.xlsx",
-        base_dir.parent.parent / "Salla Products Template.xlsx",
-        base_dir / "Salla Products Template (3).xlsx",
-        base_dir.parent / "Salla Products Template (3).xlsx",
-        base_dir.parent.parent / "Salla Products Template (3).xlsx",
-    ]
-    for p in candidates:
-        if p.exists() and p.is_file():
-            return p
-    return None
+def build_public_image_url(filename: str) -> str:
+    base = (os.getenv("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+    safe = (filename or "").strip().replace("\\", "/").split("/")[-1]
+    if not safe:
+        return ""
+    if base:
+        return f"{base}/uploads/products/{safe}"
+    return ""
+
+
+def _to_public_image_value(p: Dict[str, Any]) -> str:
+    cloud = str(p.get("image_cloudinary") or "").strip()
+    if cloud.startswith("https://res.cloudinary.com/"):
+        return cloud
+    return ""
 
 
 def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path | None, output_path: Path) -> Path:
-    if template_path:
-        wb = load_workbook(template_path)
-        ws = wb.active
-        header_map: Dict[str, int] = {}
-        for col in range(1, ws.max_column + 1):
-            name = ws.cell(row=1, column=col).value
-            key = str(name).strip() if name is not None else ""
-            if key:
-                header_map[key] = col
-    else:
-        # graceful fallback: never fail export if template is missing
-        log.warning("Salla template not found; using fallback header-only workbook")
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Products"
-        for i, name in enumerate(_FALLBACK_TEMPLATE_COLUMNS, start=1):
-            ws.cell(row=1, column=i).value = name
-        header_map = {name: idx for idx, name in enumerate(_FALLBACK_TEMPLATE_COLUMNS, start=1)}
-
-    rows: List[Dict[str, Any]] = []
+    # external template is intentionally ignored to avoid any runtime dependency.
+    template_df = pd.DataFrame(columns=_DEFAULT_SALLA_COLUMNS)
+    columns = [str(c) for c in template_df.columns]
+    output_rows: List[Dict[str, Any]] = []
     for p in products:
-        if not str(p.get("brand", "")).strip():
+        image_value = _to_public_image_value(p)
+        if not image_value:
+            # skip from salla export when cloudinary upload failed
             continue
-        if not str(p.get("size", "")).strip():
-            continue
-        if not str(p.get("price", "")).strip():
-            continue
-        if str(p.get("image_status", "")).strip().lower() != "ok":
-            continue
-        public_image_url = str(p.get("image_cloudinary") or "").strip()
-        if not public_image_url.startswith("https://res.cloudinary.com/"):
-            continue
-
+        row = {col: "" for col in columns}
         promo_bits = []
         if p.get("year"):
             promo_bits.append(f"سنة الصنع {p.get('year')}")
         if p.get("warranty"):
             promo_bits.append(f"الضمان {p.get('warranty')}")
-        promo_title = " - ".join(promo_bits)
-        rows.append(
-            {
-                "النوع ": "منتج",
-                "أسم المنتج": p.get("product_title", ""),
-                "تصنيف المنتج": "قسم الإطارات",
-                "صورة المنتج": public_image_url,
-                "وصف صورة المنتج": p.get("image_alt_text", ""),
-                "نوع المنتج": "منتج جاهز",
-                "سعر المنتج": p.get("price", ""),
-                "الوصف": p.get("description", ""),
-                "هل يتطلب شحن؟": "نعم",
-                "الوزن": 25,
-                "وحدة الوزن": "kg",
-                "الماركة": p.get("brand", ""),
-                "العنوان الترويجي": promo_title,
-                "تثبيت المنتج": "لا",
-                "خاضع للضريبة ؟": "نعم",
-                "[1] الاسم": "مقاس الإطار",
-                "[1] النوع": "نص",
-                "[1] القيمة": p.get("size", ""),
-                "[2] الاسم": "",
-                "[2] النوع": "",
-                "[2] القيمة": "",
-                "[2] الصورة / اللون": "",
-                "[3] الاسم": "",
-                "[3] النوع": "",
-                "[3] القيمة": "",
-                "[3] الصورة / اللون": "",
-            }
-        )
+        promo = " - ".join(promo_bits)
+        safe_set(row, columns, "النوع ", "منتج")
+        safe_set(row, columns, "أسم المنتج", p.get("product_title", ""))
+        safe_set(row, columns, "تصنيف المنتج", "قسم الإطارات")
+        safe_set(row, columns, "صورة المنتج", image_value)
+        safe_set(row, columns, "وصف صورة المنتج", p.get("image_alt_text", ""))
+        safe_set(row, columns, "نوع المنتج", "منتج جاهز")
+        safe_set(row, columns, "سعر المنتج", p.get("price", ""))
+        safe_set(row, columns, "الوصف", p.get("description", ""))
+        safe_set(row, columns, "هل يتطلب شحن؟", "نعم")
+        safe_set(row, columns, "الوزن", 25)
+        safe_set(row, columns, "وحدة الوزن", "kg")
+        safe_set(row, columns, "الماركة", p.get("brand", ""))
+        safe_set(row, columns, "العنوان الترويجي", promo)
+        safe_set(row, columns, "تثبيت المنتج", "لا")
+        safe_set(row, columns, "خاضع للضريبة ؟", "نعم")
 
-    # Detect real header row in case template has intro/colored rows.
-    header_row = 1
-    for r in range(1, min(ws.max_row, 20) + 1):
-        c1 = str(ws.cell(row=r, column=1).value or "").strip()
-        c2 = str(ws.cell(row=r, column=2).value or "").strip()
-        if c1 in {"النوع", "النوع "} and c2 == "أسم المنتج":
-            header_row = r
-            break
-    start_row = header_row + 1
-    # Preserve template styling for data rows when available.
-    template_style_row = start_row if ws.max_row >= start_row else header_row
-    base_height = ws.row_dimensions[template_style_row].height
-    base_styles = {c: copy(ws.cell(row=template_style_row, column=c)._style) for c in range(1, ws.max_column + 1)}
-    base_num_formats = {c: ws.cell(row=template_style_row, column=c).number_format for c in range(1, ws.max_column + 1)}
-    base_alignments = {c: copy(ws.cell(row=template_style_row, column=c).alignment) for c in range(1, ws.max_column + 1)}
-    base_fills = {c: copy(ws.cell(row=template_style_row, column=c).fill) for c in range(1, ws.max_column + 1)}
-    base_fonts = {c: copy(ws.cell(row=template_style_row, column=c).font) for c in range(1, ws.max_column + 1)}
-    base_borders = {c: copy(ws.cell(row=template_style_row, column=c).border) for c in range(1, ws.max_column + 1)}
-    max_clear_row = max(ws.max_row, start_row + len(rows) - 1)
-    for r in range(start_row, max_clear_row + 1):
-        if base_height is not None:
-            ws.row_dimensions[r].height = base_height
-        for c in range(1, ws.max_column + 1):
-            cell = ws.cell(row=r, column=c)
-            cell._style = copy(base_styles[c])
-            cell.number_format = base_num_formats[c]
-            cell.alignment = copy(base_alignments[c])
-            cell.fill = copy(base_fills[c])
-            cell.font = copy(base_fonts[c])
-            cell.border = copy(base_borders[c])
-            ws.cell(row=r, column=c).value = None
+        safe_set(row, columns, "[1] الاسم", "Tire Size")
+        safe_set(row, columns, "[1] النوع", "نص")
+        safe_set(row, columns, "[1] القيمة", p.get("size", ""))
+        safe_set(row, columns, "[2] الاسم", "Load / Speed")
+        safe_set(row, columns, "[2] النوع", "نص")
+        safe_set(row, columns, "[2] القيمة", p.get("load_speed", ""))
+        safe_set(row, columns, "[3] الاسم", "Width")
+        safe_set(row, columns, "[3] النوع", "نص")
+        safe_set(row, columns, "[3] القيمة", p.get("width", ""))
+        safe_set(row, columns, "[4] الاسم", "Rim")
+        safe_set(row, columns, "[4] النوع", "نص")
+        safe_set(row, columns, "[4] القيمة", p.get("rim", ""))
+        output_rows.append(row)
 
-    for idx, row_data in enumerate(rows, start=start_row):
-        for key, value in row_data.items():
-            col = header_map.get(key)
-            if col:
-                ws.cell(row=idx, column=col).value = value
-
+    output_df = pd.DataFrame(output_rows, columns=columns)
+    if list(output_df.columns) != list(template_df.columns):
+        raise ValueError("أعمدة ملف سلة المدمجة غير متطابقة")
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    wb.save(output_path)
+    output_df.to_excel(output_path, index=False)
     return output_path
 
 
@@ -198,19 +133,11 @@ def export_products_files(products: List[Dict[str, Any]], csv_path: Path, xlsx_p
     df.to_csv(csv_path, index=False, encoding="utf-8-sig")
     df.to_excel(xlsx_path, index=False)
     salla_xlsx_path = xlsx_path.parent / "salla_products_ready.xlsx"
-    template_path = _resolve_template_path(xlsx_path.parent)
-    out_path = export_to_salla_template(products, template_path, salla_xlsx_path)
+    out_path = export_to_salla_template(products, None, salla_xlsx_path)
     return {
         "csv_path": str(csv_path),
         "xlsx_path": str(xlsx_path),
         "salla_csv_path": "",
         "salla_xlsx_path": str(out_path),
     }
-
-
-def export_salla_only(products: List[Dict[str, Any]], exports_dir: Path) -> Path:
-    exports_dir.mkdir(parents=True, exist_ok=True)
-    salla_xlsx_path = exports_dir / "salla_products_ready.xlsx"
-    template_path = _resolve_template_path(exports_dir)
-    return export_to_salla_template(products, template_path, salla_xlsx_path)
 

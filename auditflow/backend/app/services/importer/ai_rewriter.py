@@ -125,8 +125,9 @@ def rewrite_description_fallback(prod: Dict[str, Any], source_description: str =
         if _clean(x)
     )
 
-    # ignore raw page text and generate description from structured fields only
-    extra = ""
+    extra = _clean(source_description)
+    if extra:
+        extra = f"\n\nمعلومات إضافية:\n{extra[:700]}"
 
     cta = _pick(
         [

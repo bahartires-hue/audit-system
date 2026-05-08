@@ -34,23 +34,10 @@ def _fetch(url: str) -> BeautifulSoup:
 
 
 def _looks_product_link(url: str) -> bool:
-    u = (url or "").lower()
-    p = (urlparse(u).path or "").lower()
-    bad_parts = [
-        "/cdn-cgi/",
-        "email-protection",
-        "add-to-cart",
-        "product-category",
-        "wp-content",
-        "wp-json",
-        "mailto:",
-        "tel:",
-        "?per_page=",
-        "shortcode=",
-    ]
-    if any(x in u for x in bad_parts):
+    p = (urlparse(url).path or "").lower()
+    if any(x in p for x in ["/cart", "/checkout", "/tag/", "/category/"]):
         return False
-    return "/product/" in p
+    return ("/product" in p) or ("/shop/" in p) or (len(p.strip("/").split("/")) >= 2)
 
 
 def _extract_generic_product_links(listing_url: str, soup: BeautifulSoup, limit: int) -> List[str]:
@@ -120,14 +107,7 @@ def _extract_generic_product(product_url: str) -> Dict[str, Any]:
     }
 
 
-def scrape_generic(
-    site_url: str,
-    *,
-    multi_pages: bool = False,
-    max_pages: int = 5,
-    limit: int = 20,
-    selected_brand: str = "",
-) -> List[Dict[str, Any]]:
+def scrape_generic(site_url: str, *, multi_pages: bool = False, max_pages: int = 5, limit: int = 20) -> List[Dict[str, Any]]:
     current = site_url
     visited = set()
     page_count = 0
@@ -159,65 +139,33 @@ def scrape_generic(
         try:
             p = _extract_generic_product(u)
             if p.get("name"):
-                if selected_brand and selected_brand.lower() not in (p.get("name", "").lower()):
-                    continue
                 products.append(p)
         except Exception as e:
             log.warning("generic skip product=%s err=%s", u, e)
     return products
 
 
-def scrape_products(
-    site_url: str,
-    *,
-    multi_pages: bool = False,
-    max_pages: int = 5,
-    limit: int = 20,
-    selected_brand: str = "",
-) -> List[Dict[str, Any]]:
+def scrape_products(site_url: str, *, multi_pages: bool = False, max_pages: int = 5, limit: int = 20) -> List[Dict[str, Any]]:
     domain = (urlparse(site_url).netloc or "").lower()
     kind = classify_url(site_url)
     log.info("importer domain=%s kind=%s multi_pages=%s limit=%s url=%s", domain, kind, multi_pages, limit, site_url)
     if "tireex.com" in domain or "tireex" in domain:
-        primary = scrape_tireex(
-            site_url,
-            multi_pages=multi_pages,
-            max_pages=max_pages,
-            limit=limit,
-            selected_brand=selected_brand,
-        )
+        primary = scrape_tireex(site_url, multi_pages=multi_pages, max_pages=max_pages, limit=limit)
         if primary:
             return primary
         log.warning("tireex primary scraper returned 0; trying multi-page fallback")
-        secondary = scrape_tireex(
-            site_url,
-            multi_pages=True,
-            max_pages=max(5, max_pages),
-            limit=max(limit * 2, 40),
-            selected_brand=selected_brand,
-        )
+        secondary = scrape_tireex(site_url, multi_pages=True, max_pages=max(5, max_pages), limit=max(limit * 2, 40))
         if secondary:
             return secondary[:limit]
-        log.warning("tireex multi-page scraper returned 0; skipping generic fallback for tireex")
-        return []
+        log.warning("tireex multi-page scraper returned 0; trying generic fallback")
+        generic = scrape_generic(site_url, multi_pages=True, max_pages=max(5, max_pages), limit=max(limit * 2, 40))
+        return generic[:limit]
     # fallback عام لأي موقع شبيه بمتاجر المنتجات.
-    primary_generic = scrape_generic(
-        site_url,
-        multi_pages=multi_pages,
-        max_pages=max_pages,
-        limit=limit,
-        selected_brand=selected_brand,
-    )
+    primary_generic = scrape_generic(site_url, multi_pages=multi_pages, max_pages=max_pages, limit=limit)
     if primary_generic:
         return primary_generic
     if not multi_pages:
         log.warning("generic primary scraper returned 0; retrying with multi-pages")
-        return scrape_generic(
-            site_url,
-            multi_pages=True,
-            max_pages=max(5, max_pages),
-            limit=max(limit * 2, 40),
-            selected_brand=selected_brand,
-        )[:limit]
+        return scrape_generic(site_url, multi_pages=True, max_pages=max(5, max_pages), limit=max(limit * 2, 40))[:limit]
     return primary_generic
 
