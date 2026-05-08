@@ -376,6 +376,8 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
         name = _pick_attr(doc, ["meta[property='og:title']", "meta[name='twitter:title']"], "content")
     size_token = _extract_size_token(name)
     if not size_token:
+        size_token = _extract_size_from_url(product_url)
+    if not size_token:
         size_token = _extract_size_token(
             " ".join(
                 x
@@ -474,9 +476,6 @@ def scrape_tireex(
                     ignored_links += 1
                     continue
                 if product_url in visited_product_urls:
-                    ignored_links += 1
-                    continue
-                if not c.get("_size_token"):
                     ignored_links += 1
                     continue
                 if inferred_brand:

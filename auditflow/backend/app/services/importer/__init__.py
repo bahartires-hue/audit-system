@@ -135,6 +135,16 @@ def run_import_pipeline(
     for item in scoped_items:
         parsed = item.get("_parsed") or parse_tire_name(item.get("name") or "")
         if not parsed.get("size"):
+            fallback_size = str(item.get("_size_token") or "").strip().upper().replace(" ", "")
+            m = re.match(r"^(\d{3})/(\d{2,3})R(\d{2})$", fallback_size)
+            if m:
+                parsed["size"] = fallback_size
+                parsed["width"] = m.group(1)
+                parsed["profile"] = m.group(2)
+                parsed["rim"] = m.group(3)
+                if parsed.get("parse_status") in {"failed", "size_missing"}:
+                    parsed["parse_status"] = "ok"
+        if not parsed.get("size"):
             log.info("skip invalid/no-size product name=%s", item.get("name", ""))
             continue
         if re.search(r"ابحث|search", str(item.get("name", "")), flags=re.IGNORECASE):
