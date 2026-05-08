@@ -34,10 +34,23 @@ def _fetch(url: str) -> BeautifulSoup:
 
 
 def _looks_product_link(url: str) -> bool:
-    p = (urlparse(url).path or "").lower()
-    if any(x in p for x in ["/cart", "/checkout", "/tag/", "/category/"]):
+    u = (url or "").lower()
+    p = (urlparse(u).path or "").lower()
+    bad_parts = [
+        "/cdn-cgi/",
+        "email-protection",
+        "add-to-cart",
+        "product-category",
+        "wp-content",
+        "wp-json",
+        "mailto:",
+        "tel:",
+        "?per_page=",
+        "shortcode=",
+    ]
+    if any(x in u for x in bad_parts):
         return False
-    return ("/product" in p) or ("/shop/" in p) or (len(p.strip("/").split("/")) >= 2)
+    return "/product/" in p
 
 
 def _extract_generic_product_links(listing_url: str, soup: BeautifulSoup, limit: int) -> List[str]:
@@ -185,15 +198,8 @@ def scrape_products(
         )
         if secondary:
             return secondary[:limit]
-        log.warning("tireex multi-page scraper returned 0; trying generic fallback")
-        generic = scrape_generic(
-            site_url,
-            multi_pages=True,
-            max_pages=max(5, max_pages),
-            limit=max(limit * 2, 40),
-            selected_brand=selected_brand,
-        )
-        return generic[:limit]
+        log.warning("tireex multi-page scraper returned 0; skipping generic fallback for tireex")
+        return []
     # fallback عام لأي موقع شبيه بمتاجر المنتجات.
     primary_generic = scrape_generic(
         site_url,

@@ -130,6 +130,27 @@ def _is_product_url(url: str) -> bool:
     return False
 
 
+def _is_valid_product_url(url: str) -> bool:
+    if not url:
+        return False
+    u = (url or "").strip().lower()
+    bad_parts = [
+        "/cdn-cgi/",
+        "email-protection",
+        "add-to-cart",
+        "product-category",
+        "wp-content",
+        "wp-json",
+        "mailto:",
+        "tel:",
+        "?per_page=",
+        "shortcode=",
+    ]
+    if any(x in u for x in bad_parts):
+        return False
+    return "tireex.com/product/" in u or "/product/" in (urlparse(u).path or "")
+
+
 def _extract_size_token(text: str) -> str:
     m = _SIZE_RE.search(text or "")
     if not m:
@@ -212,6 +233,17 @@ def _next_page_url(base_url: str, soup: BeautifulSoup) -> str:
     return ""
 
 
+def _category_page_candidates(category_url: str, page: int) -> List[str]:
+    base = (category_url or "").rstrip("/")
+    if page <= 1:
+        return [base + "/"]
+    return [
+        f"{base}/page/{page}/",
+        f"{base}/?product-page={page}",
+        f"{base}/?paged={page}",
+    ]
+
+
 def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     seen: Set[str] = set()
@@ -245,8 +277,7 @@ def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str,
         product_url = urljoin(base_url, a.get("href"))
         if product_url in seen:
             continue
-        pth = (urlparse(product_url).path or "").lower()
-        if "/product/" not in pth and "/shop/" not in pth:
+        if not _is_valid_product_url(product_url):
             log.info("tireex skip card reason=not_product_url url=%s", product_url)
             continue
         seen.add(product_url)
@@ -450,16 +481,24 @@ def scrape_tireex(
     if _is_product_url(url):
         links = [url]
     else:
-        current = url
         visited_pages: Set[str] = set()
         page_count = 0
-        while current and current not in visited_pages and page_count < max_pages:
-            visited_pages.add(current)
+        while page_count < max_pages:
             page_count += 1
-            try:
-                doc = _fetch(current)
-            except Exception as e:
-                log.warning("skip listing page %s: %s", current, e)
+            page_candidates = _category_page_candidates(url, page_count)
+            current = ""
+            doc = None
+            for candidate in page_candidates:
+                if candidate in visited_pages:
+                    continue
+                try:
+                    doc = _fetch(candidate)
+                    current = candidate
+                    visited_pages.add(candidate)
+                    break
+                except Exception:
+                    continue
+            if not current or doc is None:
                 break
             raw_cards = _extract_list_products(current, doc)
             log.warning("tireex product cards count=%s page=%s", len(raw_cards), current)
@@ -498,13 +537,7 @@ def scrape_tireex(
                 break
             if not multi_pages:
                 break
-            nxt = _next_page_url(current, doc)
-            if not nxt:
-                break
-            if not _in_same_scope(url, nxt):
-                log.info("stop pagination outside scope seed=%s next=%s", url, nxt)
-                break
-            current = nxt
+            # continue to next page number candidates
     listing_by_url = {str(x.get("product_url") or "").strip(): x for x in listing_items if (x.get("product_url") or "").strip()}
     products: List[Dict[str, Any]] = []
     for u in links[: max_items * 2]:
