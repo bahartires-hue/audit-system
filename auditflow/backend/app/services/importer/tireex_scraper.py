@@ -350,7 +350,9 @@ def _infer_brand_from_text(text: str) -> str:
 
 
 def _has_explicit_other_brand(name: str, selected_brand: str) -> bool:
-    return _is_explicit_other_brand(name, selected_brand)
+    # Keep scraper permissive to avoid false zero-results.
+    # Final strict brand enforcement happens in pipeline after parsing.
+    return False
 
 
 def _in_same_scope(seed_url: str, candidate_url: str) -> bool:
@@ -479,10 +481,6 @@ def scrape_tireex(
                     continue
                 if inferred_brand:
                     on_brand_page = bool(_infer_brand_from_text(url))
-                    if _has_explicit_other_brand(name, inferred_brand):
-                        log.info("SKIPPED_WRONG_BRAND card=%s selected=%s", name, inferred_brand)
-                        ignored_links += 1
-                        continue
                     # On brand/category page, allow neutral names to avoid zero results.
                     if not _is_brand_match(name, inferred_brand) and not on_brand_page:
                         log.info("SKIPPED_WRONG_BRAND card=%s selected=%s", name, inferred_brand)
@@ -535,9 +533,6 @@ def scrape_tireex(
                 continue
             if inferred_brand:
                 pname = p.get("name", "")
-                if _has_explicit_other_brand(pname, inferred_brand):
-                    log.info("SKIPPED_WRONG_BRAND product=%s selected=%s", pname, inferred_brand)
-                    continue
                 if not _is_brand_match(pname, inferred_brand):
                     base_name = str(base.get("name", "")).strip()
                     # if card already accepted from brand page, don't drop neutral titles here

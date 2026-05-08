@@ -67,7 +67,7 @@ def _name_contains_brand(name: str, selected_brand: str) -> bool:
 
 def _is_explicit_other_brand(name: str, selected_brand: str) -> bool:
     b = normalize_brand_name(selected_brand or "").lower()
-    guessed = _infer_brand_from_product_name(name).lower()
+    guessed = normalize_brand_name(parse_tire_name(name or "").get("brand", "")).lower()
     return bool(b and guessed and guessed != b)
 
 
