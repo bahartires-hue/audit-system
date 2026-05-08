@@ -33,6 +33,44 @@ def _extract_size_from_text(s: str) -> str:
     return _norm_size(f"{m.group(1)}/{m.group(2)}R{m.group(3)}")
 
 
+def _infer_brand_from_url(url: str) -> str:
+    path = (re.sub(r"[?#].*$", "", (url or "").strip())).strip("/")
+    if not path:
+        return ""
+    # use the last meaningful slug segment as brand hint
+    parts = [p for p in path.split("/") if p]
+    if not parts:
+        return ""
+    tail = parts[-1]
+    tail = re.sub(r"^(product-category|category|brand|brands)-?", "", tail, flags=re.IGNORECASE)
+    tail = re.sub(r"-tires?$|-tyres?$|-كفرات$|-اطارات$|-إطارات$", "", tail, flags=re.IGNORECASE)
+    tail = tail.replace("-", " ").replace("_", " ").strip()
+    if tail:
+        return normalize_brand_name(tail)
+    return ""
+
+
+def _infer_brand_from_product_name(name: str) -> str:
+    guess = normalize_brand_name((name or "").split(" ")[0] if (name or "").strip() else "")
+    if guess:
+        return guess
+    n = normalize_brand_name(name or "")
+    # if full normalized name has spaces, first token is the likely brand
+    return (n.split(" ")[0] if n else "")
+
+
+def _name_contains_brand(name: str, selected_brand: str) -> bool:
+    n = normalize_brand_name(name or "").lower()
+    b = normalize_brand_name(selected_brand or "").lower()
+    return bool(b and b in n)
+
+
+def _is_explicit_other_brand(name: str, selected_brand: str) -> bool:
+    b = normalize_brand_name(selected_brand or "").lower()
+    guessed = _infer_brand_from_product_name(name).lower()
+    return bool(b and guessed and guessed != b)
+
+
 def filter_products(products: List[Dict[str, Any]], brand: str = "", size: str = "", limit: int = 20) -> List[Dict[str, Any]]:
     b_raw = (brand or "").strip()
     b_norm = normalize_brand_name(b_raw) if b_raw else ""
@@ -66,7 +104,10 @@ def run_import_pipeline(
     limit: int = 20,
     multi_pages: bool = False,
 ) -> Dict[str, Any]:
-    raw_items = scrape_products(site_url, multi_pages=multi_pages, limit=limit, selected_brand=brand)
+    selected_brand = normalize_brand_name((brand or "").strip())
+    if not selected_brand:
+        selected_brand = _infer_brand_from_url(site_url)
+    raw_items = scrape_products(site_url, multi_pages=multi_pages, limit=limit, selected_brand=selected_brand)
     products: List[Dict[str, Any]] = []
     seen = set()
     image_dir = uploads_root / "products"
@@ -80,12 +121,12 @@ def run_import_pipeline(
         parsed = parse_tire_name(item.get("name") or "")
         prepared.append({**item, "_parsed": parsed})
 
-    scoped_items = filter_products(prepared, brand=brand, size=size, limit=limit)
+    scoped_items = filter_products(prepared, brand=selected_brand, size=size, limit=limit)
     log.info(
         "importer filter applied raw=%s scoped=%s brand=%s size=%s limit=%s multi_pages=%s",
         len(raw_items),
         len(scoped_items),
-        brand,
+        selected_brand,
         size,
         limit,
         multi_pages,
@@ -99,29 +140,27 @@ def run_import_pipeline(
         if re.search(r"ابحث|search", str(item.get("name", "")), flags=re.IGNORECASE):
             log.info("skip non-product row name=%s", item.get("name", ""))
             continue
-        if brand:
-            selected = normalize_brand_name(brand).lower().strip()
-            parsed_brand = str(parsed.get("brand", "")).lower().strip()
-            name_text = str(item.get("name", "")).lower()
-            if selected and selected not in parsed_brand and selected not in name_text:
-                log.info("SKIPPED_WRONG_BRAND selected=%s parsed=%s name=%s", selected, parsed_brand, item.get("name", ""))
-                skipped_wrong_brand_count += 1
-                continue
-        # strict Alpha mode: never allow non-Alpha products
-        alpha_mode = (
-            normalize_brand_name(brand).lower().strip() == "alpha"
-            or bool(re.search(r"alpha|ألفا|الفا", site_url, flags=re.IGNORECASE))
-        )
-        if alpha_mode:
+        if selected_brand:
+            selected = normalize_brand_name(selected_brand).lower().strip()
             parsed_brand = normalize_brand_name(str(parsed.get("brand", ""))).lower().strip()
             name_text = str(item.get("name", "")).lower()
-            name_has_alpha = ("alpha" in name_text) or ("ألفا" in name_text) or ("الفا" in name_text)
-            if not parsed_brand:
-                # On explicit Alpha mode, treat unknown brand as Alpha unless contradicted.
-                parsed["brand"] = "Alpha"
-                parsed_brand = "alpha"
-            if not (name_has_alpha or parsed_brand == "alpha"):
-                log.info("SKIPPED_WRONG_BRAND selected=alpha parsed=%s name=%s", parsed_brand, item.get("name", ""))
+            explicit_name_brand = _infer_brand_from_product_name(item.get("name", "")).lower().strip()
+            if not parsed_brand and selected:
+                parsed["brand"] = selected_brand
+                parsed_brand = selected
+            # Accept if name contains selected OR parsed brand matches.
+            accepted_by_name = _name_contains_brand(item.get("name", ""), selected_brand)
+            accepted_by_parsed = parsed_brand == selected
+            accepted_by_page = bool(selected_brand)  # selected inferred from user input or category URL
+            if not (accepted_by_name or accepted_by_parsed or accepted_by_page):
+                skipped_wrong_brand_count += 1
+                log.info("SKIPPED_WRONG_BRAND selected=%s parsed=%s name=%s", selected, parsed_brand, item.get("name", ""))
+                continue
+            # But reject explicit mismatch brands.
+            if (explicit_name_brand and explicit_name_brand != selected and not accepted_by_name) or (
+                parsed_brand and parsed_brand != selected and not accepted_by_name
+            ) or _is_explicit_other_brand(item.get("name", ""), selected_brand):
+                log.info("SKIPPED_WRONG_BRAND selected=%s parsed=%s name=%s", selected, parsed_brand, item.get("name", ""))
                 skipped_wrong_brand_count += 1
                 continue
         if parsed.get("parse_status") == "non_english_name" or re.search(r"[\u0600-\u06FF]", f"{parsed.get('brand','')} {parsed.get('model','')}"):
@@ -206,17 +245,15 @@ def run_import_pipeline(
         products.append(row)
         accepted_products_count += 1
 
-    # hard stop for wrong brands in Alpha export
-    alpha_mode = (
-        normalize_brand_name(brand).lower().strip() == "alpha"
-        or bool(re.search(r"alpha|ألفا|الفا", site_url, flags=re.IGNORECASE))
-    )
-    if alpha_mode:
+    # hard stop for wrong brands in selected-brand export
+    if selected_brand:
+        selected_norm = normalize_brand_name(selected_brand).lower().strip()
         for p in products:
             b = normalize_brand_name(str(p.get("brand", ""))).lower().strip()
-            if b != "alpha":
-                raise ValueError("Wrong brand detected in Alpha export")
+            if b != selected_norm:
+                raise ValueError(f"Wrong brand detected in {selected_brand} export")
 
+    log.info("selected_brand=%s", selected_brand)
     log.info("accepted_products_count=%s", accepted_products_count)
     log.info("skipped_wrong_brand_count=%s", skipped_wrong_brand_count)
     log.info("skipped_image_failed_count=%s", skipped_image_failed_count)

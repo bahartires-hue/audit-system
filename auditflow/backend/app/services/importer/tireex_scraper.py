@@ -310,30 +310,47 @@ def _is_brand_match(name: str, selected_brand: str) -> bool:
     return sb in candidate or sb in (name or "").lower()
 
 
+def _infer_brand_from_url(url: str) -> str:
+    path = (urlparse(url).path or "").strip("/")
+    if not path:
+        return ""
+    parts = [p for p in path.split("/") if p]
+    if not parts:
+        return ""
+    tail = parts[-1]
+    tail = re.sub(r"^(product-category|category|brand|brands)-?", "", tail, flags=re.IGNORECASE)
+    tail = re.sub(r"-tires?$|-tyres?$|-كفرات$|-اطارات$|-إطارات$", "", tail, flags=re.IGNORECASE)
+    tail = tail.replace("-", " ").replace("_", " ").strip()
+    return normalize_brand_name(tail) if tail else ""
+
+
+def _infer_brand_from_name(name: str) -> str:
+    s = (name or "").strip()
+    if not s:
+        return ""
+    first = s.split(" ")[0]
+    return normalize_brand_name(first)
+
+
+def _name_contains_brand(name: str, selected_brand: str) -> bool:
+    n = normalize_brand_name(name or "").lower()
+    b = normalize_brand_name(selected_brand or "").lower()
+    return bool(b and b in n)
+
+
+def _is_explicit_other_brand(name: str, selected_brand: str) -> bool:
+    b = normalize_brand_name(selected_brand or "").lower()
+    g = _infer_brand_from_name(name).lower()
+    return bool(b and g and g != b and not _name_contains_brand(name, selected_brand))
+
+
+def _infer_brand_from_text(text: str) -> str:
+    # keep backward compatibility for callers; generic inference now
+    return _infer_brand_from_url(text) or _infer_brand_from_name(text)
+
+
 def _has_explicit_other_brand(name: str, selected_brand: str) -> bool:
-    n = (name or "").lower()
-    s = normalize_brand_name(selected_brand or "").lower().strip()
-    known = [
-        "alpha",
-        "laufenn",
-        "michelin",
-        "bridgestone",
-        "hankook",
-        "goodyear",
-        "continental",
-        "pirelli",
-        "yokohama",
-        "kumho",
-        "dunlop",
-        "nexen",
-        "ألفا",
-        "الفا",
-        "لاوفين",
-    ]
-    for b in known:
-        if b in n and b != s:
-            return True
-    return False
+    return _is_explicit_other_brand(name, selected_brand)
 
 
 def _in_same_scope(seed_url: str, candidate_url: str) -> bool:
@@ -425,11 +442,7 @@ def scrape_tireex(
     seen_card_keys: Set[str] = set()
     inferred_brand = selected_brand
     if not inferred_brand:
-        p = (urlparse(url).path or "").lower()
-        if "alpha" in p or "ألفا" in p:
-            inferred_brand = "Alpha"
-        elif "laufenn" in p or "لاوفين" in p:
-            inferred_brand = "Laufenn"
+        inferred_brand = _infer_brand_from_url(url)
     if _is_product_url(url):
         links = [url]
     else:
@@ -465,7 +478,7 @@ def scrape_tireex(
                     ignored_links += 1
                     continue
                 if inferred_brand:
-                    on_brand_page = bool(re.search(r"alpha|ألفا|الفا|laufenn|لاوفين", url, flags=re.IGNORECASE))
+                    on_brand_page = bool(_infer_brand_from_text(url))
                     if _has_explicit_other_brand(name, inferred_brand):
                         log.info("SKIPPED_WRONG_BRAND card=%s selected=%s", name, inferred_brand)
                         ignored_links += 1

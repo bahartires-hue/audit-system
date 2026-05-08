@@ -12,6 +12,7 @@ _SPEED_ONLY_RE = re.compile(r"\b([HVWYS])\b", re.IGNORECASE)
 _RF_RE = re.compile(r"\b(RF|RUNFLAT|RUN FLAT)\b", re.IGNORECASE)
 _PR_RE = re.compile(r"\b(\d{1,2}\s*PR)\b", re.IGNORECASE)
 _AR_RE = re.compile(r"[\u0600-\u06FF]")
+_GENERIC_BRAND_WORDS_RE = re.compile(r"\b(كفرات|إطارات|اطارات|Tires?|Tyres?)\b", re.IGNORECASE)
 
 BRAND_TRANSLATIONS = {
     "ميشلان": "Michelin",
@@ -22,6 +23,7 @@ BRAND_TRANSLATIONS = {
     "بيريللي": "Pirelli",
     "يوكوهاما": "Yokohama",
     "كمهو": "Kumho",
+    "كومهو": "Kumho",
     "دنلوب": "Dunlop",
     "نيكسن": "Nexen",
     "نكسان": "Nexen",
@@ -50,9 +52,16 @@ def normalize_brand_name(raw: str) -> str:
     s = re.sub(r"\s+", " ", (raw or "").strip())
     if not s:
         return ""
+    s = _GENERIC_BRAND_WORDS_RE.sub(" ", s)
+    s = re.sub(r"\s+", " ", s).strip(" -_/")
+    if not s:
+        return ""
     for ar, en in BRAND_TRANSLATIONS.items():
         if ar in s:
             s = s.replace(ar, en)
+    s = re.sub(r"\s+", " ", s).strip()
+    if not s:
+        return ""
     return s.title()
 
 
