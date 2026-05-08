@@ -3,13 +3,19 @@ from __future__ import annotations
 import logging
 import re
 import time
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Tuple
 from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
 
 log = logging.getLogger("importer.tireex")
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "ar,en-US;q=0.9,en;q=0.8",
+}
 
 BAD_LINK_PARTS = [
     "/cdn-cgi/",
@@ -24,18 +30,7 @@ BAD_LINK_PARTS = [
     "#",
 ]
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-    "Accept-Language": "ar,en-US;q=0.9,en;q=0.8",
-}
-
 _SIZE_RE = re.compile(r"(\d{3})\s*/\s*(\d{2,3})\s*Z?R\s*(\d{2})", re.IGNORECASE)
-_SIZE_URL_RE = re.compile(r"(\d{3})[-_/](\d{2,3})[-_]?r(\d{2})", re.IGNORECASE)
-_NAME_RE = re.compile(
-    r"([A-Za-z\u0600-\u06FF][A-Za-z0-9\u0600-\u06FF\s\-]{1,60}?\s+\d{3}\s*/\s*\d{2,3}\s*R?\s*\d{2}(?:\s+\d{2,3}(?:/\d{2,3})?[A-Z])?)",
-    re.IGNORECASE,
-)
 _BAD_NAME_WORDS = ["وقود", "راحة", "إضافة", "السلة", "للإطار", "الضمان", "النقشة"]
 
 
@@ -45,14 +40,6 @@ def _clean(s: str) -> str:
 
 def _extract_size_token(text: str) -> str:
     m = _SIZE_RE.search(text or "")
-    if not m:
-        return ""
-    return f"{m.group(1)}/{m.group(2)}R{m.group(3)}"
-
-
-def _extract_size_from_url(url: str) -> str:
-    slug = (urlparse(url).path or "").strip("/").lower()
-    m = _SIZE_URL_RE.search(slug)
     if not m:
         return ""
     return f"{m.group(1)}/{m.group(2)}R{m.group(3)}"
@@ -86,7 +73,7 @@ def get_html(url: str) -> Tuple[str, str, int]:
 
 def extract_tireex_product_links(html: str, page_url: str) -> List[str]:
     soup = BeautifulSoup(html, "html.parser")
-    links: Set[str] = set()
+    links = set()
     for a in soup.select("a[href]"):
         href = (a.get("href") or "").strip()
         if not href:
@@ -103,133 +90,6 @@ def extract_tireex_product_links(html: str, page_url: str) -> List[str]:
             continue
         links.add(full)
     return sorted(links)
-
-
-def scrape_tireex_product(product_url: str) -> Dict[str, Any]:
-    html, final_url, status = get_html(product_url)
-    if status >= 400:
-        return {}
-    soup = BeautifulSoup(html, "html.parser")
-
-    name = ""
-    h1 = soup.select_one("h1")
-    if h1:
-        name = _clean(h1.get_text(" ", strip=True))
-    if not name:
-        og_title = soup.select_one('meta[property="og:title"]')
-        if og_title:
-            name = _clean(og_title.get("content", ""))
-    if not name:
-        t = soup.select_one("title")
-        if t:
-            name = _clean(t.get_text(" ", strip=True))
-
-    price = ""
-    price_el = soup.select_one(".price .amount, .amount, .price")
-    if price_el:
-        price = clean_price(price_el.get_text(" ", strip=True))
-    if not price:
-        meta_price = soup.select_one('meta[property="product:price:amount"]')
-        if meta_price:
-            price = clean_price(meta_price.get("content", ""))
-
-    image = ""
-    og_img = soup.select_one('meta[property="og:image"]')
-    if og_img:
-        image = _clean(og_img.get("content", ""))
-    if not image:
-        img = soup.select_one("img.wp-post-image, .woocommerce-product-gallery img, img")
-        if img:
-            image = _clean((img.get("src") or img.get("data-src") or ""))
-    if image:
-        image = urljoin(final_url, image)
-
-    desc = ""
-    desc_el = soup.select_one(".woocommerce-product-details__short-description")
-    if desc_el:
-        desc = _clean(desc_el.get_text(" ", strip=True))
-    if not desc:
-        meta_desc = soup.select_one('meta[name="description"]')
-        if meta_desc:
-            desc = _clean(meta_desc.get("content", ""))
-
-    if not name:
-        return {}
-
-    return {
-        "name": name,
-        "price": price,
-        "old_price": "",
-        "product_url": final_url,
-        "image_url": image,
-        "year": "",
-        "country": "",
-        "warranty": "",
-        "pattern": "",
-        "description": desc,
-        "_size_token": _extract_size_token(name) or _extract_size_from_url(final_url),
-    }
-
-
-def _extract_products_from_listing_text(text: str, selected_brand: str, page_url: str) -> List[Dict[str, Any]]:
-    full = _clean(text or "")
-    products: List[Dict[str, Any]] = []
-    seen = set()
-    matches = list(_NAME_RE.finditer(full))
-    for idx, m_name in enumerate(matches):
-        name = _clean(m_name.group(1))
-        if selected_brand:
-            sb = (selected_brand or "").strip().lower()
-            if sb and sb not in name.lower():
-                continue
-        start = m_name.end()
-        end = matches[idx + 1].start() if (idx + 1) < len(matches) else min(len(full), start + 500)
-        c = full[start:end]
-        # price line around "للإطار الواحد"
-        m_price_line = re.search(r"(\d[\d,\.]*)\s+(\d[\d,\.]*)\s+للإطار\s+الواحد", c)
-        price = ""
-        old_price = ""
-        if m_price_line:
-            price = clean_price(m_price_line.group(1))
-            old_price = clean_price(m_price_line.group(2))
-        else:
-            nums = re.findall(r"\b\d[\d,\.]*\b", c)
-            if nums:
-                price = clean_price(nums[0])
-                old_price = clean_price(nums[1]) if len(nums) > 1 else ""
-        year = ""
-        m_year = re.search(r"سنة\s*الصنع\s*[:：]?\s*(20\d{2})", c, flags=re.IGNORECASE)
-        if m_year:
-            year = m_year.group(1)
-        warranty = ""
-        m_w = re.search(r"الضمان\s*[:：]?\s*([^\n\r|]+)", c, flags=re.IGNORECASE)
-        if m_w:
-            warranty = _clean(m_w.group(1))
-        pattern = ""
-        m_p = re.search(r"النقشة\s*[:：]?\s*([^\n\r|]+)", c, flags=re.IGNORECASE)
-        if m_p:
-            pattern = _clean(m_p.group(1))
-        size_token = _extract_size_token(name)
-        key = (name.lower(), size_token, price)
-        if key in seen:
-            continue
-        seen.add(key)
-        products.append(
-            {
-                "name": name,
-                "price": price,
-                "old_price": old_price,
-                "product_url": page_url,
-                "image_url": "",
-                "year": year,
-                "country": "",
-                "warranty": warranty,
-                "pattern": pattern,
-                "description": "",
-                "_size_token": size_token,
-            }
-        )
-    return products
 
 
 def is_real_product_name(name: str, selected_brand: str = "") -> bool:
@@ -270,46 +130,43 @@ def _extract_products_from_cards(html: str, page_url: str, selected_brand: str) 
     products: List[Dict[str, Any]] = []
     seen = set()
     for card in cards:
-        card_text = _clean(card.get_text(" ", strip=True))
-        if not card_text:
-            continue
-        name = ""
         name_el = card.select_one("h2, h3, a.product-card-content-title, .woocommerce-loop-product__title, a")
-        if name_el:
-            name = _clean(name_el.get_text(" ", strip=True))
-        if not name:
-            m_name = _NAME_RE.search(card_text)
-            if not m_name:
-                continue
-            name = _clean(m_name.group(1))
-        if selected_brand:
-            sb = (selected_brand or "").strip().lower()
-            if sb and sb not in name.lower():
-                continue
+        if not name_el:
+            continue
+        name = _clean(name_el.get_text(" ", strip=True))
+        if not is_real_product_name(name, selected_brand):
+            continue
+
         a = card.select_one("a[href]")
-        product_url = ""
+        product_url = page_url
         if a and a.get("href"):
             full = urljoin(page_url, a.get("href"))
             low = full.lower()
             if "/product/" in low and not any(x in low for x in BAD_LINK_PARTS):
                 product_url = full.split("?")[0].rstrip("/") + "/"
-        img = card.select_one("img")
-        image_url = ""
-        if img:
-            image_url = (img.get("data-src") or img.get("src") or "").strip()
-            if image_url:
-                image_url = urljoin(page_url, image_url)
-        m_price_line = re.search(r"(\d[\d,\.]*)\s+(\d[\d,\.]*)\s+للإطار\s+الواحد", card_text)
+
         price = ""
         old_price = ""
-        if m_price_line:
-            price = clean_price(m_price_line.group(1))
-            old_price = clean_price(m_price_line.group(2))
-        else:
-            nums = re.findall(r"\b\d[\d,\.]*\b", card_text)
+        price_el = card.select_one(".price, .amount")
+        if price_el:
+            nums = re.findall(r"\b\d[\d,\.]*\b", price_el.get_text(" ", strip=True))
             if nums:
                 price = clean_price(nums[0])
                 old_price = clean_price(nums[1]) if len(nums) > 1 else ""
+        if not price:
+            nums = re.findall(r"\b\d[\d,\.]*\b", card.get_text(" ", strip=True))
+            if nums:
+                price = clean_price(nums[0])
+                old_price = clean_price(nums[1]) if len(nums) > 1 else ""
+
+        image_url = ""
+        img = card.select_one("img")
+        if img:
+            image_url = _clean((img.get("data-src") or img.get("src") or ""))
+            if image_url:
+                image_url = urljoin(page_url, image_url)
+
+        card_text = _clean(card.get_text(" ", strip=True))
         year = ""
         m_year = re.search(r"سنة\s*الصنع\s*[:：]?\s*(20\d{2})", card_text, flags=re.IGNORECASE)
         if m_year:
@@ -322,17 +179,19 @@ def _extract_products_from_cards(html: str, page_url: str, selected_brand: str) 
         m_p = re.search(r"النقشة\s*[:：]?\s*([^\n\r|]+)", card_text, flags=re.IGNORECASE)
         if m_p:
             pattern = _clean(m_p.group(1))
-        size_token = _extract_size_token(name) or _extract_size_from_url(product_url)
-        key = ((product_url or name).lower(), size_token, price)
+
+        size_token = _extract_size_token(name)
+        key = ((product_url or name).lower(), size_token, clean_price(price))
         if key in seen:
             continue
         seen.add(key)
+
         products.append(
             {
                 "name": name,
-                "price": price,
-                "old_price": old_price,
-                "product_url": product_url or page_url,
+                "price": clean_price(price),
+                "old_price": clean_price(old_price),
+                "product_url": product_url,
                 "image_url": image_url,
                 "year": year,
                 "country": "",
@@ -378,9 +237,9 @@ def scrape_tireex(
         links = extract_tireex_product_links(html, final_url)
         log.warning("TIREEX PRODUCT LINKS COUNT = %s", len(links))
         log.warning("TIREEX FIRST LINKS = %s", links[:5])
-        page_products_cards = _extract_products_from_cards(html, final_url, selected_brand)
-        log.warning("TIREEX PAGE PRODUCTS FROM CARDS = %s", len(page_products_cards))
-        page_products = page_products_cards
+
+        page_products = _extract_products_from_cards(html, final_url, selected_brand)
+        log.warning("TIREEX PAGE PRODUCTS FROM CARDS = %s", len(page_products))
         if not page_products and page > 1:
             break
         products.extend(page_products)
@@ -391,6 +250,7 @@ def scrape_tireex(
     products = dedupe_products(products, selected_brand)
     log.warning("PRODUCTS AFTER CLEAN = %s", len(products))
     log.warning("FINAL EXPORT COUNT = %s", len(products))
+
     elapsed = time.perf_counter() - started_at
     log.info("tireex scrape done total_seconds=%.2f", elapsed)
     return products[:max_items]
