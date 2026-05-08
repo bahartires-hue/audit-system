@@ -295,6 +295,32 @@ def _is_brand_match(name: str, selected_brand: str) -> bool:
     return sb in candidate or sb in (name or "").lower()
 
 
+def _has_explicit_other_brand(name: str, selected_brand: str) -> bool:
+    n = (name or "").lower()
+    s = normalize_brand_name(selected_brand or "").lower().strip()
+    known = [
+        "alpha",
+        "laufenn",
+        "michelin",
+        "bridgestone",
+        "hankook",
+        "goodyear",
+        "continental",
+        "pirelli",
+        "yokohama",
+        "kumho",
+        "dunlop",
+        "nexen",
+        "ألفا",
+        "الفا",
+        "لاوفين",
+    ]
+    for b in known:
+        if b in n and b != s:
+            return True
+    return False
+
+
 def _in_same_scope(seed_url: str, candidate_url: str) -> bool:
     seed = urlparse(seed_url)
     cand = urlparse(candidate_url)
@@ -423,10 +449,17 @@ def scrape_tireex(
                 if not c.get("_size_token"):
                     ignored_links += 1
                     continue
-                if inferred_brand and not _is_brand_match(name, inferred_brand):
-                    log.info("SKIPPED_WRONG_BRAND card=%s selected=%s", name, inferred_brand)
-                    ignored_links += 1
-                    continue
+                if inferred_brand:
+                    on_brand_page = bool(re.search(r"alpha|ألفا|الفا|laufenn|لاوفين", url, flags=re.IGNORECASE))
+                    if _has_explicit_other_brand(name, inferred_brand):
+                        log.info("SKIPPED_WRONG_BRAND card=%s selected=%s", name, inferred_brand)
+                        ignored_links += 1
+                        continue
+                    # On brand/category page, allow neutral names to avoid zero results.
+                    if not _is_brand_match(name, inferred_brand) and not on_brand_page:
+                        log.info("SKIPPED_WRONG_BRAND card=%s selected=%s", name, inferred_brand)
+                        ignored_links += 1
+                        continue
                 dedup_key = f"{normalize_brand_name(inferred_brand or '').lower()}::{c.get('_size_token','')}::{name.lower()}"
                 if dedup_key in seen_card_keys:
                     ignored_links += 1
@@ -472,9 +505,17 @@ def scrape_tireex(
             if not p.get("name"):
                 log.info("tireex skip product reason=no_name url=%s", u)
                 continue
-            if inferred_brand and not _is_brand_match(p.get("name", ""), inferred_brand):
-                log.info("SKIPPED_WRONG_BRAND product=%s selected=%s", p.get("name", ""), inferred_brand)
-                continue
+            if inferred_brand:
+                pname = p.get("name", "")
+                if _has_explicit_other_brand(pname, inferred_brand):
+                    log.info("SKIPPED_WRONG_BRAND product=%s selected=%s", pname, inferred_brand)
+                    continue
+                if not _is_brand_match(pname, inferred_brand):
+                    base_name = str(base.get("name", "")).strip()
+                    # if card already accepted from brand page, don't drop neutral titles here
+                    if not base_name:
+                        log.info("SKIPPED_WRONG_BRAND product=%s selected=%s", pname, inferred_brand)
+                        continue
             if not p.get("_size_token"):
                 log.info("tireex skip product reason=no_size name=%s url=%s", p.get("name", ""), u)
                 continue

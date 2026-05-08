@@ -116,6 +116,10 @@ def run_import_pipeline(
             parsed_brand = normalize_brand_name(str(parsed.get("brand", ""))).lower().strip()
             name_text = str(item.get("name", "")).lower()
             name_has_alpha = ("alpha" in name_text) or ("ألفا" in name_text) or ("الفا" in name_text)
+            if not parsed_brand:
+                # On explicit Alpha mode, treat unknown brand as Alpha unless contradicted.
+                parsed["brand"] = "Alpha"
+                parsed_brand = "alpha"
             if not (name_has_alpha or parsed_brand == "alpha"):
                 log.info("SKIPPED_WRONG_BRAND selected=alpha parsed=%s name=%s", parsed_brand, item.get("name", ""))
                 skipped_wrong_brand_count += 1
