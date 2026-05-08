@@ -8,7 +8,7 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
-from fastapi import APIRouter, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -416,7 +416,42 @@ def build_salla_xlsx(products: list[dict], output_path: Path):
 
 
 @router.post("/scrape")
-def scrape_importer(url: str = Form(...), brand: str = Form(""), category: str = Form("إطارات"), max_pages: int = Form(1)):
+async def scrape_importer(
+    request: Request,
+    url: str = Form(""),
+    brand: str = Form(""),
+    category: str = Form("إطارات"),
+    max_pages: int = Form(1),
+):
+    # Backward compatible input: support both JSON and Form payloads.
+    if not url:
+        ct = (request.headers.get("content-type") or "").lower()
+        if "application/json" in ct:
+            body = await request.json()
+            url = str(body.get("url") or body.get("site_url") or "").strip()
+            brand = str(body.get("brand") or "").strip()
+            category = str(body.get("category") or "إطارات").strip()
+            raw_pages = body.get("max_pages")
+            if raw_pages in (None, ""):
+                # old UI sends multi_pages boolean + limit
+                raw_pages = 5 if bool(body.get("multi_pages")) else 1
+            try:
+                max_pages = int(raw_pages or 1)
+            except Exception:
+                max_pages = 1
+        else:
+            form = await request.form()
+            url = str(form.get("url") or form.get("site_url") or "").strip()
+            brand = str(form.get("brand") or brand or "").strip()
+            category = str(form.get("category") or category or "إطارات").strip()
+            raw_pages = form.get("max_pages")
+            if raw_pages in (None, ""):
+                raw_pages = 5 if str(form.get("multi_pages", "")).lower() in {"1", "true", "yes", "on"} else 1
+            try:
+                max_pages = int(raw_pages or 1)
+            except Exception:
+                max_pages = 1
+
     if not url.startswith("http"):
         raise HTTPException(status_code=400, detail="الرابط غير صحيح.")
     max_pages = max(1, min(int(max_pages), 10))
