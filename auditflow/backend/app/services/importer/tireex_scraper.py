@@ -32,6 +32,10 @@ HEADERS = {
 
 _SIZE_RE = re.compile(r"(\d{3})\s*/\s*(\d{2,3})\s*Z?R\s*(\d{2})", re.IGNORECASE)
 _SIZE_URL_RE = re.compile(r"(\d{3})[-_/](\d{2,3})[-_]?r(\d{2})", re.IGNORECASE)
+_NAME_RE = re.compile(
+    r"([A-Za-z\u0600-\u06FF][A-Za-z0-9\u0600-\u06FF\s\-]{1,60}?\s+\d{3}\s*/\s*\d{2,3}\s*R?\s*\d{2}(?:\s+\d{2,3}(?:/\d{2,3})?[A-Z])?)",
+    re.IGNORECASE,
+)
 
 
 def _clean(s: str) -> str:
@@ -166,6 +170,66 @@ def scrape_tireex_product(product_url: str) -> Dict[str, Any]:
     }
 
 
+def _extract_products_from_listing_text(text: str, selected_brand: str, page_url: str) -> List[Dict[str, Any]]:
+    chunks = [c.strip() for c in re.split(r"\n{2,}", text) if c.strip()]
+    products: List[Dict[str, Any]] = []
+    seen = set()
+    for c in chunks:
+        m_name = _NAME_RE.search(c)
+        if not m_name:
+            continue
+        name = _clean(m_name.group(1))
+        if selected_brand:
+            sb = (selected_brand or "").strip().lower()
+            if sb and sb not in name.lower():
+                continue
+        # price line around "للإطار الواحد"
+        m_price_line = re.search(r"(\d[\d,\.]*)\s+(\d[\d,\.]*)\s+للإطار\s+الواحد", c)
+        price = ""
+        old_price = ""
+        if m_price_line:
+            price = clean_price(m_price_line.group(1))
+            old_price = clean_price(m_price_line.group(2))
+        else:
+            nums = re.findall(r"\b\d[\d,\.]*\b", c)
+            if nums:
+                price = clean_price(nums[0])
+                old_price = clean_price(nums[1]) if len(nums) > 1 else ""
+        year = ""
+        m_year = re.search(r"سنة\s*الصنع\s*[:：]?\s*(20\d{2})", c, flags=re.IGNORECASE)
+        if m_year:
+            year = m_year.group(1)
+        warranty = ""
+        m_w = re.search(r"الضمان\s*[:：]?\s*([^\n\r|]+)", c, flags=re.IGNORECASE)
+        if m_w:
+            warranty = _clean(m_w.group(1))
+        pattern = ""
+        m_p = re.search(r"النقشة\s*[:：]?\s*([^\n\r|]+)", c, flags=re.IGNORECASE)
+        if m_p:
+            pattern = _clean(m_p.group(1))
+        size_token = _extract_size_token(name)
+        key = (name.lower(), size_token, price)
+        if key in seen:
+            continue
+        seen.add(key)
+        products.append(
+            {
+                "name": name,
+                "price": price,
+                "old_price": old_price,
+                "product_url": page_url,
+                "image_url": "",
+                "year": year,
+                "country": "",
+                "warranty": warranty,
+                "pattern": pattern,
+                "description": "",
+                "_size_token": size_token,
+            }
+        )
+    return products
+
+
 def scrape_tireex(
     url: str,
     *,
@@ -179,7 +243,7 @@ def scrape_tireex(
     max_items = max(1, int(limit or 20))
     pages_to_scan = max(1, int(max_pages or 5)) if multi_pages else 1
 
-    all_links: List[str] = []
+    products: List[Dict[str, Any]] = []
     for page in range(1, pages_to_scan + 1):
         page_url = f"{base}/" if page == 1 else f"{base}/page/{page}/"
         try:
@@ -200,32 +264,14 @@ def scrape_tireex(
         log.warning("TIREEX PRODUCT LINKS COUNT = %s", len(links))
         log.warning("TIREEX FIRST LINKS = %s", links[:5])
 
-        if not links and page > 1:
+        text_blob = BeautifulSoup(html, "html.parser").get_text("\n", strip=True)
+        page_products = _extract_products_from_listing_text(text_blob, selected_brand, final_url)
+        log.warning("TIREEX PAGE PRODUCTS FROM TEXT = %s", len(page_products))
+        if not page_products and page > 1:
             break
-        all_links.extend(links)
-        if len(set(all_links)) >= max_items * 3:
-            break
-
-    unique_links = sorted(set(all_links))
-    log.warning("TIREEX TOTAL UNIQUE PRODUCT LINKS = %s", len(unique_links))
-
-    products: List[Dict[str, Any]] = []
-    for link in unique_links:
+        products.extend(page_products)
         if len(products) >= max_items:
             break
-        try:
-            item = scrape_tireex_product(link)
-            if not item:
-                continue
-            if selected_brand:
-                b = (selected_brand or "").strip().lower()
-                n = (item.get("name") or "").lower()
-                if b and b not in n:
-                    continue
-            products.append(item)
-            time.sleep(0.2)
-        except Exception as e:
-            log.warning("TIREEX PRODUCT FETCH ERROR = %s err=%s", link, e)
 
     log.warning("TIREEX FINAL PRODUCTS COUNT = %s", len(products))
     elapsed = time.perf_counter() - started_at
