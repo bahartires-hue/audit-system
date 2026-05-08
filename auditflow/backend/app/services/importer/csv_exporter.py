@@ -5,7 +5,11 @@ from typing import Any, Dict, List
 
 import pandas as pd
 from openpyxl import load_workbook
+from openpyxl import Workbook
 from copy import copy
+import logging
+
+log = logging.getLogger("importer.csv_exporter")
 
 _FALLBACK_TEMPLATE_COLUMNS = [
     "النوع ",
@@ -74,17 +78,24 @@ def _resolve_template_path(base_dir: Path) -> Path:
 
 
 def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path | None, output_path: Path) -> Path:
-    if not template_path:
-        raise ValueError("تعذر العثور على ملف قالب سلة الأصلي. يرجى وضعه داخل importer/templates")
-
-    wb = load_workbook(template_path)
-    ws = wb.active
-    header_map: Dict[str, int] = {}
-    for col in range(1, ws.max_column + 1):
-        name = ws.cell(row=1, column=col).value
-        key = str(name).strip() if name is not None else ""
-        if key:
-            header_map[key] = col
+    if template_path:
+        wb = load_workbook(template_path)
+        ws = wb.active
+        header_map: Dict[str, int] = {}
+        for col in range(1, ws.max_column + 1):
+            name = ws.cell(row=1, column=col).value
+            key = str(name).strip() if name is not None else ""
+            if key:
+                header_map[key] = col
+    else:
+        # graceful fallback: never fail export if template is missing
+        log.warning("Salla template not found; using fallback header-only workbook")
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Products"
+        for i, name in enumerate(_FALLBACK_TEMPLATE_COLUMNS, start=1):
+            ws.cell(row=1, column=i).value = name
+        header_map = {name: idx for idx, name in enumerate(_FALLBACK_TEMPLATE_COLUMNS, start=1)}
 
     rows: List[Dict[str, Any]] = []
     for p in products:
@@ -136,7 +147,7 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
         )
 
     start_row = 2
-    # Preserve template styling for newly added rows by cloning row 2 styles.
+    # Preserve template styling for newly added rows when available.
     template_style_row = 2 if ws.max_row >= 2 else 1
     base_height = ws.row_dimensions[template_style_row].height
     base_styles = {c: copy(ws.cell(row=template_style_row, column=c)._style) for c in range(1, ws.max_column + 1)}
