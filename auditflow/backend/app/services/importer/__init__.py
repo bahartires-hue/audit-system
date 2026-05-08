@@ -247,13 +247,23 @@ def run_import_pipeline(
         products.append(row)
         accepted_products_count += 1
 
-    # hard stop for wrong brands in selected-brand export
+    # enforce selected brand without hard-failing whole export
     if selected_brand:
         selected_norm = normalize_brand_name(selected_brand).lower().strip()
+        filtered_products: List[Dict[str, Any]] = []
         for p in products:
             b = normalize_brand_name(str(p.get("brand", ""))).lower().strip()
-            if b != selected_norm:
-                raise ValueError(f"Wrong brand detected in {selected_brand} export")
+            name_has_selected = selected_norm in normalize_brand_name(str(p.get("name", ""))).lower()
+            if not b and selected_norm:
+                p["brand"] = normalize_brand_name(selected_brand)
+                b = selected_norm
+            if b != selected_norm and not name_has_selected:
+                skipped_wrong_brand_count += 1
+                log.info("SKIPPED_WRONG_BRAND selected=%s parsed=%s name=%s", selected_norm, b, p.get("name", ""))
+                continue
+            p["brand"] = normalize_brand_name(selected_brand)
+            filtered_products.append(p)
+        products = filtered_products
 
     log.info("selected_brand=%s", selected_brand)
     log.info("accepted_products_count=%s", accepted_products_count)
