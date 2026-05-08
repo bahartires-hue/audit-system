@@ -14,6 +14,7 @@ log = logging.getLogger("importer.tireex")
 
 _UA = {"User-Agent": "Mozilla/5.0"}
 _SIZE_RE = re.compile(r"(\d{3})\s*/\s*(\d{2})\s*(?:ZR|R)?\s*(\d{2})", re.IGNORECASE)
+_SIZE_URL_RE = re.compile(r"(\d{3})[-_/](\d{2,3})[-_]?r(\d{2})", re.IGNORECASE)
 _GENERIC_TITLE_RE = re.compile(r"(تصنيف|عروض|منتجات|product category|category)", re.IGNORECASE)
 
 
@@ -136,6 +137,14 @@ def _extract_size_token(text: str) -> str:
     return f"{m.group(1)}/{m.group(2)}R{m.group(3)}"
 
 
+def _extract_size_from_url(url: str) -> str:
+    slug = (urlparse(url).path or "").strip("/").lower()
+    m = _SIZE_URL_RE.search(slug)
+    if not m:
+        return ""
+    return f"{m.group(1)}/{m.group(2)}R{m.group(3)}"
+
+
 def _extract_product_links(base_url: str, soup: BeautifulSoup) -> List[str]:
     out: List[str] = []
     seen: Set[str] = set()
@@ -206,11 +215,16 @@ def _next_page_url(base_url: str, soup: BeautifulSoup) -> str:
 def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     seen: Set[str] = set()
-    main_scope = soup.select_one("main") or soup
+    main_scope = soup.select_one("main .woocommerce") or soup.select_one("main") or soup.select_one(".woocommerce") or soup
     cards = main_scope.select(
         "ul.products li.product, .products .product, .woocommerce ul.products li.product"
     )
+    if not cards:
+        # theme fallback still inside main/woocommerce scope only
+        cards = main_scope.select(".products .product-card, .product-card, a.product-card-content-title")
     log.info("tireex detected listing cards=%s url=%s", len(cards), base_url)
+    if not cards:
+        log.warning("tireex detected listing cards=0 url=%s", base_url)
     for card in cards:
         if card.name == "a" and "product-card-content-title" in ((card.get("class") or [])):
             a = card
@@ -268,6 +282,7 @@ def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str,
             if not raw:
                 raw = img.get("data-src") or img.get("data-lazy-src") or img.get("src") or ""
             image_url = urljoin(base_url, raw) if raw else ""
+        size_token = _extract_size_token(name) or _extract_size_from_url(product_url)
         out.append(
             {
                 "name": name,
@@ -280,7 +295,7 @@ def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str,
                 "warranty": "",
                 "pattern": _pick_text(card_root, [".product-card-pattern"]),
                 "description": "",
-                "_size_token": _extract_size_token(name),
+                "_size_token": size_token,
             }
         )
     log.info("tireex listing products after size filter=%s url=%s", len(out), base_url)
@@ -430,7 +445,7 @@ def scrape_tireex(
                 log.warning("skip listing page %s: %s", current, e)
                 break
             raw_cards = _extract_list_products(current, doc)
-            log.info("tireex product cards count=%s page=%s", len(raw_cards), current)
+            log.warning("tireex product cards count=%s page=%s", len(raw_cards), current)
             for c in raw_cards:
                 if len(listing_items) >= max_items:
                     break
