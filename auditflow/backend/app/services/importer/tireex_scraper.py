@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import re
-from pathlib import Path
 from typing import Any, Dict, List, Set
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
@@ -389,20 +388,22 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
         name = _pick_attr(doc, ["meta[property='og:title']", "meta[name='twitter:title']"], "content")
     size_token = _extract_size_token(name)
     if not size_token:
+        # لا نستخدم نص الوصف أو body أو og:description لاستخراج المقاس — مناطق المنتج المنظمة فقط.
         size_token = _extract_size_token(
             " ".join(
                 x
                 for x in [
-                    _pick_text(doc, [".product_meta", ".summary", ".woocommerce-product-details__short-description"]),
+                    name,
+                    _pick_text(doc, [".product_meta", ".summary"]),
                     _pick_text(doc, ["table.variations", ".woocommerce-product-attributes", ".shop_attributes"]),
-                    _pick_text(doc, [".entry-content", ".product-description"]),
-                    _pick_attr(doc, ["meta[property='og:description']"], "content"),
                 ]
                 if x
             )
         )
     if not size_token:
-        size_token = _extract_size_token(doc.get_text(" ", strip=True))
+        summary_el = doc.select_one(".summary")
+        if summary_el:
+            size_token = _extract_size_token(_clean(summary_el.get_text(" ", strip=True)))
     page_text = _clean(doc.get_text(" ", strip=True))
     price_node = doc.select_one(".summary .price, .product .price, .woocommerce-variation-price .price, .price")
     price, old_price = _extract_price_pair(price_node)
@@ -425,7 +426,6 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
     warranty = _pick_text(doc, [".warranty", "[class*='warranty']"]) or _find_detail(page_text, ["الضمان", "Warranty"])
     country = _pick_text(doc, [".country", "[class*='origin']", ".origin"]) or _find_detail(page_text, ["بلد المنشأ", "الصنع", "Origin", "Country"])
     pattern = _pick_text(doc, [".pattern", "[class*='pattern']"]) or _find_detail(page_text, ["النقشة", "Pattern", "Tread"])
-    desc = _pick_text(doc, [".product-description", ".woocommerce-product-details__short-description", ".entry-content"])
     return {
         "name": name,
         "price": price,
@@ -436,7 +436,7 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
         "country": country,
         "warranty": warranty,
         "pattern": pattern,
-        "description": desc,
+        "description": "",
         "_size_token": size_token,
     }
 
@@ -531,14 +531,12 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 10, l
         return products if int(limit or 0) <= 0 else products[:max_items]
     # fallback إذا فشل parsing صفحات المنتج: نعيد منتجات الكروت من صفحة الماركة/البحث.
     if not listing_items:
+        log.warning("tireex no products found on listing; trying link extraction fallback")
         try:
-            doc = _fetch(url)
-            html = doc.prettify()[:5000]
-            Path("debug_tireex.html").write_text(html, encoding="utf-8")
-            log.warning("tireex no products found; wrote debug_tireex.html")
+            links = _extract_product_links(url, _fetch(url))
         except Exception as e:
-            log.warning("tireex debug html write failed: %s", e)
-        links = _extract_product_links(url, _fetch(url))
+            log.warning("tireex fallback link extraction failed: %s", e)
+            links = []
         for u in links[: max_items * 4]:
             if len(listing_items) >= max_items:
                 break

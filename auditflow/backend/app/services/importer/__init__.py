@@ -10,7 +10,11 @@ from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import unquote, urlparse
 
 from .ai_seo_engine import apply_bundle_to_row, generate_seo_bundle
-from .clean_seo_description import clean_text, generate_clean_seo_description, validate_description
+from .clean_seo_description import (
+    generate_clean_seo_description,
+    normalize_pattern_display,
+    validate_description,
+)
 from .cloudinary_uploader import upload_to_cloudinary
 from .csv_exporter import export_products_files
 from .image_downloader import download_image
@@ -404,7 +408,7 @@ def run_import_pipeline(
             "brand": str(row.get("brand", "") or parsed.get("brand", "") or ""),
             "size": str(row.get("size", "") or parsed.get("size", "") or ""),
             "load_speed": str(row.get("load_speed", "") or parsed.get("load_speed", "") or ""),
-            "pattern": str(row.get("pattern", "") or item.get("pattern", "") or ""),
+            "pattern": normalize_pattern_display(str(row.get("pattern", "") or item.get("pattern", "") or "")),
             "country": str(row.get("country", "") or item.get("country", "") or ""),
             "year": str(row.get("year", "") or item.get("year", "") or ""),
             "warranty": str(row.get("warranty", "") or item.get("warranty", "") or ""),
@@ -413,7 +417,8 @@ def run_import_pipeline(
         ai_long_desc = ""
         if _openai_client is not None:
             ai_prompt = f"""
-اكتب وصفًا تسويقيًا قصيرًا واحترافيًا لمنتج كفر سيارات بالمواصفات التالية:
+اكتب وصفًا تسويقيًا قصيرًا واحترافيًا لمنتج كفر سيارات بالمواصفات التالية.
+المصدر الوحيد للحقائق هو الحقول أدناه فقط — لا تنسخ أي نص من صفحات الويب أو وصف متجر أو body أو تعليقات عملاء.
 
 - الماركة: {clean_for_desc["brand"]}
 - المقاس: {clean_for_desc["size"]}
@@ -448,29 +453,10 @@ def run_import_pipeline(
                 )
                 raw_msg = ai_resp.choices[0].message.content
                 ai_long_desc = (raw_msg or "").strip()
-
-                banned_patterns = [
-                    r"السعر",
-                    r"الضريبة",
-                    r"شامل الضريبة",
-                    r"متوفر في المخزون",
-                    r"إضافة إلى السلة",
-                    r"أضف إلى السلة",
-                    r"اشتري الآن",
-                    r"عدد الزوار",
-                    r"عدد الطلبات",
-                    r"التقييم",
-                    r"تقييم المنتج",
-                ]
-                for pat in banned_patterns:
-                    ai_long_desc = re.sub(pat, "", ai_long_desc, flags=re.IGNORECASE)
-
-                if not validate_description(ai_long_desc):
-                    ai_long_desc = clean_text(ai_long_desc)
+                # لا نُصلح نصًا يحتوي حشو المتجر — إن فشل التحقق يُرفض بالكامل ويُستبدل بالقالب من الحقول فقط.
                 if not validate_description(ai_long_desc):
                     fallback_desc = generate_clean_seo_description(clean_for_desc)
-                    if validate_description(fallback_desc):
-                        ai_long_desc = fallback_desc
+                    ai_long_desc = fallback_desc if validate_description(fallback_desc) else ""
 
             except Exception as e:
                 log.warning("AI description failed for %s: %s", row.get("product_title", ""), e)

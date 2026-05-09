@@ -120,10 +120,7 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
         title = str(p.get("product_title", "")).strip()
         brand = str(p.get("brand", "")).strip()
         size = str(p.get("size", "")).strip()
-        load_speed = str(p.get("load_speed", "")).strip()
         price = str(p.get("price", "")).strip()
-        # Debug values to detect any mapping corruption before row write.
-        print({"title": title, "brand": brand, "size": size, "price": price, "image": image_value})
         row = {col: "" for col in columns}
         promo_bits = []
         if p.get("year"):

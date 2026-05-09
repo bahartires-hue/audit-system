@@ -3,6 +3,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Any, Dict
 
@@ -43,6 +44,37 @@ BAD_AI_PHRASES = [
     "النقشة: النقشة",
 ]
 
+# أي ظهور لهذه السلاسل في الوصف النهائي = رفض النص بالكامل (لا يُعتمد وصف الصفحة أو حشو المتجر).
+DESCRIPTION_REJECT_SUBSTRINGS = (
+    "السعر",
+    "الضريبة",
+    "المخزون",
+    "زوار",
+    "طلبات",
+    "تقييم",
+    "إضافة للسلة",
+    "إضافة إلى السلة",
+    "أضف إلى السلة",
+    "أضف للسلة",
+    "اشتري الآن",
+    "اشتري الان",
+    "متوفر في المخزون",
+    "شامل الضريبة",
+)
+
+
+def description_has_rejected_commerce_markers(text: str) -> bool:
+    """True إذا كان النص يحتوي كلمات متجر/صفحة ممنوعة (يُرفض بالكامل)."""
+    if not str(text or "").strip():
+        return True
+    t = str(text)
+    for sub in DESCRIPTION_REJECT_SUBSTRINGS:
+        if sub in t:
+            return True
+    if re.search(r"هناك\s*\d+\s*زوار", t):
+        return True
+    return False
+
 
 def clean_text(value: str) -> str:
     if not value:
@@ -56,9 +88,24 @@ def clean_text(value: str) -> str:
 
     value = value.replace("النقشة: النقشة:", "النقشة:")
     value = value.replace("النقشة: النقشة", "النقشة")
+    value = re.sub(r"نقشة\s+النقشة", "النقشة", value)
     value = re.sub(r"\s+", " ", value).strip()
 
     return value
+
+
+def normalize_pattern_display(raw: str) -> str:
+    """
+    إزالة بادئات «نقشة / النقشة» من قيمة الحقل القادمة من المتجر
+    حتى لا تتكرر عبارة مثل «تساعد نقشة النقشة: …» في الجملة.
+    """
+    p = clean_text(str(raw or ""))
+    if not p:
+        return ""
+    p = re.sub(r"^(ال)?نقشة\s*[:：]\s*", "", p, flags=re.IGNORECASE).strip()
+    p = re.sub(r"^(ال)?نقشة\s+", "", p, flags=re.IGNORECASE).strip()
+    p = p.strip(":-： ").strip()
+    return p
 
 
 def guess_car_type(size: str) -> str:
@@ -78,32 +125,58 @@ def guess_car_type(size: str) -> str:
     return "السيارات العائلية والاستخدام اليومي"
 
 
+def _variant_seed(product: Dict[str, Any]) -> int:
+    key = "|".join(
+        [
+            str(product.get("brand", "") or ""),
+            str(product.get("size", "") or ""),
+            str(product.get("load_speed", "") or ""),
+            str(product.get("pattern", "") or ""),
+        ]
+    )
+    return int(hashlib.sha256(key.encode("utf-8")).hexdigest()[:8], 16)
+
+
 def generate_clean_seo_description(product: Dict[str, Any]) -> str:
     brand = clean_text(str(product.get("brand", "") or ""))
     size = clean_text(str(product.get("size", "") or ""))
     load_speed = clean_text(str(product.get("load_speed", "") or ""))
-    pattern = clean_text(str(product.get("pattern", "") or ""))
+    pattern_raw = clean_text(str(product.get("pattern", "") or ""))
+    pattern = normalize_pattern_display(pattern_raw)
     country = clean_text(str(product.get("country", "") or ""))
     year = clean_text(str(product.get("year", "") or ""))
     warranty = clean_text(str(product.get("warranty", "") or ""))
 
     car_type = guess_car_type(size)
+    h = _variant_seed(product)
 
-    parts: list[str] = []
+    openers = [
+        f"كفر {brand} مقاس {size} يناسب {car_type}، مع أداء عملي للتنقل اليومي داخل المدينة وعلى الطرق السريعة.",
+        f"يقدّم {brand} في مقاس {size} خيارًا متوازنًا لمالكي {car_type}، مع تركيز على ثبات معقول وراحة أثناء القيادة المتكررة.",
+        f"مقاس {size} من {brand} موجّه لاستخدام {car_type} بشكل عام، مع سلوك عملي على الأسفلت في الزحام والمسافات القصيرة.",
+        f"إطار {brand} {size} يستهدف {car_type}، ويُفضّل مطابقته مع جدول الإطارات قبل الاعتماد النهائي للتركيب.",
+    ]
+    pattern_lines = [
+        f"تصميم {pattern} يدعم تماسكًا جيدًا على الطرق المعبدة مع ضوضاء مقبولة نسبيًا أثناء الاستخدام الطويل.",
+        f"نقشة {pattern} تساهم في ثبات أفضل عند المنعطفات الخفيفة مع أسلوب قيادة هادئ على الطرق السريعة.",
+        f"أسلوب {pattern} يميل إلى التوازن بين الكبح والتسارع على الأسفلت دون مبالغة في وعود الأداء.",
+    ]
+    load_lines = [
+        f"رمز الحمولة والسرعة {load_speed} يحدّد نطاق التحميل والسرعة الآمنة؛ راجع توصية مصنع سيارتك.",
+        f"مؤشر {load_speed} يوضح حدود التحميل والسرعة؛ التزم بجدول الإطارات لضمان استخدام آمن.",
+    ]
+    closers = [
+        "في بحر الإطارات نوفر كفرات في الدمام بمقاسات متعددة، مع إمكانية شراء كفرات أونلاين وخيارات دفع مرنة.",
+        "بحر الإطارات يخدم طلب كفرات في الدمام وكفرات سيارات بمقاسات مختلفة، مع خيار طلب أونلاين عند التوفر.",
+    ]
 
-    parts.append(
-        f"كفر {brand} مقاس {size} مناسب لـ {car_type}، ويقدم أداءً عمليًا للقيادة اليومية داخل المدينة وعلى الطرق السريعة."
-    )
+    parts: list[str] = [openers[h % len(openers)]]
 
     if pattern:
-        parts.append(
-            f"تساعد نقشة {pattern} على تحسين التماسك والثبات على الطرق المعبدة، مع تقليل الضوضاء أثناء الاستخدام المستمر."
-        )
+        parts.append(pattern_lines[h % len(pattern_lines)])
 
     if load_speed:
-        parts.append(
-            f"رمز الحمولة والسرعة {load_speed} يجعله خيارًا مناسبًا لمن يبحث عن إطار متوازن يجمع بين الراحة والتحمل."
-        )
+        parts.append(load_lines[(h >> 4) % len(load_lines)])
 
     extra: list[str] = []
     if country:
@@ -116,9 +189,7 @@ def generate_clean_seo_description(product: Dict[str, Any]) -> str:
     if extra:
         parts.append("، ".join(extra) + ".")
 
-    parts.append(
-        "في بحر الإطارات نوفر كفرات في الدمام بمقاسات متعددة، مع إمكانية شراء كفرات أونلاين وخيارات دفع مرنة."
-    )
+    parts.append(closers[(h >> 8) % len(closers)])
 
     description = " ".join(parts)
     description = clean_text(description)
@@ -131,6 +202,9 @@ def generate_clean_seo_description(product: Dict[str, Any]) -> str:
 
 def validate_description(description: str) -> bool:
     if not description:
+        return False
+
+    if description_has_rejected_commerce_markers(description):
         return False
 
     if len(description) < 180:

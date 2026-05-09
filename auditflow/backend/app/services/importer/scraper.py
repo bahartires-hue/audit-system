@@ -93,6 +93,7 @@ def _extract_generic_product(product_url: str) -> Dict[str, Any]:
     ym = re.search(r"(20[1-9][0-9])", text_all)
     if ym:
         year = ym.group(1)
+    # text_all يُستخدم فقط لاستخراج سنة تقريبية — لا يُخزَّن كوصف منتج (الوصف يُولَّد لاحقًا من حقول منظمة).
     return {
         "name": name,
         "price": price,
