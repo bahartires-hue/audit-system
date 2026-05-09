@@ -55,6 +55,17 @@ _BANNED_PHRASES = [
     "سعر كفرات",
     "توصيل كفرات",
     "mailto:",
+    "السعر الحالي",
+    "السعر الأصلي",
+    "شامل الضريبة",
+    "إضافة إلى السلة",
+    "اشتري الآن",
+    "اشتري الان",
+    "متوفر في المخزون",
+    "تقييم",
+    "الطلبات",
+    "كمية",
+    "الوكيل المحلي",
 ]
 
 _DESC_MIN = 700
@@ -102,6 +113,10 @@ def _forbidden_merchant_patterns(text: str) -> List[str]:
         hits.append("price")
     if re.search(r"\b(?:ضريبة|القيمة المضافة|vat|مخزون|رصيد)\b", low, re.I):
         hits.append("commerce_meta")
+    if re.search(r"هناك\s*\d+\s*زوار", text):
+        hits.append("visitors_counter")
+    if re.search(r"تمت?\s+منذ\s+قليل", text):
+        hits.append("recent_activity")
     return hits
 
 
@@ -214,6 +229,14 @@ def quality_check_bundle(
     prior_openings: Optional[List[str]] = None,
 ) -> Tuple[bool, List[str]]:
     reasons: List[str] = []
+    text_blob = " ".join(
+        [
+            _norm(str(bundle.get("seo_title", ""))),
+            _norm(str(bundle.get("meta_description", ""))),
+            _norm(str(bundle.get("description_short", ""))),
+            _norm(str(bundle.get("description_long", ""))),
+        ]
+    )
     for key, mn in _MIN.items():
         v = _norm(str(bundle.get(key, "")))
         if len(v) < mn:
@@ -226,7 +249,7 @@ def quality_check_bundle(
     long_t = _norm(bundle.get("description_long", ""))
     low = long_t.lower()
     for bad in _BANNED_PHRASES:
-        if bad.lower() in low:
+        if bad.lower() in text_blob.lower():
             reasons.append(f"banned_phrase:{bad[:24]}")
 
     for hit in _forbidden_merchant_patterns(long_t):
