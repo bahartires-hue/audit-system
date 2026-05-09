@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import unquote, urlparse
 
 from .ai_seo_engine import apply_bundle_to_row, generate_seo_bundle
+from .clean_seo_description import clean_text, generate_clean_seo_description, validate_description
 from .cloudinary_uploader import upload_to_cloudinary
 from .csv_exporter import export_products_files
 from .image_downloader import download_image
@@ -381,10 +382,35 @@ def run_import_pipeline(
         bundle = generate_seo_bundle(
             prod_for_seo,
             prior_long_samples=_seo_long_history,
-            source_description=item.get("description", "") or "",
+            source_description="",
         )
         apply_bundle_to_row(row, bundle, _canonical_base)
-        _seo_long_history.append(str(bundle.get("description_long", "")))
+
+        # وصف سلة/التصدير: من حقول نظيفة فقط — لا نستخدم نص الوصف المسحوب من صفحة المتجر.
+        clean_for_desc = {
+            "brand": str(row.get("brand", "") or parsed.get("brand", "") or ""),
+            "size": str(row.get("size", "") or parsed.get("size", "") or ""),
+            "load_speed": str(row.get("load_speed", "") or parsed.get("load_speed", "") or ""),
+            "pattern": str(row.get("pattern", "") or item.get("pattern", "") or ""),
+            "country": str(row.get("country", "") or item.get("country", "") or ""),
+            "year": str(row.get("year", "") or item.get("year", "") or ""),
+            "warranty": str(row.get("warranty", "") or item.get("warranty", "") or ""),
+        }
+        clean_desc = generate_clean_seo_description(clean_for_desc)
+        if not validate_description(clean_desc):
+            clean_desc = clean_text(clean_desc)
+        if not validate_description(clean_desc):
+            log.warning(
+                "importer clean description validation still failing title=%s len=%s",
+                row.get("product_title", ""),
+                len(clean_desc),
+            )
+        row["description"] = clean_desc
+        row["description_short"] = clean_desc[:260] if len(clean_desc) > 260 else clean_desc
+        row["description_long"] = clean_desc
+        row["description_export"] = clean_desc
+
+        _seo_long_history.append(clean_desc)
 
         products.append(row)
 
