@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 BAD_WORDS = [
     "السعر الأصلي",
@@ -177,6 +177,47 @@ def clean_text(value: str) -> str:
     return value
 
 
+def _is_blank_field(value: Any) -> bool:
+    if value is None:
+        return True
+    s = str(value).strip()
+    if not s:
+        return True
+    low = s.lower()
+    return low in ("none", "nan", "null", "undefined")
+
+
+def add_line(label: str, value: Any) -> Optional[str]:
+    if _is_blank_field(value):
+        return None
+    s = str(value).strip()
+    return f"{label} {s}".strip()
+
+
+def normalize_tire_size_display(raw: str) -> str:
+    """
+    توحيد شكل المقاس: 275/50R22XL، دون فراغات زائدة، مع دعم 275-50-22 و 275 / 50 R 22 XL.
+    """
+    if _is_blank_field(raw):
+        return ""
+    t = str(raw).strip()
+    t = re.sub(r"\s+", " ", t)
+    u = t.upper().replace("×", "/").replace("Ｒ", "R")
+    u = re.sub(r"\s+", "", u)
+    u = u.replace("ZR", "R")
+    u = re.sub(r"(\d{3})-(\d{2,3})-(\d{2})(?![0-9])", r"\1/\2R\3", u)
+    u = re.sub(r"(\d{3})/(\d{2,3})/(\d{2})(?![0-9])", r"\1/\2R\3", u)
+    if re.match(r"^\d{3}/\d{2,3}R\d{2}[A-Z]*$", u):
+        return u
+    m = re.search(r"(\d{3})\s*/\s*(\d{2,3})\s*Z?R\s*(\d{2})", t, re.IGNORECASE)
+    if m:
+        base = f"{m.group(1)}/{m.group(2)}R{m.group(3)}"
+        rest = t[m.end():].strip()
+        tail = re.sub(r"[^A-Za-z]+", "", rest).upper() if rest else ""
+        return base + tail
+    return re.sub(r"\s+", "", t.strip())
+
+
 def normalize_pattern_display(raw: str) -> str:
     """
     إزالة بادئات «نقشة / النقشة» من قيمة الحقل القادمة من المتجر
@@ -193,30 +234,35 @@ def normalize_pattern_display(raw: str) -> str:
 
 def make_simple_description(p: Dict[str, Any]) -> str:
     """
-    وصف منتج بصيغة ثابتة فقط — لا نصوص SEO ولا إطالة ولا «بحر الإطارات» داخل الوصف.
-    الحقول: brand, pattern, size, load_speed, traction, temperature, treadwear, country, year, warranty.
+    وصف منتج بصيغة ثابتة — أسطر فقط إذا للحقل قيمة حقيقية (لا None ولا nan ولا فراغ).
     """
-    brand = str(p.get("brand", "") or "").strip()
-    pattern = normalize_pattern_display(str(p.get("pattern", "") or "").strip())
-    size = str(p.get("size", "") or "").strip()
-    load_speed = str(p.get("load_speed", "") or "").strip()
-    traction = strip_html_tags(str(p.get("traction", "") or "").strip())
-    temperature = strip_html_tags(str(p.get("temperature", "") or "").strip())
-    treadwear = strip_html_tags(str(p.get("treadwear", "") or "").strip())
-    country = strip_html_tags(str(p.get("country", "") or "").strip())
-    year = str(p.get("year", "") or "").strip()
-    warranty = strip_html_tags(str(p.get("warranty", "") or "").strip())
-    return f"""إطارات {brand}
-نقشة {pattern}
-مقاس {size}
-مؤشر السرعة والحمولة {load_speed}
-تراكشن {traction}
-تمبريتشر {temperature}
-تريدواير {treadwear}
-الصناعة {country}
-بجودة عالية حسب مواصفات ومقاييس المملكة العربية السعودية
-انتاج {year}
-ضمان {warranty}""".strip()
+    brand = "" if _is_blank_field(p.get("brand")) else str(p.get("brand")).strip()
+    pattern = normalize_pattern_display("" if _is_blank_field(p.get("pattern")) else str(p.get("pattern")))
+    size_raw = "" if _is_blank_field(p.get("size")) else str(p.get("size"))
+    size = normalize_tire_size_display(size_raw)
+    load_speed = "" if _is_blank_field(p.get("load_speed")) else strip_html_tags(str(p.get("load_speed")).strip())
+    traction = "" if _is_blank_field(p.get("traction")) else strip_html_tags(str(p.get("traction")).strip())
+    temperature = "" if _is_blank_field(p.get("temperature")) else strip_html_tags(str(p.get("temperature")).strip())
+    treadwear = "" if _is_blank_field(p.get("treadwear")) else strip_html_tags(str(p.get("treadwear")).strip())
+    country = "" if _is_blank_field(p.get("country")) else strip_html_tags(str(p.get("country")).strip())
+    year = "" if _is_blank_field(p.get("year")) else str(p.get("year")).strip()
+    warranty = "" if _is_blank_field(p.get("warranty")) else strip_html_tags(str(p.get("warranty")).strip())
+
+    head = f"إطارات {brand}".strip() if brand else "إطارات"
+    lines: List[Optional[str]] = [
+        head,
+        add_line("نقشة", pattern),
+        add_line("مقاس", size),
+        add_line("مؤشر السرعة والحمولة", load_speed),
+        add_line("تراكشن", traction),
+        add_line("تمبريتشر", temperature),
+        add_line("تريدواير", treadwear),
+        add_line("الصناعة", country),
+        "بجودة عالية حسب مواصفات ومقاييس المملكة العربية السعودية",
+        add_line("إنتاج", year),
+        add_line("ضمان", warranty),
+    ]
+    return "\n".join(x for x in lines if x)
 
 
 def guess_car_type(size: str) -> str:
