@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from ..auth_core import require_csrf, require_user
 from ..db import SessionLocal
 from ..services.importer import run_import_pipeline
+from ..services.importer.universal_scraper import run_universal_import
 
 router = APIRouter(prefix="/importer", tags=["importer"])
 
@@ -24,6 +25,13 @@ class ImporterRequest(BaseModel):
     limit: int = Field(default=100, ge=1, le=500)
     max_pages: int = Field(default=10, ge=1, le=50)
     multi_pages: bool = False
+
+
+class UniversalImporterRequest(BaseModel):
+    site_key: str
+    category_url: str
+    max_pages: int = Field(default=10, ge=1, le=50)
+    limit: int = Field(default=0, ge=0, le=5000)
 
 
 def _uploads_root() -> Path:
@@ -83,6 +91,44 @@ def scrape_importer(request: Request, body: ImporterRequest) -> Dict[str, Any]:
         "salla_csv_path": out.get("salla_csv_path", ""),
         "salla_xlsx_path": out.get("salla_xlsx_path", ""),
         "items": items,
+    }
+
+
+@router.post("/universal/scrape")
+def scrape_importer_universal(request: Request, body: UniversalImporterRequest) -> Dict[str, Any]:
+    require_csrf(request)
+    db = SessionLocal()
+    try:
+        require_user(db, request)
+    finally:
+        db.close()
+
+    category_url = (body.category_url or "").strip()
+    site_key = (body.site_key or "").strip().lower()
+    if not category_url.startswith("http://") and not category_url.startswith("https://"):
+        raise HTTPException(400, "أدخل رابطًا صحيحًا يبدأ بـ http:// أو https://")
+    if not site_key:
+        raise HTTPException(400, "site_key مطلوب.")
+
+    exports_root = _uploads_root().parent / "exports"
+    try:
+        out = run_universal_import(
+            site_key=site_key,
+            category_url=category_url,
+            max_pages=int(body.max_pages or 10),
+            limit=int(body.limit or 0),
+            exports_root=exports_root,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception:
+        raise HTTPException(502, "فشل تشغيل السحب العام. تأكد من site_key والرابط.")
+
+    return {
+        "ok": True,
+        "count": out.get("count", 0),
+        "csv_path": out.get("csv_path", ""),
+        "items": out.get("items", []),
     }
 
 
