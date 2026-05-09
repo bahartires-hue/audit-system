@@ -80,7 +80,7 @@
               </select>
               <input id="brandInp" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" placeholder="اسم الماركة (مثال: Michelin)" />
               <input id="sizeInp" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" placeholder="المقاس اختياري (مثال: 215/55R16)" />
-              <input id="limitInp" type="number" min="1" max="500" value="100" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" />
+              <input id="limitInp" type="number" min="1" max="500" value="500" title="حد أقصى 500 منتج" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" />
               <input id="maxPagesInp" type="number" min="1" max="50" value="10" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" />
               <select id="pageMode" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2">
                 <option value="single">صفحة واحدة فقط</option>
@@ -201,7 +201,7 @@
         const site_key = (siteKeyInp.value || "").trim();
         const brand = (brandInp.value || "").trim();
         const max_pages = Math.max(1, Number(maxPagesInp.value || 10));
-        const limit = Math.max(0, Number(limitInp.value || 0));
+        const limit = Math.min(500, Math.max(0, Number(limitInp.value || 500)));
         if (!category_url) {
           showToast("أدخل رابط الصفحة", "#ef4444");
           return;

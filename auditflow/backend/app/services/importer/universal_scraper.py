@@ -324,6 +324,9 @@ def export_salla_like_csv(products: List[Dict[str, Any]], csv_path: Path) -> Non
 # 7) البايبلاين الكامل
 # =========================
 
+MAX_SCRAPE_PRODUCTS = 500
+
+
 def run_universal_import(
     site_key: str,
     category_url: str,
@@ -333,7 +336,9 @@ def run_universal_import(
     brand: str = "",
     exports_root: Path = Path("exports"),
 ) -> Dict[str, Any]:
-    raw_items = scrape_products(site_key, category_url, max_pages=max_pages, limit=limit)
+    # limit=0 يعني جمع حتى السقف الأقصى (500). أي قيمة أعلى من 500 تُقصّ إلى 500.
+    effective_limit = MAX_SCRAPE_PRODUCTS if int(limit or 0) <= 0 else min(int(limit), MAX_SCRAPE_PRODUCTS)
+    raw_items = scrape_products(site_key, category_url, max_pages=max_pages, limit=effective_limit)
 
     products: List[Dict[str, Any]] = []
     seen: set[str] = set()
