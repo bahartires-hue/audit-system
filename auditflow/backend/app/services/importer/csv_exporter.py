@@ -94,13 +94,22 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
 
     wb = load_workbook(template_path)
     ws = wb.active
-    columns = [str(ws.cell(row=1, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
+    header_row = 1
+    for r in range(1, min(20, ws.max_row) + 1):
+        c1 = str(ws.cell(row=r, column=1).value or "").strip()
+        c2 = str(ws.cell(row=r, column=2).value or "").strip()
+        if c1 in {"النوع", "النوع "} and c2 == "أسم المنتج":
+            header_row = r
+            break
+    columns = [str(ws.cell(row=header_row, column=c).value or "").strip() for c in range(1, ws.max_column + 1)]
     header_map = {name: idx + 1 for idx, name in enumerate(columns) if name}
     output_rows: List[Dict[str, Any]] = []
 
     for p in products:
         image_value = _to_public_image_value(p)
         if not image_value:
+            continue
+        if str(p.get("image_status", "")).strip().lower() != "ok":
             continue
         if not str(p.get("brand", "")).strip():
             continue
@@ -112,6 +121,13 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
             continue
         if price_num <= 0:
             continue
+        title = str(p.get("product_title", "")).strip()
+        brand = str(p.get("brand", "")).strip()
+        size = str(p.get("size", "")).strip()
+        load_speed = str(p.get("load_speed", "")).strip()
+        price = str(p.get("price", "")).strip()
+        # Debug values to detect any mapping corruption before row write.
+        print({"title": title, "brand": brand, "size": size, "price": price, "image": image_value})
         row = {col: "" for col in columns}
         promo_bits = []
         if p.get("year"):
@@ -120,24 +136,25 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
             promo_bits.append(f"الضمان {p.get('warranty')}")
         promo = " - ".join(promo_bits)
         safe_set(row, columns, "النوع ", "منتج")
-        safe_set(row, columns, "أسم المنتج", p.get("product_title", ""))
+        safe_set(row, columns, "النوع", "منتج")
+        safe_set(row, columns, "أسم المنتج", title)
         safe_set(row, columns, "تصنيف المنتج", "قسم الإطارات")
         safe_set(row, columns, "صورة المنتج", image_value)
         safe_set(row, columns, "وصف صورة المنتج", p.get("image_alt_text", ""))
         safe_set(row, columns, "نوع المنتج", "منتج جاهز")
-        safe_set(row, columns, "سعر المنتج", p.get("price", ""))
+        safe_set(row, columns, "سعر المنتج", price)
         safe_set(row, columns, "الوصف", p.get("description", ""))
         safe_set(row, columns, "هل يتطلب شحن؟", "نعم")
         safe_set(row, columns, "الوزن", 25)
         safe_set(row, columns, "وحدة الوزن", "kg")
-        safe_set(row, columns, "الماركة", p.get("brand", ""))
+        safe_set(row, columns, "الماركة", brand)
         safe_set(row, columns, "العنوان الترويجي", promo)
         safe_set(row, columns, "تثبيت المنتج", "لا")
         safe_set(row, columns, "خاضع للضريبة ؟", "نعم")
 
         safe_set(row, columns, "[1] الاسم", "مقاس الإطار")
         safe_set(row, columns, "[1] النوع", "نص")
-        safe_set(row, columns, "[1] القيمة", p.get("size", ""))
+        safe_set(row, columns, "[1] القيمة", size)
         safe_set(row, columns, "[2] الاسم", "")
         safe_set(row, columns, "[2] النوع", "")
         safe_set(row, columns, "[2] القيمة", "")
@@ -148,8 +165,8 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
         safe_set(row, columns, "[3] الصورة / اللون", "")
         output_rows.append(row)
 
-    start_row = 2
-    style_row = 2 if ws.max_row >= 2 else 1
+    start_row = header_row + 1
+    style_row = start_row if ws.max_row >= start_row else header_row
     base_height = ws.row_dimensions[style_row].height
     base_styles = {c: copy(ws.cell(row=style_row, column=c)._style) for c in range(1, ws.max_column + 1)}
     max_clear_row = max(ws.max_row, start_row + len(output_rows) - 1)

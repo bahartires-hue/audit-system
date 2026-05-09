@@ -131,6 +131,10 @@ def run_import_pipeline(
             parsed["brand"] = "Alpha"
         if not parsed.get("brand") and re.search(r"alpha|ألفا|الفا", f"{raw_name} {item.get('product_url','')}", flags=re.IGNORECASE):
             parsed["brand"] = "Alpha"
+        if re.search(r"alpha|ألفا|الفا", f"{parsed.get('brand','')} {raw_name} {item.get('product_url','')}", flags=re.IGNORECASE):
+            parsed["brand"] = "Alpha"
+        if re.search(r"لاوفين|laufenn", f"{parsed.get('brand','')} {raw_name}", flags=re.IGNORECASE):
+            parsed["brand"] = "Laufenn"
         if parsed.get("parse_status") == "non_english_name" or re.search(r"[\u0600-\u06FF]", f"{parsed.get('brand','')} {parsed.get('model','')}"):
             # final fallback: keep product but clear non-English fragments
             parsed["brand"] = re.sub(r"[\u0600-\u06FF]+", "", parsed.get("brand", "")).strip() or parsed.get("brand", "")
@@ -169,7 +173,10 @@ def run_import_pipeline(
         seo_status = "ok" if parsed.get("size") else "needs_review"
         row = {
             "name": item.get("name", ""),
-            "product_title": parsed.get("product_title", ""),
+            "product_title": " ".join(
+                x for x in [normalize_brand_name(parsed.get("brand", "")), parsed.get("model", ""), parsed.get("size", ""), parsed.get("load_speed", "")]
+                if str(x).strip()
+            ).strip(),
             "brand": parsed["brand"],
             "model": parsed["model"],
             "size": parsed["size"],
