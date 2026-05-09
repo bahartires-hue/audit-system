@@ -199,6 +199,7 @@
       scrapeUniversalBtn.addEventListener("click", async () => {
         const category_url = (urlInp.value || "").trim();
         const site_key = (siteKeyInp.value || "").trim();
+        const brand = (brandInp.value || "").trim();
         const max_pages = Math.max(1, Number(maxPagesInp.value || 10));
         const limit = Math.max(0, Number(limitInp.value || 0));
         if (!category_url) {
@@ -213,7 +214,7 @@
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token": csrf },
-            body: JSON.stringify({ site_key, category_url, max_pages, limit }),
+            body: JSON.stringify({ site_key, category_url, brand, max_pages, limit }),
           });
           if (!res.ok) throw new Error(await readErrorMessage(res));
           const data = await res.json();

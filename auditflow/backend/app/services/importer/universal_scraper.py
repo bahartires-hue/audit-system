@@ -96,6 +96,15 @@ def normalize_price(raw: str) -> str:
     return f"{v:.2f}".rstrip("0").rstrip(".")
 
 
+def normalize_brand(value: str) -> str:
+    v = str(value or "").strip().lower()
+    if v in {"ألفا", "الفا", "alpha"}:
+        return "alpha"
+    if v in {"لاوفين", "laufenn"}:
+        return "laufenn"
+    return v
+
+
 # =========================
 # 3) تحليل اسم الكفر
 # =========================
@@ -321,17 +330,20 @@ def run_universal_import(
     *,
     max_pages: int = 10,
     limit: int = 0,
+    brand: str = "",
     exports_root: Path = Path("exports"),
 ) -> Dict[str, Any]:
     raw_items = scrape_products(site_key, category_url, max_pages=max_pages, limit=limit)
 
     products: List[Dict[str, Any]] = []
-    seen: set[tuple[str, str, str, str]] = set()
+    seen: set[str] = set()
+    selected_brand = normalize_brand(brand)
 
     for item in raw_items:
         parsed = parse_tire_name(item.name)
         price = normalize_price(item.price_raw)
-        if not parsed.size or not price:
+        product_brand = normalize_brand(parsed.brand)
+        if selected_brand and product_brand != selected_brand:
             continue
 
         seo = build_seo_fields(parsed, item.year, item.country, item.pattern)
@@ -340,12 +352,7 @@ def run_universal_import(
             x for x in [parsed.brand, parsed.model, parsed.size, parsed.load_speed] if x
         ).strip()
 
-        key = (
-            parsed.brand.lower(),
-            parsed.model.lower(),
-            parsed.size.lower(),
-            parsed.load_speed.lower(),
-        )
+        key = (item.product_url or "").strip().lower() or (item.name or "").strip().lower()
         if key in seen:
             continue
         seen.add(key)
@@ -378,6 +385,7 @@ def run_universal_import(
                 "meta_description": seo["meta_description"],
                 "keywords": seo["keywords"],
                 "image_alt_text": seo["image_alt_text"],
+                "status": "needs_review" if (not parsed.size or not price) else "ok",
             }
         )
 

@@ -30,6 +30,7 @@ class ImporterRequest(BaseModel):
 class UniversalImporterRequest(BaseModel):
     site_key: str
     category_url: str
+    brand: str = ""
     max_pages: int = Field(default=10, ge=1, le=50)
     limit: int = Field(default=0, ge=0, le=5000)
 
@@ -117,6 +118,7 @@ def scrape_importer_universal(request: Request, body: UniversalImporterRequest) 
             category_url=category_url,
             max_pages=int(body.max_pages or 10),
             limit=int(body.limit or 0),
+            brand=(body.brand or "").strip(),
             exports_root=exports_root,
         )
     except ValueError as e:
