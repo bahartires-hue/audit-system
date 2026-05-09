@@ -4,7 +4,7 @@ import logging
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Set
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -249,6 +249,41 @@ def _next_page_url(base_url: str, soup: BeautifulSoup) -> str:
     return ""
 
 
+def _with_page_path(url: str, page: int) -> str:
+    p = urlparse(url)
+    parts = [x for x in (p.path or "").split("/") if x]
+    if "page" in parts:
+        i = parts.index("page")
+        parts = parts[:i]
+    if parts and re.fullmatch(r"\d+", parts[-1]) and len(parts) >= 2 and parts[-2] == "page":
+        parts = parts[:-2]
+    parts += ["page", str(page)]
+    path = "/" + "/".join(parts) + "/"
+    return urlunparse((p.scheme, p.netloc, path, p.params, p.query, p.fragment))
+
+
+def _with_paged_query(url: str, page: int) -> str:
+    p = urlparse(url)
+    q = dict(parse_qsl(p.query, keep_blank_values=True))
+    q["paged"] = str(page)
+    query = urlencode(q, doseq=True)
+    return urlunparse((p.scheme, p.netloc, p.path, p.params, query, p.fragment))
+
+
+def _pagination_candidates(seed_url: str, current_url: str, current_page: int, soup: BeautifulSoup) -> List[str]:
+    out: List[str] = []
+    seen: Set[str] = set()
+    explicit_next = _next_page_url(current_url, soup)
+    for candidate in [explicit_next, _with_page_path(seed_url, current_page + 1), _with_paged_query(seed_url, current_page + 1)]:
+        if not candidate:
+            continue
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        out.append(candidate)
+    return out
+
+
 def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     seen: Set[str] = set()
@@ -406,7 +441,7 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
     }
 
 
-def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 5, limit: int = 20) -> List[Dict[str, Any]]:
+def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 10, limit: int = 100) -> List[Dict[str, Any]]:
     links: List[str] = []
     listing_items: List[Dict[str, Any]] = []
     max_items = max(1, int(limit or 20))
@@ -424,7 +459,8 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 5, li
             except Exception as e:
                 log.warning("skip listing page %s: %s", current, e)
                 break
-            listing_items.extend(_extract_list_products(current, doc))
+            page_products = _extract_list_products(current, doc)
+            listing_items.extend(page_products)
             # fallback سريع: روابط a التي تحمل مقاسًا في النص.
             for p in _extract_product_links_by_anchor_text(current, doc):
                 if p.get("product_url") and all(x.get("product_url") != p["product_url"] for x in listing_items):
@@ -448,17 +484,29 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 5, li
                     links.append(u)
                 if len(links) >= max_items:
                     break
+            next_page_url = ""
+            candidates = _pagination_candidates(url, current, page_count, doc)
+            for nxt in candidates:
+                if not _in_same_scope(url, nxt):
+                    continue
+                if nxt in visited_pages:
+                    continue
+                next_page_url = nxt
+                break
+            log.info(
+                "pagination current_page=%s products_found_on_page=%s total_products_collected=%s next_page_url=%s",
+                page_count,
+                len(page_products),
+                len(links),
+                next_page_url,
+            )
             if len(links) >= max_items:
                 break
             if not multi_pages:
                 break
-            nxt = _next_page_url(current, doc)
-            if not nxt:
+            if not next_page_url:
                 break
-            if not _in_same_scope(url, nxt):
-                log.info("stop pagination outside scope seed=%s next=%s", url, nxt)
-                break
-            current = nxt
+            current = next_page_url
     products: List[Dict[str, Any]] = []
     for u in links[: max_items * 2]:
         if len(products) >= max_items:

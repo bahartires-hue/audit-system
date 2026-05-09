@@ -72,6 +72,16 @@ def _infer_brand_from_name(name: str) -> str:
     return normalize_brand_name(first)
 
 
+def _normalize_brand_strict(value: str) -> str:
+    v = normalize_brand_name(str(value or "").strip())
+    low = v.lower()
+    if low in {"ألفا", "الفا", "alpha"}:
+        return "alpha"
+    if low in {"لاوفين", "laufenn"}:
+        return "laufenn"
+    return low
+
+
 def filter_products(products: List[Dict[str, Any]], brand: str = "", size: str = "", limit: int = 20) -> List[Dict[str, Any]]:
     b_raw = (brand or "").strip()
     b_norm = normalize_brand_name(b_raw) if b_raw else ""
@@ -103,9 +113,10 @@ def run_import_pipeline(
     brand: str = "",
     size: str = "",
     limit: int = 20,
+    max_pages: int = 5,
     multi_pages: bool = False,
 ) -> Dict[str, Any]:
-    raw_items = scrape_products(site_url, multi_pages=multi_pages, limit=limit)
+    raw_items = scrape_products(site_url, multi_pages=multi_pages, max_pages=max_pages, limit=limit)
     products: List[Dict[str, Any]] = []
     seen = set()
     image_dir = uploads_root / "products"
@@ -179,13 +190,22 @@ def run_import_pipeline(
         if raw_name == "ابحث !" or not parsed.get("size") or not price:
             continue
         if brand:
-            selected = normalize_brand_name(brand).lower().strip()
-            parsed_brand = normalize_brand_name(parsed.get("brand", "")).lower().strip()
-            explicit_name_brand = normalize_brand_name(_infer_brand_from_name(raw_name)).lower().strip()
-            if selected and explicit_name_brand and explicit_name_brand != selected:
+            selected_brand = _normalize_brand_strict(brand)
+            product_brand = _normalize_brand_strict(parsed.get("brand", "") or _infer_brand_from_name(raw_name))
+            if selected_brand and product_brand and product_brand != selected_brand:
+                log.info(
+                    "SKIPPED_WRONG_BRAND selected_brand=%s product_brand=%s name=%s",
+                    selected_brand,
+                    product_brand,
+                    raw_name,
+                )
                 continue
-            if selected and parsed_brand and selected != parsed_brand:
-                continue
+            log.info(
+                "ACCEPTED selected_brand=%s product_brand=%s name=%s",
+                selected_brand,
+                product_brand,
+                raw_name,
+            )
         price_status = "ok" if price else "price_missing"
         seo_status = "ok" if parsed.get("size") else "needs_review"
         row = {
@@ -241,6 +261,19 @@ def run_import_pipeline(
         if image_status in {"failed", "no_image_url"} and (item.get("image_url") or "").startswith("https://"):
             row["status"] = "مراجعة"
         products.append(row)
+
+    if brand:
+        selected_brand = _normalize_brand_strict(brand)
+        for product in products:
+            product_brand = _normalize_brand_strict(product.get("brand", ""))
+            if selected_brand and product_brand != selected_brand:
+                log.error(
+                    "wrong brand detected before export selected_brand=%s product_brand=%s name=%s",
+                    selected_brand,
+                    product_brand,
+                    product.get("name", ""),
+                )
+                raise ValueError("Wrong brand detected before export")
 
     csv_path = exports_dir / "tire_products.csv"
     xlsx_path = exports_dir / "tire_products.xlsx"

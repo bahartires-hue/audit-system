@@ -21,7 +21,8 @@ class ImporterRequest(BaseModel):
     site_url: str
     brand: str = ""
     size: str = ""
-    limit: int = Field(default=20, ge=1, le=500)
+    limit: int = Field(default=100, ge=1, le=500)
+    max_pages: int = Field(default=10, ge=1, le=50)
     multi_pages: bool = False
 
 
@@ -45,7 +46,8 @@ def scrape_importer(request: Request, body: ImporterRequest) -> Dict[str, Any]:
         raise HTTPException(400, "أدخل رابطًا صحيحًا يبدأ بـ http:// أو https://")
     brand = (body.brand or "").strip()
     size = (body.size or "").strip()
-    limit = int(body.limit or 20)
+    limit = int(body.limit or 100)
+    max_pages = int(body.max_pages or 10)
     multi_pages = bool(body.multi_pages)
     path = (urlparse(site_url).path or "").strip("/")
     if not path and not brand and not size:
@@ -58,6 +60,7 @@ def scrape_importer(request: Request, body: ImporterRequest) -> Dict[str, Any]:
             brand=brand,
             size=size,
             limit=limit,
+            max_pages=max_pages,
             multi_pages=multi_pages,
         )
     except ValueError as e:

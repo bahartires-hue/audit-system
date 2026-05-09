@@ -74,7 +74,8 @@
               <input id="siteUrl" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 md:col-span-2" placeholder="https://tireex.com/brands/michelin" />
               <input id="brandInp" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" placeholder="اسم الماركة (مثال: Michelin)" />
               <input id="sizeInp" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" placeholder="المقاس اختياري (مثال: 215/55R16)" />
-              <input id="limitInp" type="number" min="1" max="500" value="20" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" />
+              <input id="limitInp" type="number" min="1" max="500" value="100" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" />
+              <input id="maxPagesInp" type="number" min="1" max="50" value="10" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" />
               <select id="pageMode" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2">
                 <option value="single">صفحة واحدة فقط</option>
                 <option value="multi">عدة صفحات</option>
@@ -125,6 +126,7 @@
       const brandInp = document.getElementById("brandInp");
       const sizeInp = document.getElementById("sizeInp");
       const limitInp = document.getElementById("limitInp");
+      const maxPagesInp = document.getElementById("maxPagesInp");
       const pageMode = document.getElementById("pageMode");
 
       function esc(s) {
@@ -156,7 +158,8 @@
         const site_url = (urlInp.value || "").trim();
         const brand = (brandInp.value || "").trim();
         const size = (sizeInp.value || "").trim();
-        const limit = Math.max(1, Number(limitInp.value || 20));
+        const limit = Math.max(1, Number(limitInp.value || 100));
+        const max_pages = Math.max(1, Number(maxPagesInp.value || 10));
         const multi_pages = pageMode.value === "multi";
         if (!site_url) {
           showToast("أدخل رابط صفحة الماركة أو البحث", "#ef4444");
@@ -170,7 +173,7 @@
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token": csrf },
-            body: JSON.stringify({ site_url, brand, size, limit, multi_pages }),
+            body: JSON.stringify({ site_url, brand, size, limit, max_pages, multi_pages }),
           });
           if (!res.ok) throw new Error(await readErrorMessage(res));
           const data = await res.json();

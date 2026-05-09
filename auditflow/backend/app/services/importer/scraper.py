@@ -107,7 +107,7 @@ def _extract_generic_product(product_url: str) -> Dict[str, Any]:
     }
 
 
-def scrape_generic(site_url: str, *, multi_pages: bool = False, max_pages: int = 5, limit: int = 20) -> List[Dict[str, Any]]:
+def scrape_generic(site_url: str, *, multi_pages: bool = False, max_pages: int = 10, limit: int = 100) -> List[Dict[str, Any]]:
     current = site_url
     visited = set()
     page_count = 0
@@ -145,7 +145,7 @@ def scrape_generic(site_url: str, *, multi_pages: bool = False, max_pages: int =
     return products
 
 
-def scrape_products(site_url: str, *, multi_pages: bool = False, max_pages: int = 5, limit: int = 20) -> List[Dict[str, Any]]:
+def scrape_products(site_url: str, *, multi_pages: bool = False, max_pages: int = 10, limit: int = 100) -> List[Dict[str, Any]]:
     domain = (urlparse(site_url).netloc or "").lower()
     kind = classify_url(site_url)
     log.info("importer domain=%s kind=%s multi_pages=%s limit=%s url=%s", domain, kind, multi_pages, limit, site_url)
@@ -157,9 +157,8 @@ def scrape_products(site_url: str, *, multi_pages: bool = False, max_pages: int 
         secondary = scrape_tireex(site_url, multi_pages=True, max_pages=max(5, max_pages), limit=max(limit * 2, 40))
         if secondary:
             return secondary[:limit]
-        log.warning("tireex multi-page scraper returned 0; trying generic fallback")
-        generic = scrape_generic(site_url, multi_pages=True, max_pages=max(5, max_pages), limit=max(limit * 2, 40))
-        return generic[:limit]
+        log.warning("tireex multi-page scraper returned 0; skipping generic fallback for tireex")
+        return []
     # fallback عام لأي موقع شبيه بمتاجر المنتجات.
     primary_generic = scrape_generic(site_url, multi_pages=multi_pages, max_pages=max_pages, limit=limit)
     if primary_generic:
