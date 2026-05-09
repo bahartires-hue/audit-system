@@ -10,13 +10,7 @@ from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import unquote, urlparse
 
 from .ai_seo_engine import apply_bundle_to_row, build_json_ld_product, generate_seo_bundle
-from .clean_seo_description import (
-    combine_ai_narrative_with_specs,
-    generate_clean_seo_description,
-    normalize_pattern_display,
-    strip_html_tags,
-    validate_export_body,
-)
+from .clean_seo_description import make_simple_description, normalize_pattern_display
 from .cloudinary_uploader import upload_to_cloudinary
 from .csv_exporter import export_products_files
 from .image_downloader import download_image
@@ -327,18 +321,6 @@ def run_import_pipeline(
     _seo_long_history: List[str] = []
     _canonical_base = (os.getenv("AUDITFLOW_STORE_PUBLIC_BASE") or os.getenv("PUBLIC_BASE_URL") or "").strip()
 
-    _openai_client: Optional[Any] = None
-    _openai_model = (os.getenv("OPENAI_MODEL") or "gpt-4o-mini").strip()
-    if (os.getenv("OPENAI_API_KEY") or "").strip():
-        try:
-            from openai import OpenAI
-
-            _openai_client = OpenAI()
-        except Exception as e:
-            log.warning("importer OPENAI_API_KEY is set but OpenAI client init failed: %s", e)
-    else:
-        log.info("importer OPENAI_API_KEY is not set; cart descriptions use non-AI fallback only")
-
     for unit in enriched_units:
         if not unit:
             continue
@@ -379,6 +361,9 @@ def run_import_pipeline(
             "warranty": item.get("warranty", ""),
             "country": item.get("country", ""),
             "pattern": item.get("pattern", ""),
+            "traction": str(item.get("traction", "") or "").strip(),
+            "temperature": str(item.get("temperature", "") or "").strip(),
+            "treadwear": str(item.get("treadwear", "") or "").strip(),
             "parse_status": parsed.get("parse_status", ""),
             "image_status": image_status,
             "seo_status": seo_status,
@@ -405,88 +390,29 @@ def run_import_pipeline(
         )
         apply_bundle_to_row(row, bundle, _canonical_base, omit_body_copy=True)
 
-        # ====== AI-ONLY CLEAN LONG DESCRIPTION (NO RAW PAGE TEXT) ======
-        clean_for_desc = {
-            "brand": str(row.get("brand", "") or parsed.get("brand", "") or ""),
-            "size": str(row.get("size", "") or parsed.get("size", "") or ""),
-            "load_speed": str(row.get("load_speed", "") or parsed.get("load_speed", "") or ""),
+        # وصف المنتج للسلة/التصدير: صيغة ثابتة فقط (بدون AI وبدون SEO إضافي وبدون «بحر الإطارات» داخل الوصف).
+        simple_desc = {
+            "brand": str(row.get("brand", "") or parsed.get("brand", "") or "").strip(),
+            "size": str(row.get("size", "") or parsed.get("size", "") or "").strip(),
+            "load_speed": str(row.get("load_speed", "") or parsed.get("load_speed", "") or "").strip(),
             "pattern": normalize_pattern_display(str(row.get("pattern", "") or item.get("pattern", "") or "")),
-            "country": str(row.get("country", "") or item.get("country", "") or ""),
-            "year": str(row.get("year", "") or item.get("year", "") or ""),
-            "warranty": str(row.get("warranty", "") or item.get("warranty", "") or ""),
+            "country": str(row.get("country", "") or item.get("country", "") or "").strip(),
+            "year": str(row.get("year", "") or item.get("year", "") or "").strip(),
+            "warranty": str(row.get("warranty", "") or item.get("warranty", "") or "").strip(),
+            "traction": row.get("traction", "") or "",
+            "temperature": row.get("temperature", "") or "",
+            "treadwear": row.get("treadwear", "") or "",
         }
+        cart_desc = make_simple_description(simple_desc)
 
-        ai_long_desc = ""
-        if _openai_client is not None:
-            ai_prompt = f"""
-اكتب وصفًا تسويقيًا قصيرًا واحترافيًا لمنتج كفر سيارات بالمواصفات التالية.
-المصدر الوحيد للحقائق هو الحقول أدناه فقط — لا تنسخ أي نص من صفحات الويب أو وصف متجر أو body أو تعليقات عملاء.
-
-- الماركة: {clean_for_desc["brand"]}
-- المقاس: {clean_for_desc["size"]}
-- رمز الحمولة والسرعة: {clean_for_desc["load_speed"]}
-- النقشة: {clean_for_desc["pattern"]}
-- بلد المنشأ: {clean_for_desc["country"] or "كوريا"}
-- سنة الصنع: {clean_for_desc["year"] or "2025"}
-- الضمان: {clean_for_desc["warranty"] or "3 سنوات"}
-
-الشروط الإلزامية:
-- لا تذكر السعر، الضريبة، المخزون، عدد الطلبات، عدد الزوار، التقييم، أو أي أزرار شراء مثل "إضافة إلى السلة" أو "اشتري الآن".
-- لا تذكر أسماء متاجر أو مواقع أخرى نهائيًا.
-- لا تستخدم أي نص من صفحات المتاجر، اكتب وصفًا جديدًا بالكامل.
-- اجعل الوصف طبيعيًا، بشريًا، غير مكرر، ومناسبًا للسيو المحلي في السعودية (يمكن ذكر: كفرات سيارات، كفرات في الدمام، كفرات السعودية بشكل طبيعي داخل النص).
-- ركّز على: الثبات، الراحة، الهدوء، التماسك، الاستخدام اليومي، الطرق السريعة.
-- الطول بين 70 و 130 كلمة.
-- لا تذكر أنه نص مولّد بالذكاء الاصطناعي.
-"""
-
-            try:
-                ai_resp = _openai_client.chat.completions.create(
-                    model=_openai_model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "أنت كاتب محتوى تسويقي عربي محترف في مجال إطارات السيارات، تكتب بأسلوب بشري طبيعي ومناسب للسيو.",
-                        },
-                        {"role": "user", "content": ai_prompt},
-                    ],
-                    temperature=0.9,
-                    max_tokens=400,
-                )
-                raw_msg = ai_resp.choices[0].message.content
-                ai_core = strip_html_tags((raw_msg or "").strip())
-                combined = combine_ai_narrative_with_specs(ai_core, clean_for_desc)
-                if validate_export_body(combined):
-                    ai_long_desc = combined
-
-            except Exception as e:
-                log.warning("AI description failed for %s: %s", row.get("product_title", ""), e)
-                ai_long_desc = ""
-
-        if not ai_long_desc:
-            fb = generate_clean_seo_description(clean_for_desc)
-            combined_fb = combine_ai_narrative_with_specs(fb, clean_for_desc)
-            ai_long_desc = combined_fb if validate_export_body(combined_fb) else fb
-
-        if not validate_export_body(ai_long_desc):
-            log.warning(
-                "importer description rejected after checks title=%s len=%s",
-                row.get("product_title", ""),
-                len(ai_long_desc or ""),
-            )
-            fb2 = generate_clean_seo_description(clean_for_desc)
-            combined2 = combine_ai_narrative_with_specs(fb2, clean_for_desc)
-            ai_long_desc = combined2 if validate_export_body(combined2) else fb2
-
-        row["description_long"] = ai_long_desc
-        row["description"] = ai_long_desc
-        row["description_export"] = ai_long_desc
-        row["description_short"] = ai_long_desc[:260] if len(ai_long_desc) > 260 else ai_long_desc
+        row["description_long"] = cart_desc
+        row["description"] = cart_desc
+        row["description_export"] = cart_desc
+        row["description_short"] = cart_desc
 
         row["json_ld"] = build_json_ld_product(row, _canonical_base)
 
-        _seo_long_history.append(ai_long_desc)
-        # ====== END AI-ONLY CLEAN LONG DESCRIPTION ======
+        _seo_long_history.append(cart_desc)
 
         products.append(row)
 

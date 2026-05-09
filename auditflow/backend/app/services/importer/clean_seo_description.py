@@ -191,6 +191,34 @@ def normalize_pattern_display(raw: str) -> str:
     return p
 
 
+def make_simple_description(p: Dict[str, Any]) -> str:
+    """
+    وصف منتج بصيغة ثابتة فقط — لا نصوص SEO ولا إطالة ولا «بحر الإطارات» داخل الوصف.
+    الحقول: brand, pattern, size, load_speed, traction, temperature, treadwear, country, year, warranty.
+    """
+    brand = str(p.get("brand", "") or "").strip()
+    pattern = normalize_pattern_display(str(p.get("pattern", "") or "").strip())
+    size = str(p.get("size", "") or "").strip()
+    load_speed = str(p.get("load_speed", "") or "").strip()
+    traction = strip_html_tags(str(p.get("traction", "") or "").strip())
+    temperature = strip_html_tags(str(p.get("temperature", "") or "").strip())
+    treadwear = strip_html_tags(str(p.get("treadwear", "") or "").strip())
+    country = strip_html_tags(str(p.get("country", "") or "").strip())
+    year = str(p.get("year", "") or "").strip()
+    warranty = strip_html_tags(str(p.get("warranty", "") or "").strip())
+    return f"""إطارات {brand}
+نقشة {pattern}
+مقاس {size}
+مؤشر السرعة والحمولة {load_speed}
+تراكشن {traction}
+تمبريتشر {temperature}
+تريدواير {treadwear}
+الصناعة {country}
+بجودة عالية حسب مواصفات ومقاييس المملكة العربية السعودية
+انتاج {year}
+ضمان {warranty}""".strip()
+
+
 def guess_car_type(size: str) -> str:
     if not size:
         return "السيارات"
