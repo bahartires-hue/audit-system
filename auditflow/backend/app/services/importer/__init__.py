@@ -9,11 +9,13 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import unquote, urlparse
 
-from .ai_seo_engine import apply_bundle_to_row, generate_seo_bundle
+from .ai_seo_engine import apply_bundle_to_row, build_json_ld_product, generate_seo_bundle
 from .clean_seo_description import (
+    combine_ai_narrative_with_specs,
     generate_clean_seo_description,
     normalize_pattern_display,
-    validate_description,
+    strip_html_tags,
+    validate_export_body,
 )
 from .cloudinary_uploader import upload_to_cloudinary
 from .csv_exporter import export_products_files
@@ -401,7 +403,7 @@ def run_import_pipeline(
             prior_long_samples=_seo_long_history,
             source_description="",
         )
-        apply_bundle_to_row(row, bundle, _canonical_base)
+        apply_bundle_to_row(row, bundle, _canonical_base, omit_body_copy=True)
 
         # ====== AI-ONLY CLEAN LONG DESCRIPTION (NO RAW PAGE TEXT) ======
         clean_for_desc = {
@@ -452,23 +454,36 @@ def run_import_pipeline(
                     max_tokens=400,
                 )
                 raw_msg = ai_resp.choices[0].message.content
-                ai_long_desc = (raw_msg or "").strip()
-                # لا نُصلح نصًا يحتوي حشو المتجر — إن فشل التحقق يُرفض بالكامل ويُستبدل بالقالب من الحقول فقط.
-                if not validate_description(ai_long_desc):
-                    fallback_desc = generate_clean_seo_description(clean_for_desc)
-                    ai_long_desc = fallback_desc if validate_description(fallback_desc) else ""
+                ai_core = strip_html_tags((raw_msg or "").strip())
+                combined = combine_ai_narrative_with_specs(ai_core, clean_for_desc)
+                if validate_export_body(combined):
+                    ai_long_desc = combined
 
             except Exception as e:
                 log.warning("AI description failed for %s: %s", row.get("product_title", ""), e)
                 ai_long_desc = ""
 
         if not ai_long_desc:
-            ai_long_desc = generate_clean_seo_description(clean_for_desc)
+            fb = generate_clean_seo_description(clean_for_desc)
+            combined_fb = combine_ai_narrative_with_specs(fb, clean_for_desc)
+            ai_long_desc = combined_fb if validate_export_body(combined_fb) else fb
+
+        if not validate_export_body(ai_long_desc):
+            log.warning(
+                "importer description rejected after checks title=%s len=%s",
+                row.get("product_title", ""),
+                len(ai_long_desc or ""),
+            )
+            fb2 = generate_clean_seo_description(clean_for_desc)
+            combined2 = combine_ai_narrative_with_specs(fb2, clean_for_desc)
+            ai_long_desc = combined2 if validate_export_body(combined2) else fb2
 
         row["description_long"] = ai_long_desc
         row["description"] = ai_long_desc
         row["description_export"] = ai_long_desc
         row["description_short"] = ai_long_desc[:260] if len(ai_long_desc) > 260 else ai_long_desc
+
+        row["json_ld"] = build_json_ld_product(row, _canonical_base)
 
         _seo_long_history.append(ai_long_desc)
         # ====== END AI-ONLY CLEAN LONG DESCRIPTION ======

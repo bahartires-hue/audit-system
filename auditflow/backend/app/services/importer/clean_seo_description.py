@@ -76,6 +76,89 @@ def description_has_rejected_commerce_markers(text: str) -> bool:
     return False
 
 
+def strip_html_tags(text: str) -> str:
+    """إزالة أي وسم HTML — لا يُسمح بدمج نص خام من الصفحة داخل الوصف."""
+    if not text:
+        return ""
+    t = re.sub(r"<[^>]+>", " ", str(text))
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def _sanitize_spec_value(value: str) -> str:
+    v = strip_html_tags(value or "")
+    v = re.sub(r"[\x00-\x1f\x7f]", "", v)
+    return re.sub(r"\s+", " ", v).strip()
+
+
+def build_specs_lines_from_fields(specs: Dict[str, Any]) -> str:
+    """سطر مواصفات من الحقول السبعة فقط (بدون أسعار أو نص صفحة)."""
+    pairs = [
+        ("الماركة", "brand"),
+        ("المقاس", "size"),
+        ("رمز الحمولة والسرعة", "load_speed"),
+        ("النقشة", "pattern"),
+        ("بلد المنشأ", "country"),
+        ("سنة الصنع", "year"),
+        ("الضمان", "warranty"),
+    ]
+    lines: list[str] = []
+    for label, key in pairs:
+        v = _sanitize_spec_value(str(specs.get(key, "") or ""))
+        if v:
+            lines.append(f"{label}: {v}")
+    return "\n".join(lines)
+
+
+def combine_ai_narrative_with_specs(narrative: str, specs: Dict[str, Any]) -> str:
+    """وصف نهائي = نص AI (بعد تنظيف HTML) + كتلة مواصفات منظمة فقط — لا دمج مع raw_text أو page_text."""
+    n = strip_html_tags(narrative or "").strip()
+    b = build_specs_lines_from_fields(specs).strip()
+    if n and b:
+        return f"{n}\n\n{b}"
+    return n or b
+
+
+def must_reject_description(text: str) -> bool:
+    """
+    True = يجب رفض الوصف بالكامل (لا يُحفظ كما هو؛ يُعاد التوليد أو الاستبدال).
+    فلاتر إجبارية: أنماط المتجر، أرقام طويلة، HTML، إلخ.
+    """
+    if not str(text or "").strip():
+        return True
+    t = re.sub(r"\s+", " ", str(text).strip())
+    if re.search(r"(هو:|هناك\s+\d+|4\.8|""|\d+,\d+)", t):
+        return True
+    if "هناك" in t:
+        return True
+    if "هو:" in t:
+        return True
+    if '""' in t:
+        return True
+    if re.search(r"\d{6,}", t):
+        return True
+    if re.search(r"</?[a-zA-Z][^>]{0,200}?>", t):
+        return True
+    if description_has_rejected_commerce_markers(t):
+        return True
+    return False
+
+
+def validate_export_body(text: str) -> bool:
+    """تحقق من الوصف النهائي المحفوظ (AI + مواصفات) قبل التصدير."""
+    if not str(text or "").strip():
+        return False
+    if len(text.strip()) < 40 or len(text) > 2500:
+        return False
+    if must_reject_description(text):
+        return False
+    for word in BAD_WORDS + BAD_AI_PHRASES:
+        if word in text:
+            return False
+    if re.search(r"هناك\s*\d+\s*زوار", text):
+        return False
+    return True
+
+
 def clean_text(value: str) -> str:
     if not value:
         return ""
@@ -204,7 +287,7 @@ def validate_description(description: str) -> bool:
     if not description:
         return False
 
-    if description_has_rejected_commerce_markers(description):
+    if must_reject_description(description):
         return False
 
     if len(description) < 180:

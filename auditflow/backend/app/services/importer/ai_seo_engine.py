@@ -315,7 +315,7 @@ def quality_check_bundle(
 def build_json_ld_product(row: Dict[str, Any], canonical_base: str) -> str:
     """Product schema.org JSON-LD (توليد تقني موثوق، ليس من نص حر للنموذج)."""
     name = _norm(row.get("product_title") or row.get("name", ""))
-    desc = _norm(row.get("meta_description") or row.get("description_short", ""))
+    desc = _norm(row.get("meta_description") or row.get("description_short", "") or row.get("description", ""))
     img = _norm(row.get("image_cloudinary") or "")
     sku = _norm(row.get("size", "")) + "-" + _norm(row.get("brand", "")) + "-" + _norm(row.get("model", ""))
     sku = re.sub(r"[^\w\-]+", "-", sku).strip("-")[:80] or "sku"
@@ -663,12 +663,24 @@ def generate_seo_bundle(
     return bundle
 
 
-def apply_bundle_to_row(row: Dict[str, Any], bundle: Dict[str, Any], canonical_base: str) -> None:
+def apply_bundle_to_row(
+    row: Dict[str, Any],
+    bundle: Dict[str, Any],
+    canonical_base: str,
+    *,
+    omit_body_copy: bool = False,
+) -> None:
     row["seo_title"] = bundle["seo_title"]
     row["meta_description"] = bundle["meta_description"]
-    row["description_short"] = bundle["description_short"]
-    row["description_long"] = bundle["description_long"]
-    row["description"] = bundle["description_export"]
+    if omit_body_copy:
+        # لا تُدمَج نصوص الوصف الطويل من حزمة SEO هنا — تُملأ لاحقًا من وصف AI + مواصفات منظمة فقط.
+        row["description_short"] = ""
+        row["description_long"] = ""
+        row["description"] = ""
+    else:
+        row["description_short"] = bundle["description_short"]
+        row["description_long"] = bundle["description_long"]
+        row["description"] = bundle["description_export"]
     row["keywords"] = bundle["seo_keywords"]
     row["seo_keywords"] = bundle["seo_keywords"]
     row["image_alt_text"] = bundle["image_alt_text"]
