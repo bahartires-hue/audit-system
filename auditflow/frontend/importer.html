@@ -124,8 +124,9 @@
                 id="maxPagesInp"
                 type="number"
                 min="1"
-                max="50"
+                max="500"
                 value="10"
+                title="حد أقصى 500 صفحة ترقيم للسحب"
                 class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2"
               />
               <select id="pageMode" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2">
@@ -262,7 +263,7 @@
         const brand = (brandInp.value || "").trim();
         const size = (sizeInp.value || "").trim();
         const limit = Math.min(500, Math.max(1, Number(limitInp.value || 100)));
-        const max_pages = Math.max(1, Number(maxPagesInp.value || 10));
+        const max_pages = Math.min(500, Math.max(1, Number(maxPagesInp.value || 10)));
         const multi_pages = pageMode.value === "multi";
         if (!site_url) {
           showToast("أدخل رابط صفحة الماركة أو البحث", "#ef4444");
@@ -361,7 +362,7 @@
         const category_url = (urlInp.value || "").trim();
         const site_key = (siteKeyInp.value || "").trim();
         const brand = (brandInp.value || "").trim();
-        const max_pages = Math.max(1, Number(maxPagesInp.value || 10));
+        const max_pages = Math.min(500, Math.max(1, Number(maxPagesInp.value || 10)));
         const limit = Math.min(500, Math.max(0, Number(limitInp.value || 500)));
         if (!category_url) {
           showToast("أدخل رابط الصفحة", "#ef4444");

@@ -25,7 +25,7 @@ class ImporterRequest(BaseModel):
     brand: str = ""
     size: str = ""
     limit: int = Field(default=500, ge=1, le=500)
-    max_pages: int = Field(default=10, ge=1, le=50)
+    max_pages: int = Field(default=10, ge=1, le=500)
     multi_pages: bool = False
 
 
@@ -33,7 +33,7 @@ class UniversalImporterRequest(BaseModel):
     site_key: str
     category_url: str
     brand: str = ""
-    max_pages: int = Field(default=10, ge=1, le=50)
+    max_pages: int = Field(default=10, ge=1, le=500)
     limit: int = Field(default=0, ge=0, le=500)
 
 
