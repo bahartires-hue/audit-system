@@ -13,7 +13,7 @@ from .ai_rewriter import rewrite_description_fallback
 from .cloudinary_uploader import upload_to_cloudinary
 from .csv_exporter import export_products_files
 from .image_downloader import download_image
-from .parser import normalize_brand_name, parse_tire_name
+from .parser import BRAND_TRANSLATIONS, normalize_brand_name, parse_tire_name
 from .scraper import scrape_products
 from .seo_optimizer import build_seo_fields
 
@@ -116,21 +116,52 @@ def _normalize_brand_strict(value: str) -> str:
 
 
 def _infer_brand_from_url(site_url: str) -> str:
+    """استخراج slug الماركة من مسار URL (مثل /brands/michelin) لأي ماركة وليس alpha/laufenn فقط."""
     path = unquote((urlparse(site_url).path or "").strip("/")).lower()
     if not path:
         return ""
     tokens = [t for t in re.split(r"[/\-_]+", path) if t]
+    skip_next = {"page", "search", "all", "list", "products", "items", "category", "tag", "id"}
+    brandish = {"brands", "brand", "العلامات", "ماركة", "brandname"}
+    for i, token in enumerate(tokens):
+        if token in brandish and i + 1 < len(tokens):
+            slug = tokens[i + 1]
+            if slug and slug not in skip_next:
+                return _normalize_brand_strict(slug.replace("-", " "))
     for token in tokens:
-        candidate = _normalize_brand_strict(token)
+        candidate = _normalize_brand_strict(token.replace("-", " "))
         if candidate in {"alpha", "laufenn"}:
             return candidate
     return ""
 
 
+def _display_brand_from_key(key: str) -> str:
+    if not key:
+        return ""
+    return normalize_brand_name(str(key).replace("-", " ").strip())
+
+
+def _name_signals_brand(item: Dict[str, Any], want_key: str) -> bool:
+    """هل اسم المنتج أو الرابط يوحي بالماركة المطلوبة (want_key بعد _normalize_brand_strict)."""
+    if not want_key:
+        return False
+    blob = f"{item.get('name', '')} {item.get('product_url', '')} {item.get('sku', '')}"
+    low = blob.lower()
+    compact = re.sub(r"\s+", "", low)
+    if want_key in compact or want_key in low:
+        return True
+    for ar, en in BRAND_TRANSLATIONS.items():
+        if _normalize_brand_strict(en) != want_key:
+            continue
+        if ar in blob or en.lower() in low:
+            return True
+    return False
+
+
 def filter_products(products: List[Dict[str, Any]], brand: str = "", size: str = "", limit: int = 20) -> List[Dict[str, Any]]:
     b_raw = (brand or "").strip()
     b_norm = normalize_brand_name(b_raw) if b_raw else ""
-    b = _norm_brand(b_norm or b_raw)
+    want_key = _normalize_brand_strict(b_norm or b_raw) if b_raw else ""
     sz = _norm_size(size)
     out: List[Dict[str, Any]] = []
     cap = limit if int(limit or 0) > 0 else 10**9
@@ -140,8 +171,14 @@ def filter_products(products: List[Dict[str, Any]], brand: str = "", size: str =
         parsed = item.get("_parsed") or {}
         p_brand = _normalize_brand_strict(parsed.get("brand", ""))
         p_size = _norm_size(parsed.get("size", ""))
-        if b and p_brand != _normalize_brand_strict(b):
-            continue
+        if want_key:
+            if p_brand != want_key:
+                if _name_signals_brand(item, want_key):
+                    pass
+                elif not p_brand:
+                    pass
+                else:
+                    continue
         if sz and not p_size:
             p_size = _extract_size_from_text(item.get("name", ""))
         if sz and sz not in p_size:
@@ -164,6 +201,7 @@ def run_import_pipeline(
     selected_brand = _normalize_brand_strict(brand) if brand else _infer_brand_from_url(site_url)
     if not selected_brand:
         raise ValueError("تعذر تحديد الماركة. أدخل brand أو استخدم رابط قسم ماركة واضح.")
+    listing_brand_display = _display_brand_from_key((brand or "").strip()) if (brand or "").strip() else _display_brand_from_key(selected_brand)
 
     _report_progress(progress_cb, 2, "جاري جلب صفحات المنتجات...")
     raw_items = scrape_products(site_url, multi_pages=multi_pages, max_pages=max_pages, limit=0)
@@ -236,18 +274,23 @@ def run_import_pipeline(
             continue
         if selected_brand:
             product_brand = _normalize_brand_strict(parsed.get("brand", "") or _infer_brand_from_name(raw_name))
-            if selected_brand and product_brand and product_brand != selected_brand:
-                log.info(
-                    "SKIPPED_WRONG_BRAND selected_brand=%s product_brand=%s name=%s",
-                    selected_brand,
-                    product_brand,
-                    raw_name,
-                )
-                continue
+            if product_brand and product_brand != selected_brand:
+                if _name_signals_brand(item, selected_brand):
+                    parsed["brand"] = listing_brand_display or parsed.get("brand", "")
+                else:
+                    log.info(
+                        "SKIPPED_WRONG_BRAND selected_brand=%s product_brand=%s name=%s",
+                        selected_brand,
+                        product_brand,
+                        raw_name,
+                    )
+                    continue
+            elif not product_brand:
+                parsed["brand"] = listing_brand_display or parsed.get("brand", "")
             log.info(
                 "ACCEPTED selected_brand=%s product_brand=%s name=%s",
                 selected_brand,
-                product_brand,
+                _normalize_brand_strict(parsed.get("brand", "")),
                 raw_name,
             )
         work_units.append({"item": item, "parsed": parsed, "seo": seo, "price": price, "raw_name": raw_name, "image_dir": image_dir_str})

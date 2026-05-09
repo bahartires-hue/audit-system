@@ -12,23 +12,72 @@
         } catch (e) {}
       })();
     </script>
-    <title>مستورد المنتجات | التطابق الأمثل</title>
-    <link rel="icon" href="/static/favicon.svg?v=15" type="image/svg+xml" />
+    <title>مستورد الإطارات | التطابق الأمثل</title>
+    <link rel="icon" href="/static/favicon.svg?v=16" type="image/svg+xml" />
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/static/tailwind.css?v=15" />
-    <link rel="stylesheet" href="/static/dark.css?v=15" />
+    <link rel="stylesheet" href="/static/tailwind.css?v=16" />
+    <link rel="stylesheet" href="/static/dark.css?v=16" />
     <style>
-      body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
-      .preview-img { width: 62px; height: 62px; object-fit: cover; border-radius: 10px; border: 1px solid rgba(148, 163, 184, 0.35); }
+      body {
+        font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      }
+      .preview-img {
+        width: 52px;
+        height: 52px;
+        object-fit: cover;
+        border-radius: 10px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+      }
+      .importer-subnav__link {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        padding: 0.65rem 0.85rem;
+        border-radius: 0.75rem;
+        font-size: 0.875rem;
+        font-weight: 800;
+        color: rgb(148 163 184);
+        transition: background 0.15s, color 0.15s;
+      }
+      .importer-subnav__link:hover {
+        color: rgb(226 232 240);
+        background: rgba(51, 65, 85, 0.5);
+      }
+      .importer-subnav__link--active {
+        color: rgb(255 255 255);
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.35), rgba(16, 185, 129, 0.2));
+        border: 1px solid rgba(59, 130, 246, 0.35);
+      }
+      .importer-log {
+        max-height: 220px;
+        overflow-y: auto;
+        font-size: 0.72rem;
+        line-height: 1.45;
+      }
+      .importer-log__line {
+        padding: 0.35rem 0;
+        border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+        color: rgb(148 163 184);
+      }
+      .importer-log__time {
+        font-variant-numeric: tabular-nums;
+        color: rgb(100 116 139);
+        margin-inline-end: 0.35rem;
+      }
+      .ring-progress {
+        --pct: 0;
+      }
     </style>
   </head>
-  <body class="erp-shell bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
+  <body class="erp-shell bg-slate-100 dark:bg-[#0a0e14] text-slate-900 dark:text-slate-100 min-h-screen">
     <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
 
     <aside class="erp-sidebar" aria-label="القائمة الرئيسية">
       <a href="/" class="erp-sidebar__brand app-brand flex-col items-center gap-1" aria-label="التطابق الأمثل OptimalMatch">
         <span class="app-brand__mark" style="width: 2.35rem; height: 2.35rem">
-          <svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 16l5 5 11-11" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          <svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 16l5 5 11-11" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
         </span>
       </a>
       <nav class="erp-sidebar__nav" aria-label="تنقل">
@@ -43,17 +92,26 @@
     </aside>
 
     <div class="erp-content min-h-0">
-      <header class="erp-topbar">
-        <button type="button" id="navMenuBtn" class="nav-toggle-btn nav-burger-only" aria-controls="mobileNavDrawer" aria-expanded="false" aria-label="فتح القائمة">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" /></svg>
+      <header class="erp-topbar border-b border-slate-200/80 dark:border-slate-800/80">
+        <button
+          type="button"
+          id="navMenuBtn"
+          class="nav-toggle-btn nav-burger-only"
+          aria-controls="mobileNavDrawer"
+          aria-expanded="false"
+          aria-label="فتح القائمة"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" />
+          </svg>
         </button>
         <div class="min-w-0 flex flex-col">
-          <span class="erp-topbar__title truncate">المستورد الذكي</span>
-          <span class="text-[0.65rem] font-extrabold text-slate-500 dark:text-slate-400 truncate">استيراد منتجات الإطارات + تحسين SEO</span>
+          <span class="erp-topbar__title truncate">مستورد الإطارات</span>
+          <span class="text-[0.65rem] font-extrabold text-slate-500 dark:text-slate-400 truncate">سحب وتحسين SEO وتصدير لسلة</span>
         </div>
         <div class="flex items-center gap-2 shrink-0 ms-auto">
           <div id="authArea"></div>
-          <button type="button" id="themeToggle" class="theme-toggle-btn"></button>
+          <button type="button" id="themeToggle" class="theme-toggle-btn" aria-label="الوضع الداكن"></button>
         </div>
       </header>
       <div id="mobileNavDrawer" class="mobile-nav-drawer md:hidden" role="navigation" aria-label="قائمة الجوال">
@@ -66,74 +124,298 @@
         <a href="/help" data-nav="help">مساعدة</a>
       </div>
 
-      <main class="erp-main">
-        <div class="max-w-7xl mx-auto w-full px-4 py-6 md:px-6 space-y-4">
-          <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-5">
-            <label class="block text-sm font-extrabold mb-2">رابط صفحة الماركة أو نتائج البحث</label>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-              <input id="siteUrl" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 md:col-span-2" placeholder="https://tireex.com/brands/michelin" />
-              <select id="siteKeyInp" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2">
-                <option value="tireex">tireex</option>
-                <option value="lumitires">lumitires</option>
-                <option value="kafaratplus">kafaratplus</option>
-                <option value="etar">etar</option>
-              </select>
-              <input id="brandInp" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" placeholder="اسم الماركة (مثال: Michelin)" />
-              <input id="sizeInp" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" placeholder="المقاس اختياري (مثال: 215/55R16)" />
-              <input id="limitInp" type="number" min="1" max="500" value="500" title="حد أقصى 500 منتج" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" />
-              <input id="maxPagesInp" type="number" min="1" max="50" value="10" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" />
-              <select id="pageMode" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2">
-                <option value="single">صفحة واحدة فقط</option>
-                <option value="multi">عدة صفحات</option>
-              </select>
-            </div>
-            <div id="scrapeProgressWrap" class="hidden mt-4">
-              <div class="flex justify-between items-center text-xs font-extrabold mb-1.5 gap-2">
-                <span id="scrapeProgressMsg" class="truncate text-slate-600 dark:text-slate-300">جاري السحب...</span>
-                <span id="scrapeProgressPct" class="shrink-0 text-emerald-600 dark:text-emerald-400 tabular-nums">1%</span>
-              </div>
-              <div class="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                <div
-                  id="scrapeProgressBar"
-                  class="h-full bg-gradient-to-l from-emerald-500 to-teal-400 transition-[width] duration-100 ease-linear rounded-full"
-                  style="width: 1%"
-                ></div>
-              </div>
-            </div>
-            <div class="mt-2">
-              <button id="scrapeBtn" class="btn-primary-analyze px-5 py-2 rounded-xl" type="button">سحب المنتجات</button>
-              <button id="scrapeUniversalBtn" class="px-5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 ms-2" type="button">سحب عام (متعدد المواقع)</button>
-              <button id="downloadCsvBtn" class="px-5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 ms-2" type="button">تحميل CSV</button>
-              <button id="downloadXlsxBtn" class="px-5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 ms-2" type="button">تحميل Excel</button>
-              <button id="downloadSallaBtn" class="px-5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 ms-2" type="button">تحميل Excel سلة</button>
-            </div>
-            <p id="metaInfo" class="text-xs mt-3 text-slate-500 dark:text-slate-400"></p>
-          </div>
+      <main class="erp-main overflow-x-hidden">
+        <div class="px-3 py-4 sm:px-5 md:px-6 pb-8">
+          <nav class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-4 flex items-center gap-1.5 flex-wrap" aria-label="مسار التنقل">
+            <a href="/" class="hover:text-blue-500 dark:hover:text-blue-400">الرئيسية</a>
+            <span aria-hidden="true">›</span>
+            <span class="text-slate-700 dark:text-slate-200">الاستيراد</span>
+          </nav>
 
-          <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-3 overflow-auto">
-            <table class="min-w-full text-sm">
-              <thead>
-                <tr class="border-b border-slate-200 dark:border-slate-700">
-                  <th class="p-2">الصورة</th>
-                  <th class="p-2">الاسم الأصلي</th>
-                  <th class="p-2">الاسم المحسن</th>
-                  <th class="p-2">الماركة</th>
-                  <th class="p-2">الموديل</th>
-                  <th class="p-2">المقاس</th>
-                  <th class="p-2">السعر</th>
-                  <th class="p-2">سنة الصنع</th>
-                  <th class="p-2">حالة الصورة</th>
-                  <th class="p-2">حالة SEO</th>
-                </tr>
-              </thead>
-              <tbody id="previewRows"></tbody>
-            </table>
+          <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,19rem)] gap-4 items-start">
+            <aside
+              class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0f1419] p-3 shadow-sm dark:shadow-none xl:sticky xl:top-4"
+              aria-label="قائمة المستورد"
+            >
+              <p class="text-[0.65rem] font-extrabold uppercase tracking-wider text-slate-400 px-2 mb-2">المستورد</p>
+              <nav class="space-y-1">
+                <a href="/importer" class="importer-subnav__link importer-subnav__link--active">
+                  <svg class="shrink-0 opacity-80" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 5v14M5 12h14" stroke-linecap="round" />
+                  </svg>
+                  مستورد جديد
+                </a>
+                <span class="importer-subnav__link opacity-50 cursor-not-allowed pointer-events-none" title="قريبًا">
+                  <svg class="shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 8v4l3 3M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" />
+                  </svg>
+                  عمليات سابقة
+                </span>
+                <span class="importer-subnav__link opacity-50 cursor-not-allowed pointer-events-none" title="قريبًا">
+                  <svg class="shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  المنتجات المستوردة
+                </span>
+                <a href="/reports" class="importer-subnav__link">
+                  <svg class="shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 17v-6M12 17V7M15 17v-3" stroke-linecap="round" />
+                  </svg>
+                  التقارير
+                </a>
+                <a href="/settings" class="importer-subnav__link">
+                  <svg class="shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke-linecap="round" />
+                  </svg>
+                  الإعدادات
+                </a>
+                <span class="importer-subnav__link opacity-50 cursor-not-allowed pointer-events-none" title="قريبًا">
+                  <svg class="shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke-linecap="round" />
+                    <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke-linecap="round" />
+                  </svg>
+                  قوالب التصدير
+                </span>
+                <button type="button" id="scrollToLogBtn" class="importer-subnav__link w-full text-start border-0 bg-transparent cursor-pointer">
+                  <svg class="shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 6h16M4 12h10M4 18h14" stroke-linecap="round" />
+                  </svg>
+                  سجل العمليات
+                </button>
+              </nav>
+              <a
+                href="/help"
+                class="mt-4 flex items-center justify-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 py-2.5 text-xs font-extrabold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800"
+              >
+                الدعم الفني
+              </a>
+            </aside>
+
+            <div class="min-w-0 space-y-4">
+              <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0f1419] p-5 shadow-sm dark:shadow-none">
+                <h1 class="text-xl md:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">مستورد الإطارات</h1>
+                <p class="text-sm text-slate-500 dark:text-slate-400 mt-1 mb-5">استيراد المنتجات من مواقع الإطارات وتحسين البيانات للنشر على سلة.</p>
+
+                <div class="space-y-3">
+                  <div>
+                    <label class="block text-xs font-extrabold text-slate-600 dark:text-slate-300 mb-1.5">رابط صفحة الماركة أو البحث</label>
+                    <input
+                      id="siteUrl"
+                      class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/80 px-3 py-2.5 text-sm"
+                      placeholder="https://example.com/brand/alpha-tires"
+                    />
+                  </div>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-xs font-extrabold text-slate-600 dark:text-slate-300 mb-1.5">الماركة</label>
+                      <input
+                        id="brandInp"
+                        class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/80 px-3 py-2.5 text-sm"
+                        placeholder="مثال: Alpha"
+                      />
+                    </div>
+                    <div>
+                      <label class="block text-xs font-extrabold text-slate-600 dark:text-slate-300 mb-1.5">المقاس (اختياري)</label>
+                      <input
+                        id="sizeInp"
+                        class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/80 px-3 py-2.5 text-sm"
+                        placeholder="215/55R16"
+                      />
+                    </div>
+                    <div>
+                      <label class="block text-xs font-extrabold text-slate-600 dark:text-slate-300 mb-1.5">عدد الصفحات</label>
+                      <input
+                        id="maxPagesInp"
+                        type="number"
+                        min="1"
+                        max="50"
+                        value="10"
+                        class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/80 px-3 py-2.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label class="block text-xs font-extrabold text-slate-600 dark:text-slate-300 mb-1.5">أقصى عدد منتجات</label>
+                      <input
+                        id="limitInp"
+                        type="number"
+                        min="1"
+                        max="500"
+                        value="100"
+                        title="حد أقصى 500"
+                        class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/80 px-3 py-2.5 text-sm"
+                      />
+                    </div>
+                    <div class="sm:col-span-2">
+                      <label class="block text-xs font-extrabold text-slate-600 dark:text-slate-300 mb-1.5">وضع الصفحات</label>
+                      <select id="pageMode" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/80 px-3 py-2.5 text-sm">
+                        <option value="single">صفحة واحدة فقط</option>
+                        <option value="multi" selected>كل الصفحات المتاحة (متعدد)</option>
+                      </select>
+                    </div>
+                    <div class="sm:col-span-2">
+                      <label class="block text-xs font-extrabold text-slate-600 dark:text-slate-300 mb-1.5">مفتاح الموقع (السحب العام)</label>
+                      <select id="siteKeyInp" class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/80 px-3 py-2.5 text-sm">
+                        <option value="tireex">tireex</option>
+                        <option value="lumitires">lumitires</option>
+                        <option value="kafaratplus">kafaratplus</option>
+                        <option value="etar">etar</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <fieldset class="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/40 p-4">
+                    <legend class="text-xs font-extrabold text-slate-500 dark:text-slate-400 px-1">خيارات الاستيراد</legend>
+                    <div class="flex flex-wrap gap-4 mt-1">
+                      <label class="inline-flex items-center gap-2 text-sm font-bold cursor-pointer">
+                        <input type="checkbox" id="optImages" checked class="rounded border-slate-300 text-blue-600" />
+                        استيراد الصور
+                      </label>
+                      <label class="inline-flex items-center gap-2 text-sm font-bold cursor-pointer">
+                        <input type="checkbox" id="optDesc" checked class="rounded border-slate-300 text-blue-600" />
+                        استيراد الوصف
+                      </label>
+                      <label class="inline-flex items-center gap-2 text-sm font-bold cursor-pointer">
+                        <input type="checkbox" id="optPrices" checked class="rounded border-slate-300 text-blue-600" />
+                        استيراد الأسعار
+                      </label>
+                    </div>
+                    <p class="text-[0.65rem] text-slate-400 mt-2 leading-relaxed">المسار الرئيسي (Tireex) يطبّق الصور والأسعار والوصف تلقائيًا؛ الخيارات للتوافق مع التوسع لاحقًا.</p>
+                  </fieldset>
+                </div>
+
+                <div class="mt-6 flex flex-col sm:flex-row flex-wrap gap-3">
+                  <button id="scrapeBtn" type="button" class="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-extrabold px-8 py-3.5 text-sm shadow-lg shadow-blue-600/25 transition-colors">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                      <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    بدء الاستيراد
+                  </button>
+                  <button
+                    id="scrapeUniversalBtn"
+                    type="button"
+                    class="inline-flex items-center justify-center rounded-xl border-2 border-slate-200 dark:border-slate-600 font-extrabold px-5 py-3 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/80"
+                  >
+                    سحب عام (متعدد المواقع)
+                  </button>
+                </div>
+                <p id="metaInfo" class="text-xs mt-4 text-slate-500 dark:text-slate-400 leading-relaxed"></p>
+              </div>
+
+              <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0f1419] p-4 shadow-sm dark:shadow-none">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                  <h2 class="text-base font-extrabold text-slate-900 dark:text-white">معاينة المنتجات المستخرجة</h2>
+                  <div class="flex flex-wrap gap-2">
+                    <button
+                      id="downloadSallaBtn"
+                      type="button"
+                      class="rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-extrabold px-4 py-2"
+                    >
+                      تصدير لسلة
+                    </button>
+                    <button id="downloadXlsxBtn" type="button" class="rounded-xl border border-blue-500/50 text-blue-600 dark:text-blue-400 text-xs font-extrabold px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-950/40">
+                      تصدير Excel
+                    </button>
+                    <button id="downloadCsvBtn" type="button" class="rounded-xl border border-blue-500/50 text-blue-600 dark:text-blue-400 text-xs font-extrabold px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-950/40">
+                      تصدير CSV
+                    </button>
+                  </div>
+                </div>
+                <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                  <table class="min-w-full text-sm">
+                    <thead>
+                      <tr class="bg-slate-50 dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 text-xs font-extrabold text-slate-500 dark:text-slate-400">
+                        <th class="p-2.5 text-start">الصورة</th>
+                        <th class="p-2.5 text-start">اسم المنتج</th>
+                        <th class="p-2.5 text-start">الماركة</th>
+                        <th class="p-2.5 text-start">المقاس</th>
+                        <th class="p-2.5 text-start">السعر</th>
+                        <th class="p-2.5 text-start">الحالة</th>
+                        <th class="p-2.5 text-start">إجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody id="previewRows"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <aside
+              id="statusPanel"
+              class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0f1419] p-5 shadow-sm dark:shadow-none xl:sticky xl:top-4 space-y-5"
+              aria-label="حالة الاستيراد"
+            >
+              <div>
+                <h3 class="text-sm font-extrabold text-slate-700 dark:text-slate-200 mb-4 text-center">حالة الاستيراد</h3>
+                <div class="flex justify-center">
+                  <div class="relative ring-progress w-[140px] h-[140px]" id="ringWrap" style="--pct: 0">
+                    <svg class="w-full h-full -rotate-90" viewBox="0 0 100 100" aria-hidden="true">
+                      <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" class="text-slate-200 dark:text-slate-800" stroke-width="10" />
+                      <circle
+                        id="progressRing"
+                        cx="50"
+                        cy="50"
+                        r="42"
+                        fill="none"
+                        stroke="url(#importerGrad)"
+                        stroke-width="10"
+                        stroke-linecap="round"
+                        stroke-dasharray="263.9"
+                        stroke-dashoffset="263.9"
+                        class="transition-[stroke-dashoffset] duration-200 ease-out"
+                      />
+                      <defs>
+                        <linearGradient id="importerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                          <stop offset="0%" stop-color="#10b981" />
+                          <stop offset="100%" stop-color="#3b82f6" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                    <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <span id="ringPct" class="text-2xl font-black text-slate-900 dark:text-white tabular-nums">0%</span>
+                      <span id="ringSub" class="text-[0.65rem] font-bold text-slate-500 dark:text-slate-400 mt-0.5">في الانتظار</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center justify-center gap-2 mt-4 text-slate-600 dark:text-slate-300">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="opacity-70">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 2" stroke-linecap="round" />
+                  </svg>
+                  <span id="scrapeTimer" class="text-sm font-mono font-bold tabular-nums tracking-wide">00:00:00</span>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-2">
+                <div class="rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 p-3 text-center">
+                  <p class="text-[0.65rem] font-extrabold text-slate-500 dark:text-slate-400 mb-1">الصفحات</p>
+                  <p id="metricPages" class="text-lg font-black text-slate-800 dark:text-white tabular-nums">—</p>
+                </div>
+                <div class="rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 p-3 text-center">
+                  <p class="text-[0.65rem] font-extrabold text-slate-500 dark:text-slate-400 mb-1">مستخرج</p>
+                  <p id="metricRaw" class="text-lg font-black text-slate-800 dark:text-white tabular-nums">—</p>
+                </div>
+                <div class="rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 p-3 text-center">
+                  <p class="text-[0.65rem] font-extrabold text-slate-500 dark:text-slate-400 mb-1">مستورد</p>
+                  <p id="metricImported" class="text-lg font-black text-emerald-600 dark:text-emerald-400 tabular-nums">—</p>
+                </div>
+                <div class="rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 p-3 text-center">
+                  <p class="text-[0.65rem] font-extrabold text-slate-500 dark:text-slate-400 mb-1">فشل / مراجعة</p>
+                  <p id="metricFailed" class="text-lg font-black text-rose-500 dark:text-rose-400 tabular-nums">—</p>
+                </div>
+              </div>
+
+              <div id="logSection">
+                <h3 class="text-xs font-extrabold text-slate-500 dark:text-slate-400 mb-2">سجل العمليات</h3>
+                <div id="opsLog" class="importer-log rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 p-2 px-3" role="log" aria-live="polite"></div>
+              </div>
+            </aside>
           </div>
         </div>
       </main>
     </div>
 
-    <script src="/static/app.js?v=15"></script>
+    <script src="/static/app.js?v=16"></script>
     <script>
       initAuthUI();
       const rows = document.getElementById("previewRows");
@@ -150,45 +432,164 @@
       const limitInp = document.getElementById("limitInp");
       const maxPagesInp = document.getElementById("maxPagesInp");
       const pageMode = document.getElementById("pageMode");
-      const scrapeProgressWrap = document.getElementById("scrapeProgressWrap");
-      const scrapeProgressMsg = document.getElementById("scrapeProgressMsg");
-      const scrapeProgressPct = document.getElementById("scrapeProgressPct");
-      const scrapeProgressBar = document.getElementById("scrapeProgressBar");
+      const ringPct = document.getElementById("ringPct");
+      const ringSub = document.getElementById("ringSub");
+      const progressRing = document.getElementById("progressRing");
+      const scrapeTimer = document.getElementById("scrapeTimer");
+      const opsLog = document.getElementById("opsLog");
+      const metricPages = document.getElementById("metricPages");
+      const metricRaw = document.getElementById("metricRaw");
+      const metricImported = document.getElementById("metricImported");
+      const metricFailed = document.getElementById("metricFailed");
+      const scrollToLogBtn = document.getElementById("scrollToLogBtn");
+      const logSection = document.getElementById("logSection");
 
-      function setScrapeProgress(visible, pct, msg) {
-        scrapeProgressWrap.classList.toggle("hidden", !visible);
-        const p = Math.max(1, Math.min(100, Number(pct) || 1));
-        scrapeProgressPct.textContent = p + "%";
-        scrapeProgressBar.style.width = p + "%";
-        if (msg) scrapeProgressMsg.textContent = msg;
+      const RING_LEN = 263.9;
+      let timerInterval = null;
+      let timerStartedAt = 0;
+      let lastLoggedMessage = "";
+      let lastImgProgressLogged = "";
+
+      function pad2(n) {
+        return String(n).padStart(2, "0");
+      }
+
+      function formatElapsed(ms) {
+        const s = Math.floor(ms / 1000);
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        return pad2(h) + ":" + pad2(m) + ":" + pad2(sec);
+      }
+
+      function startScrapeTimer() {
+        stopScrapeTimer();
+        timerStartedAt = Date.now();
+        scrapeTimer.textContent = "00:00:00";
+        timerInterval = setInterval(function () {
+          scrapeTimer.textContent = formatElapsed(Date.now() - timerStartedAt);
+        }, 1000);
+      }
+
+      function stopScrapeTimer() {
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+      }
+
+      function timeNow() {
+        const d = new Date();
+        return pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds());
+      }
+
+      function appendLog(text) {
+        const line = document.createElement("div");
+        line.className = "importer-log__line";
+        line.innerHTML = '<span class="importer-log__time">' + esc(timeNow()) + "</span>" + esc(text);
+        opsLog.appendChild(line);
+        opsLog.scrollTop = opsLog.scrollHeight;
+      }
+
+      function resetLog() {
+        opsLog.innerHTML = "";
+        lastLoggedMessage = "";
+        lastImgProgressLogged = "";
+      }
+
+      function setRingProgress(pct, subLabel, logMessage) {
+        const p = Math.max(0, Math.min(100, Number(pct) || 0));
+        ringPct.textContent = Math.round(p) + "%";
+        ringSub.textContent = subLabel || "";
+        progressRing.style.strokeDashoffset = String(RING_LEN * (1 - p / 100));
+        if (logMessage && logMessage !== lastLoggedMessage) {
+          lastLoggedMessage = logMessage;
+          appendLog(logMessage);
+        }
+      }
+
+      function setMetricsIdle() {
+        metricPages.textContent = "—";
+        metricRaw.textContent = "—";
+        metricImported.textContent = "—";
+        metricFailed.textContent = "—";
+      }
+
+      function parseExtractedFromMessage(msg) {
+        const m = /تم جلب\s+(\d+)/.exec(msg || "");
+        return m ? m[1] : null;
+      }
+
+      function parseImagesFromMessage(msg) {
+        const m = /صور\s+(\d+)\/(\d+)/.exec(msg || "");
+        return m ? m[1] + "/" + m[2] : null;
       }
 
       function esc(s) {
-        return String(s || "").replace(/[&<>"']/g, (m) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]));
+        return String(s || "").replace(/[&<>"']/g, function (m) {
+          return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m];
+        });
       }
 
       function render(items) {
         rows.innerHTML = "";
-        items.forEach((x) => {
+        items.forEach(function (x) {
+          const st = String(x.status || "").trim();
+          const ready = st === "جاهز";
+          const badgeClass = ready
+            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30"
+            : "bg-amber-500/15 text-amber-800 dark:text-amber-400 border border-amber-500/30";
+          const badgeText = ready ? "جاهز للاستيراد" : esc(st || "مراجعة");
           const tr = document.createElement("tr");
-          tr.className = "border-b border-slate-100 dark:border-slate-800";
-          tr.innerHTML = `
-            <td class="p-2">${x.image_preview ? `<img class="preview-img" src="${esc(x.image_preview)}" />` : ""}</td>
-            <td class="p-2">${esc(x.name)}</td>
-            <td class="p-2">${esc(x.product_title)}</td>
-            <td class="p-2">${esc(x.brand)}</td>
-            <td class="p-2">${esc(x.model)}</td>
-            <td class="p-2">${esc(x.size)}</td>
-            <td class="p-2">${esc(x.price)}</td>
-            <td class="p-2">${esc(x.year)}</td>
-            <td class="p-2">${esc(x.image_status || "")}</td>
-            <td class="p-2">${esc(x.seo_status || "")}</td>
-          `;
+          tr.className = "border-b border-slate-100 dark:border-slate-800/80 hover:bg-slate-50/80 dark:hover:bg-slate-900/40";
+          const purl = esc(x.product_url || "");
+          const actions =
+            purl !== ""
+              ? '<a href="' + purl + '" target="_blank" rel="noopener" class="text-blue-600 dark:text-blue-400 font-bold text-xs hover:underline">عرض</a>'
+              : '<span class="text-slate-400 text-xs">—</span>';
+          tr.innerHTML =
+            '<td class="p-2.5">' +
+            (x.image_preview ? '<img class="preview-img" src="' + esc(x.image_preview) + '" alt="" />' : "") +
+            "</td>" +
+            '<td class="p-2.5 max-w-[200px]"><div class="font-bold text-slate-800 dark:text-slate-100">' +
+            esc(x.product_title || x.name) +
+            '</div><div class="text-[0.65rem] text-slate-500 mt-0.5 truncate">' +
+            esc(x.name) +
+            "</div></td>" +
+            '<td class="p-2.5 font-semibold">' +
+            esc(x.brand) +
+            "</td>" +
+            '<td class="p-2.5 tabular-nums">' +
+            esc(x.size) +
+            "</td>" +
+            '<td class="p-2.5 tabular-nums font-bold">' +
+            esc(x.price) +
+            "</td>" +
+            '<td class="p-2.5"><span class="inline-flex items-center rounded-lg px-2 py-1 text-[0.65rem] font-extrabold ' +
+            badgeClass +
+            '">' +
+            badgeText +
+            "</span></td>" +
+            '<td class="p-2.5 whitespace-nowrap">' +
+            actions +
+            "</td>";
           rows.appendChild(tr);
         });
       }
 
-      btn.addEventListener("click", async () => {
+      function countReview(items) {
+        let n = 0;
+        items.forEach(function (x) {
+          if (String(x.status || "").trim() !== "جاهز") n++;
+        });
+        return n;
+      }
+
+      scrollToLogBtn.addEventListener("click", function () {
+        logSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+
+      btn.addEventListener("click", async function () {
         const site_url = (urlInp.value || "").trim();
         const brand = (brandInp.value || "").trim();
         const size = (sizeInp.value || "").trim();
@@ -199,8 +600,16 @@
           showToast("أدخل رابط صفحة الماركة أو البحث", "#ef4444");
           return;
         }
-        setLoading(btn, true, "جارٍ السحب...");
-        setScrapeProgress(true, 1, "بدء السحب...");
+        btn.disabled = true;
+        btn.classList.add("opacity-75", "pointer-events-none");
+        resetLog();
+        appendLog("بدء مهمة الاستيراد.");
+        metricPages.textContent = String(max_pages);
+        metricRaw.textContent = "…";
+        metricImported.textContent = "…";
+        metricFailed.textContent = "…";
+        setRingProgress(1, "جاري الاستيراد...", "بدء السحب من المصدر.");
+        startScrapeTimer();
         let pollTimer = null;
         try {
           syncCsrfFromCookie();
@@ -218,12 +627,12 @@
 
           const pollMs = 200;
           let settled = false;
-          const data = await new Promise((resolve, reject) => {
-            const stop = () => {
+          const data = await new Promise(function (resolve, reject) {
+            const stop = function () {
               if (pollTimer) clearInterval(pollTimer);
               pollTimer = null;
             };
-            const tick = async () => {
+            const tick = async function () {
               if (settled) return;
               try {
                 const st = await fetch("/importer/scrape/job/" + encodeURIComponent(jobId), {
@@ -237,12 +646,20 @@
                   return;
                 }
                 const j = await st.json();
-                const prog = Number(j.progress) || 1;
-                setScrapeProgress(true, prog, j.message || "");
+                const prog = Number(j.progress) || 0;
+                const msg = j.message || "";
+                const extracted = parseExtractedFromMessage(msg);
+                if (extracted) metricRaw.textContent = extracted;
+                const imgProg = parseImagesFromMessage(msg);
+                if (imgProg && imgProg !== lastImgProgressLogged) {
+                  lastImgProgressLogged = imgProg;
+                  appendLog("تقدم الصور: " + imgProg);
+                }
+                setRingProgress(prog, prog >= 100 ? "تم" : "جاري الاستيراد...", msg);
                 if (j.status === "error") {
                   settled = true;
                   stop();
-                  reject(new Error(j.error || j.message || "فشل السحب"));
+                  reject(new Error(j.error || j.message || "فشل الاستيراد"));
                   return;
                 }
                 if (j.done && j.status === "done") {
@@ -262,23 +679,38 @@
             pollTimer = setInterval(tick, pollMs);
             tick();
           });
-          setScrapeProgress(true, 100, "تم");
-          render(data.items || []);
-          metaInfo.textContent = `تم جلب ${data.count || 0} منتج - CSV: ${data.csv_path || ""} - XLSX: ${data.xlsx_path || ""} - Salla XLSX: ${data.salla_xlsx_path || ""}`;
-          showToast("تم سحب المنتجات بنجاح", "#10b981");
+          setRingProgress(100, "تم", "اكتمل الاستيراد بنجاح.");
+          const items = data.items || [];
+          render(items);
+          const cnt = data.count || items.length;
+          metricImported.textContent = String(cnt);
+          metricFailed.textContent = String(countReview(items));
+          if (metricRaw.textContent === "…" || metricRaw.textContent === "—") metricRaw.textContent = String(cnt);
+          metaInfo.textContent =
+            "تم جلب " + cnt + " منتج — CSV: " + (data.csv_path || "") + " — Excel: " + (data.xlsx_path || "") + " — سلة: " + (data.salla_xlsx_path || "");
+          showToast("تم الاستيراد بنجاح", "#10b981");
         } catch (e) {
           if (pollTimer) {
             clearInterval(pollTimer);
             pollTimer = null;
           }
-          showToast(e.message || "فشل سحب المنتجات", "#ef4444");
+          setRingProgress(0, "توقف بخطأ", e.message || "فشل الاستيراد");
+          appendLog("خطأ: " + (e.message || "فشل غير معروف"));
+          showToast(e.message || "فشل الاستيراد", "#ef4444");
         } finally {
-          setLoading(btn, false, "سحب المنتجات");
-          setTimeout(() => setScrapeProgress(false, 1, ""), 600);
+          stopScrapeTimer();
+          btn.disabled = false;
+          btn.classList.remove("opacity-75", "pointer-events-none");
+          setTimeout(function () {
+            ringSub.textContent = "في الانتظار";
+            if (!timerInterval) scrapeTimer.textContent = "00:00:00";
+            progressRing.style.strokeDashoffset = String(RING_LEN);
+            ringPct.textContent = "0%";
+          }, 1800);
         }
       });
 
-      scrapeUniversalBtn.addEventListener("click", async () => {
+      scrapeUniversalBtn.addEventListener("click", async function () {
         const category_url = (urlInp.value || "").trim();
         const site_key = (siteKeyInp.value || "").trim();
         const brand = (brandInp.value || "").trim();
@@ -288,7 +720,14 @@
           showToast("أدخل رابط الصفحة", "#ef4444");
           return;
         }
-        setLoading(scrapeUniversalBtn, true, "جارٍ السحب العام...");
+        scrapeUniversalBtn.disabled = true;
+        scrapeUniversalBtn.classList.add("opacity-75", "pointer-events-none");
+        resetLog();
+        appendLog("بدء السحب العام (متعدد المواقع).");
+        metricPages.textContent = String(max_pages);
+        metricRaw.textContent = "…";
+        startScrapeTimer();
+        setRingProgress(5, "سحب عام...", "جاري الاتصال بالخادم.");
         try {
           syncCsrfFromCookie();
           const csrf = localStorage.getItem("csrf_token") || "";
@@ -300,27 +739,45 @@
           });
           if (!res.ok) throw new Error(await readErrorMessage(res));
           const data = await res.json();
-          render(data.items || []);
-          metaInfo.textContent = `تم السحب العام: ${data.count || 0} منتج - CSV: ${data.csv_path || ""}`;
+          const items = data.items || [];
+          render(items);
+          const cnt = data.count || items.length;
+          setRingProgress(100, "تم", "اكتمل السحب العام.");
+          appendLog("تم جلب " + cnt + " منتج.");
+          metricRaw.textContent = String(cnt);
+          metricImported.textContent = String(cnt);
+          metricFailed.textContent = String(countReview(items));
+          metaInfo.textContent = "تم السحب العام: " + cnt + " منتج — CSV: " + (data.csv_path || "");
           showToast("تم السحب العام بنجاح", "#10b981");
         } catch (e) {
+          setRingProgress(0, "توقف بخطأ", e.message || "فشل");
+          appendLog("خطأ: " + (e.message || ""));
           showToast(e.message || "فشل السحب العام", "#ef4444");
         } finally {
-          setLoading(scrapeUniversalBtn, false, "سحب عام (متعدد المواقع)");
+          stopScrapeTimer();
+          scrapeUniversalBtn.disabled = false;
+          scrapeUniversalBtn.classList.remove("opacity-75", "pointer-events-none");
+          setTimeout(function () {
+            ringSub.textContent = "في الانتظار";
+            scrapeTimer.textContent = "00:00:00";
+            progressRing.style.strokeDashoffset = String(RING_LEN);
+            ringPct.textContent = "0%";
+          }, 1800);
         }
       });
 
-      csvBtn.addEventListener("click", () => {
+      csvBtn.addEventListener("click", function () {
         window.location.href = "/importer/csv";
       });
-
-      xlsxBtn.addEventListener("click", () => {
+      xlsxBtn.addEventListener("click", function () {
         window.location.href = "/importer/xlsx";
       });
-
-      sallaBtn.addEventListener("click", () => {
+      sallaBtn.addEventListener("click", function () {
         window.location.href = "/importer/salla-xlsx";
       });
+
+      setMetricsIdle();
+      setRingProgress(0, "في الانتظار", "");
     </script>
   </body>
 </html>
