@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 from openpyxl import load_workbook
@@ -54,6 +55,64 @@ _DEFAULT_SALLA_COLUMNS = [
 def safe_set(row: Dict[str, Any], columns: List[str], col_name: str, value: Any) -> None:
     if col_name in columns:
         row[col_name] = value if value is not None else ""
+
+
+def _resolve_col(columns: List[str], variants: tuple[str, ...]) -> Optional[str]:
+    """أول عمود موجود في القالب يطابق أحد المتغيرات (مع تجاهل فراغات زائدة)."""
+    colset = {c for c in columns if c}
+    for v in variants:
+        if v in colset:
+            return v
+    stripped = {c.strip(): c for c in columns if c}
+    for v in variants:
+        vs = v.strip()
+        if vs in stripped:
+            return stripped[vs]
+    return None
+
+
+def _strip_html_simple(value: Any) -> str:
+    """إزالة وسوم HTML فقط؛ يُبقى المقاس (مثل 185/65R15) كما هو."""
+    s = str(value or "")
+    s = re.sub(r"<[^>]*>", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _salla_plain_text(value: Any, max_len: int = 220) -> str:
+    """
+    نص آمن لحقول سلة التي ترفض أحرفًا خاصة (مثل وصف الصورة): عربي/لاتيني وأرقام ومسافة وشرطة فقط.
+    """
+    s = str(value or "")
+    s = re.sub(r"<[^>]*>", " ", s)
+    for ent, ch in (
+        ("&nbsp;", " "),
+        ("&amp;", " "),
+        ("&quot;", " "),
+        ("&#x27;", ""),
+        ("&apos;", ""),
+    ):
+        s = s.replace(ent, ch)
+    s = re.sub(r"[\r\n\t]+", " ", s)
+    out: List[str] = []
+    for ch in s:
+        o = ord(ch)
+        if ch in "- " or ch.isdigit():
+            out.append(ch)
+        elif "A" <= ch <= "Z" or "a" <= ch <= "z":
+            out.append(ch)
+        elif 0x0600 <= o <= 0x06FF:
+            out.append(ch)
+    result = re.sub(r"\s+", " ", "".join(out)).strip()
+    if len(result) > max_len:
+        cut = result[:max_len]
+        result = cut.rsplit(" ", 1)[0].strip() if " " in cut else cut.strip()
+    return result
+
+
+def _set_resolved(row: Dict[str, Any], columns: List[str], variants: tuple[str, ...], value: Any) -> None:
+    cn = _resolve_col(columns, variants)
+    if cn:
+        row[cn] = value if value is not None else ""
 
 
 def build_public_image_url(filename: str) -> str:
@@ -117,10 +176,11 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
             continue
         if price_num <= 0:
             continue
-        title = str(p.get("product_title", "")).strip()
         brand = str(p.get("brand", "")).strip()
         size = str(p.get("size", "")).strip()
         price = str(p.get("price", "")).strip()
+        title = _strip_html_simple(p.get("product_title", "")) or _strip_html_simple(p.get("name", ""))
+        title = title.strip() or f"{brand} {size}".strip()
         row = {col: "" for col in columns}
         promo_bits = []
         if p.get("year"):
@@ -130,16 +190,17 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
         if not image_value:
             promo_bits.append("needs_image")
         promo = " - ".join(promo_bits)
-        safe_set(row, columns, "النوع ", "منتج")
-        safe_set(row, columns, "النوع", "منتج")
-        safe_set(row, columns, "أسم المنتج", title)
+        _set_resolved(row, columns, ("النوع ", "النوع"), "منتج")
+        _set_resolved(row, columns, ("أسم المنتج", "اسم المنتج"), title)
         safe_set(row, columns, "تصنيف المنتج", "قسم الإطارات")
         safe_set(row, columns, "صورة المنتج", image_value)
-        safe_set(row, columns, "وصف صورة المنتج", p.get("image_alt_text", ""))
-        safe_set(row, columns, "نوع المنتج", "منتج جاهز")
+        alt_src = p.get("image_alt_text") or f"كفر {brand} {size}"
+        alt_plain = _salla_plain_text(alt_src) or _salla_plain_text(f"كفر {brand} {size}")
+        _set_resolved(row, columns, ("وصف صورة المنتج",), alt_plain)
+        _set_resolved(row, columns, ("نوع المنتج",), "منتج جاهز")
         safe_set(row, columns, "سعر المنتج", price)
         safe_set(row, columns, "الوصف", p.get("description", ""))
-        safe_set(row, columns, "هل يتطلب شحن؟", "نعم")
+        _set_resolved(row, columns, ("هل يتطلب شحن؟", "يتطلب شحن", "هل يتطلب شحن"), "نعم")
         safe_set(row, columns, "الوزن", 25)
         safe_set(row, columns, "وحدة الوزن", "kg")
         safe_set(row, columns, "الماركة", brand)
