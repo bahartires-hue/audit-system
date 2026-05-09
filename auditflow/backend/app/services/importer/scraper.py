@@ -56,7 +56,7 @@ def _extract_generic_product_links(listing_url: str, soup: BeautifulSoup, limit:
             continue
         seen.add(u)
         out.append(u)
-        if len(out) >= limit * 3:
+        if int(limit or 0) > 0 and len(out) >= limit * 3:
             break
     return out
 
@@ -123,7 +123,7 @@ def scrape_generic(site_url: str, *, multi_pages: bool = False, max_pages: int =
         for u in _extract_generic_product_links(current, doc, limit):
             if u not in links:
                 links.append(u)
-        if len(links) >= limit * 2 or not multi_pages:
+        if (int(limit or 0) > 0 and len(links) >= limit * 2) or not multi_pages:
             break
         nxt = doc.select_one("a[rel='next'], a.next, .pagination a.next, .page-numbers.next")
         if not nxt or not nxt.get("href"):
@@ -134,7 +134,7 @@ def scrape_generic(site_url: str, *, multi_pages: bool = False, max_pages: int =
         current = next_url
     products: List[Dict[str, Any]] = []
     for u in links:
-        if len(products) >= limit:
+        if int(limit or 0) > 0 and len(products) >= limit:
             break
         try:
             p = _extract_generic_product(u)
@@ -154,9 +154,10 @@ def scrape_products(site_url: str, *, multi_pages: bool = False, max_pages: int 
         if primary:
             return primary
         log.warning("tireex primary scraper returned 0; trying multi-page fallback")
-        secondary = scrape_tireex(site_url, multi_pages=True, max_pages=max(5, max_pages), limit=max(limit * 2, 40))
+        expanded_limit = max(limit * 2, 40) if int(limit or 0) > 0 else 0
+        secondary = scrape_tireex(site_url, multi_pages=True, max_pages=max(5, max_pages), limit=expanded_limit)
         if secondary:
-            return secondary[:limit]
+            return secondary[:limit] if int(limit or 0) > 0 else secondary
         log.warning("tireex multi-page scraper returned 0; skipping generic fallback for tireex")
         return []
     # fallback عام لأي موقع شبيه بمتاجر المنتجات.
@@ -165,6 +166,8 @@ def scrape_products(site_url: str, *, multi_pages: bool = False, max_pages: int 
         return primary_generic
     if not multi_pages:
         log.warning("generic primary scraper returned 0; retrying with multi-pages")
-        return scrape_generic(site_url, multi_pages=True, max_pages=max(5, max_pages), limit=max(limit * 2, 40))[:limit]
+        expanded_limit = max(limit * 2, 40) if int(limit or 0) > 0 else 0
+        retry = scrape_generic(site_url, multi_pages=True, max_pages=max(5, max_pages), limit=expanded_limit)
+        return retry[:limit] if int(limit or 0) > 0 else retry
     return primary_generic
 

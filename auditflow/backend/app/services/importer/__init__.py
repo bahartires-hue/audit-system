@@ -88,19 +88,18 @@ def filter_products(products: List[Dict[str, Any]], brand: str = "", size: str =
     b = _norm_brand(b_norm or b_raw)
     sz = _norm_size(size)
     out: List[Dict[str, Any]] = []
+    cap = limit if int(limit or 0) > 0 else 10**9
     for item in products:
-        if len(out) >= max(1, limit):
+        if len(out) >= cap:
             break
         parsed = item.get("_parsed") or {}
-        name = _norm_brand(item.get("name", ""))
-        url = _norm_brand(item.get("product_url", ""))
-        p_brand = _norm_brand(parsed.get("brand", ""))
+        p_brand = _normalize_brand_strict(parsed.get("brand", ""))
         p_size = _norm_size(parsed.get("size", ""))
-        if b and not (b in name or b in url or b == p_brand):
+        if b and p_brand != _normalize_brand_strict(b):
             continue
         if sz and not p_size:
             p_size = _extract_size_from_text(item.get("name", ""))
-        if sz and sz != p_size:
+        if sz and sz not in p_size:
             continue
         out.append(item)
     return out
@@ -113,10 +112,10 @@ def run_import_pipeline(
     brand: str = "",
     size: str = "",
     limit: int = 20,
-    max_pages: int = 5,
-    multi_pages: bool = False,
+    max_pages: int = 10,
+    multi_pages: bool = True,
 ) -> Dict[str, Any]:
-    raw_items = scrape_products(site_url, multi_pages=multi_pages, max_pages=max_pages, limit=limit)
+    raw_items = scrape_products(site_url, multi_pages=multi_pages, max_pages=max_pages, limit=0)
     products: List[Dict[str, Any]] = []
     seen = set()
     image_dir = uploads_root / "products"

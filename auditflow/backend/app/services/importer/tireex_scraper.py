@@ -444,7 +444,7 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
 def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 10, limit: int = 100) -> List[Dict[str, Any]]:
     links: List[str] = []
     listing_items: List[Dict[str, Any]] = []
-    max_items = max(1, int(limit or 20))
+    max_items = int(limit) if int(limit or 0) > 0 else 10**9
     if _is_product_url(url):
         links = [url]
     else:
@@ -528,7 +528,7 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 10, l
         except Exception as e:
             log.warning("skip product %s: %s", u, e)
     if products:
-        return products[:max_items]
+        return products if int(limit or 0) <= 0 else products[:max_items]
     # fallback إذا فشل parsing صفحات المنتج: نعيد منتجات الكروت من صفحة الماركة/البحث.
     if not listing_items:
         try:
@@ -563,5 +563,5 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 10, l
                 log.info("tireex skip upgraded card reason=missing_required url=%s", u)
         except Exception as e:
             log.warning("skip upgraded card %s: %s", u, e)
-    return upgraded[:max_items]
+    return upgraded if int(limit or 0) <= 0 else upgraded[:max_items]
 
