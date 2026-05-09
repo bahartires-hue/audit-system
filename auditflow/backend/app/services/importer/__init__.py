@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+import csv
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -228,6 +229,31 @@ def run_import_pipeline(
     csv_path = exports_dir / "tire_products.csv"
     xlsx_path = exports_dir / "tire_products.xlsx"
     exports = export_products_files(products, csv_path, xlsx_path)
+
+    # Export image failures for later retry/review.
+    failed_images_path = exports_dir / "failed_images.csv"
+    failed_rows = [
+        {
+            "name": p.get("name", ""),
+            "brand": p.get("brand", ""),
+            "size": p.get("size", ""),
+            "image_status": p.get("image_status", ""),
+            "cloudinary_status": p.get("cloudinary_status", ""),
+            "source_image_url": p.get("source_image_url", ""),
+            "product_url": p.get("product_url", ""),
+        }
+        for p in products
+        if str(p.get("image_status", "")).strip().lower() != "ok"
+    ]
+    failed_images_path.parent.mkdir(parents=True, exist_ok=True)
+    with failed_images_path.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=["name", "brand", "size", "image_status", "cloudinary_status", "source_image_url", "product_url"],
+        )
+        writer.writeheader()
+        writer.writerows(failed_rows)
+
     log.info("importer done count=%s csv=%s xlsx=%s", len(products), exports["csv_path"], exports["xlsx_path"])
     return {
         "count": len(products),
@@ -235,6 +261,7 @@ def run_import_pipeline(
         "xlsx_path": exports["xlsx_path"],
         "salla_csv_path": exports["salla_csv_path"],
         "salla_xlsx_path": exports["salla_xlsx_path"],
+        "failed_images_path": str(failed_images_path),
         "items": products,
     }
 

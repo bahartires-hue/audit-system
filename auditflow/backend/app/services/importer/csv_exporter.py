@@ -107,10 +107,6 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
 
     for p in products:
         image_value = _to_public_image_value(p)
-        if not image_value:
-            continue
-        if str(p.get("image_status", "")).strip().lower() != "ok":
-            continue
         if not str(p.get("brand", "")).strip():
             continue
         if not str(p.get("size", "")).strip():
@@ -134,6 +130,8 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
             promo_bits.append(f"سنة الصنع {p.get('year')}")
         if p.get("warranty"):
             promo_bits.append(f"الضمان {p.get('warranty')}")
+        if not image_value:
+            promo_bits.append("needs_image")
         promo = " - ".join(promo_bits)
         safe_set(row, columns, "النوع ", "منتج")
         safe_set(row, columns, "النوع", "منتج")
