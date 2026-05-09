@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-import logging
-import re
 import csv
+import logging
+import os
+import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import unquote, urlparse
 
 from .ai_rewriter import rewrite_description_fallback
@@ -16,6 +18,36 @@ from .scraper import scrape_products
 from .seo_optimizer import build_seo_fields
 
 log = logging.getLogger("importer.pipeline")
+
+
+def _report_progress(cb: Optional[Callable[[int, str], None]], pct: int, message: str) -> None:
+    if not cb:
+        return
+    p = max(1, min(99, int(pct)))
+    cb(p, message)
+
+
+def _fetch_images_for_unit(unit: Dict[str, Any]) -> Dict[str, Any]:
+    """Download + Cloudinary for one product (thread-safe paths per slug)."""
+    image_dir = Path(unit["image_dir"])
+    item = unit["item"]
+    seo = unit["seo"]
+    local_image, image_status = download_image(item.get("image_url", ""), image_dir, seo["image_slug"])
+    cloud_url = ""
+    cloud_status = ""
+    if local_image:
+        cloud_url, cloud_status = upload_to_cloudinary(local_image, seo["image_slug"])
+    elif (item.get("image_url") or "").startswith("http"):
+        cloud_url, cloud_status = upload_to_cloudinary(item.get("image_url", ""), seo["image_slug"])
+    if not cloud_url:
+        image_status = "needs_review"
+    return {
+        **unit,
+        "local_image": local_image,
+        "image_status": image_status,
+        "cloud_url": cloud_url,
+        "cloud_status": cloud_status,
+    }
 
 
 def _norm_brand(s: str) -> str:
@@ -127,12 +159,15 @@ def run_import_pipeline(
     limit: int = 20,
     max_pages: int = 10,
     multi_pages: bool = True,
+    progress_cb: Optional[Callable[[int, str], None]] = None,
 ) -> Dict[str, Any]:
     selected_brand = _normalize_brand_strict(brand) if brand else _infer_brand_from_url(site_url)
     if not selected_brand:
         raise ValueError("تعذر تحديد الماركة. أدخل brand أو استخدم رابط قسم ماركة واضح.")
 
+    _report_progress(progress_cb, 2, "جاري جلب صفحات المنتجات...")
     raw_items = scrape_products(site_url, multi_pages=multi_pages, max_pages=max_pages, limit=0)
+    _report_progress(progress_cb, 16, f"تم جلب {len(raw_items)} عنصر من الموقع")
     products: List[Dict[str, Any]] = []
     seen = set()
     image_dir = uploads_root / "products"
@@ -162,6 +197,10 @@ def run_import_pipeline(
         limit,
         multi_pages,
     )
+    _report_progress(progress_cb, 22, f"بعد الفلترة: {len(scoped_items)} منتج للمعالجة")
+
+    work_units: List[Dict[str, Any]] = []
+    image_dir_str = str(image_dir.resolve())
 
     for item in scoped_items:
         parsed = item.get("_parsed") or parse_tire_name(item.get("name") or "")
@@ -192,16 +231,6 @@ def run_import_pipeline(
             continue
         seen.add(key)
 
-        local_image, image_status = download_image(item.get("image_url", ""), image_dir, seo["image_slug"])
-        cloud_url = ""
-        cloud_status = ""
-        if local_image:
-            cloud_url, cloud_status = upload_to_cloudinary(local_image, seo["image_slug"])
-        elif (item.get("image_url") or "").startswith("http"):
-            # fallback: ask Cloudinary to fetch source URL directly
-            cloud_url, cloud_status = upload_to_cloudinary(item.get("image_url", ""), seo["image_slug"])
-        if not cloud_url:
-            image_status = "needs_review"
         price = _normalize_price(item.get("price", ""))
         if raw_name == "ابحث !" or not parsed.get("size") or not price:
             continue
@@ -221,6 +250,43 @@ def run_import_pipeline(
                 product_brand,
                 raw_name,
             )
+        work_units.append({"item": item, "parsed": parsed, "seo": seo, "price": price, "raw_name": raw_name, "image_dir": image_dir_str})
+
+    enriched_units: List[Dict[str, Any]] = []
+    n_units = len(work_units)
+    if n_units == 0:
+        _report_progress(progress_cb, 88, "لا توجد منتجات بعد الفلترة")
+    else:
+        cpu = os.cpu_count() or 4
+        max_workers = min(16, max(6, cpu * 2), n_units)
+        span_lo, span_hi = 28, 86
+        done = 0
+        _report_progress(progress_cb, span_lo, f"تحميل الصور والرفع ({n_units} منتج)...")
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            fut_to_idx = {pool.submit(_fetch_images_for_unit, u): i for i, u in enumerate(work_units)}
+            enriched_units = [None] * n_units  # type: ignore[list-assignment]
+            for fut in as_completed(fut_to_idx):
+                idx = fut_to_idx[fut]
+                enriched_units[idx] = fut.result()
+                done += 1
+                if progress_cb and n_units:
+                    pct = span_lo + int((done / n_units) * (span_hi - span_lo))
+                    _report_progress(progress_cb, pct, f"صور {done}/{n_units}")
+
+    _report_progress(progress_cb, 88, "بناء الأوصاف والصفوف...")
+    for unit in enriched_units:
+        if not unit:
+            continue
+        item = unit["item"]
+        parsed = unit["parsed"]
+        seo = unit["seo"]
+        price = unit["price"]
+        raw_name = unit["raw_name"]
+        local_image = unit.get("local_image", "")
+        image_status = unit.get("image_status", "")
+        cloud_url = unit.get("cloud_url", "")
+        cloud_status = unit.get("cloud_status", "")
+
         price_status = "ok" if price else "price_missing"
         seo_status = "ok" if parsed.get("size") else "needs_review"
         row = {
@@ -289,6 +355,7 @@ def run_import_pipeline(
                 )
                 raise ValueError("Wrong brand detected before export")
 
+    _report_progress(progress_cb, 93, "تصدير CSV و Excel...")
     csv_path = exports_dir / "tire_products.csv"
     xlsx_path = exports_dir / "tire_products.xlsx"
     exports = export_products_files(products, csv_path, xlsx_path)
@@ -318,6 +385,7 @@ def run_import_pipeline(
         writer.writerows(failed_rows)
 
     log.info("importer done count=%s csv=%s xlsx=%s", len(products), exports["csv_path"], exports["xlsx_path"])
+    _report_progress(progress_cb, 99, "اكتمل التجهيز")
     return {
         "count": len(products),
         "csv_path": exports["csv_path"],

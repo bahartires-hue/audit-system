@@ -87,6 +87,19 @@
                 <option value="multi">عدة صفحات</option>
               </select>
             </div>
+            <div id="scrapeProgressWrap" class="hidden mt-4">
+              <div class="flex justify-between items-center text-xs font-extrabold mb-1.5 gap-2">
+                <span id="scrapeProgressMsg" class="truncate text-slate-600 dark:text-slate-300">جاري السحب...</span>
+                <span id="scrapeProgressPct" class="shrink-0 text-emerald-600 dark:text-emerald-400 tabular-nums">1%</span>
+              </div>
+              <div class="h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                <div
+                  id="scrapeProgressBar"
+                  class="h-full bg-gradient-to-l from-emerald-500 to-teal-400 transition-[width] duration-100 ease-linear rounded-full"
+                  style="width: 1%"
+                ></div>
+              </div>
+            </div>
             <div class="mt-2">
               <button id="scrapeBtn" class="btn-primary-analyze px-5 py-2 rounded-xl" type="button">سحب المنتجات</button>
               <button id="scrapeUniversalBtn" class="px-5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 ms-2" type="button">سحب عام (متعدد المواقع)</button>
@@ -137,6 +150,18 @@
       const limitInp = document.getElementById("limitInp");
       const maxPagesInp = document.getElementById("maxPagesInp");
       const pageMode = document.getElementById("pageMode");
+      const scrapeProgressWrap = document.getElementById("scrapeProgressWrap");
+      const scrapeProgressMsg = document.getElementById("scrapeProgressMsg");
+      const scrapeProgressPct = document.getElementById("scrapeProgressPct");
+      const scrapeProgressBar = document.getElementById("scrapeProgressBar");
+
+      function setScrapeProgress(visible, pct, msg) {
+        scrapeProgressWrap.classList.toggle("hidden", !visible);
+        const p = Math.max(1, Math.min(100, Number(pct) || 1));
+        scrapeProgressPct.textContent = p + "%";
+        scrapeProgressBar.style.width = p + "%";
+        if (msg) scrapeProgressMsg.textContent = msg;
+      }
 
       function esc(s) {
         return String(s || "").replace(/[&<>"']/g, (m) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[m]));
@@ -167,7 +192,7 @@
         const site_url = (urlInp.value || "").trim();
         const brand = (brandInp.value || "").trim();
         const size = (sizeInp.value || "").trim();
-        const limit = Math.max(1, Number(limitInp.value || 100));
+        const limit = Math.min(500, Math.max(1, Number(limitInp.value || 100)));
         const max_pages = Math.max(1, Number(maxPagesInp.value || 10));
         const multi_pages = pageMode.value === "multi";
         if (!site_url) {
@@ -175,24 +200,81 @@
           return;
         }
         setLoading(btn, true, "جارٍ السحب...");
+        setScrapeProgress(true, 1, "بدء السحب...");
+        let pollTimer = null;
         try {
           syncCsrfFromCookie();
           const csrf = localStorage.getItem("csrf_token") || "";
-          const res = await fetch("/importer/scrape", {
+          const startRes = await fetch("/importer/scrape/start", {
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token": csrf },
             body: JSON.stringify({ site_url, brand, size, limit, max_pages, multi_pages }),
           });
-          if (!res.ok) throw new Error(await readErrorMessage(res));
-          const data = await res.json();
+          if (!startRes.ok) throw new Error(await readErrorMessage(startRes));
+          const startData = await startRes.json();
+          const jobId = startData.job_id;
+          if (!jobId) throw new Error("لم يُرجع الخادم معرف المهمة");
+
+          const pollMs = 200;
+          let settled = false;
+          const data = await new Promise((resolve, reject) => {
+            const stop = () => {
+              if (pollTimer) clearInterval(pollTimer);
+              pollTimer = null;
+            };
+            const tick = async () => {
+              if (settled) return;
+              try {
+                const st = await fetch("/importer/scrape/job/" + encodeURIComponent(jobId), {
+                  credentials: "include",
+                  headers: { Accept: "application/json" },
+                });
+                if (!st.ok) {
+                  settled = true;
+                  stop();
+                  reject(new Error(await readErrorMessage(st)));
+                  return;
+                }
+                const j = await st.json();
+                const prog = Number(j.progress) || 1;
+                setScrapeProgress(true, prog, j.message || "");
+                if (j.status === "error") {
+                  settled = true;
+                  stop();
+                  reject(new Error(j.error || j.message || "فشل السحب"));
+                  return;
+                }
+                if (j.done && j.status === "done") {
+                  settled = true;
+                  stop();
+                  resolve(j.result || {});
+                  return;
+                }
+              } catch (err) {
+                if (!settled) {
+                  settled = true;
+                  stop();
+                  reject(err);
+                }
+              }
+            };
+            pollTimer = setInterval(tick, pollMs);
+            tick();
+          });
+          setScrapeProgress(true, 100, "تم");
           render(data.items || []);
           metaInfo.textContent = `تم جلب ${data.count || 0} منتج - CSV: ${data.csv_path || ""} - XLSX: ${data.xlsx_path || ""} - Salla XLSX: ${data.salla_xlsx_path || ""}`;
           showToast("تم سحب المنتجات بنجاح", "#10b981");
         } catch (e) {
+          if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+          }
           showToast(e.message || "فشل سحب المنتجات", "#ef4444");
         } finally {
           setLoading(btn, false, "سحب المنتجات");
+          setTimeout(() => setScrapeProgress(false, 1, ""), 600);
         }
       });
 

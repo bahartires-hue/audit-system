@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 from urllib.parse import quote
 from urllib.parse import urlparse
 
@@ -13,6 +14,7 @@ from pydantic import BaseModel, Field
 from ..auth_core import require_csrf, require_user
 from ..db import SessionLocal
 from ..services.importer import run_import_pipeline
+from ..services.importer.scrape_jobs import complete_job, create_job, fail_job, get_job, update_job
 from ..services.importer.universal_scraper import run_universal_import
 
 router = APIRouter(prefix="/importer", tags=["importer"])
@@ -39,6 +41,91 @@ def _uploads_root() -> Path:
     data_root = (os.getenv("AUDITFLOW_DATA_ROOT") or "").strip()
     app_root = Path(__file__).resolve().parents[3]  # auditflow/
     return (Path(data_root) / "uploads") if data_root else (app_root / "uploads")
+
+
+def _attach_importer_previews(items: List[Any]) -> None:
+    for x in items:
+        p = (x.get("image_local") or "").strip()
+        if p:
+            fname = Path(p).name
+            x["image_preview"] = f"/importer/image?name={quote(fname)}"
+        else:
+            x["image_preview"] = ""
+
+
+@router.post("/scrape/start")
+def scrape_importer_start(request: Request, body: ImporterRequest) -> Dict[str, Any]:
+    require_csrf(request)
+    db = SessionLocal()
+    try:
+        require_user(db, request)
+    finally:
+        db.close()
+
+    site_url = (body.site_url or "").strip()
+    if not site_url.startswith("http://") and not site_url.startswith("https://"):
+        raise HTTPException(400, "أدخل رابطًا صحيحًا يبدأ بـ http:// أو https://")
+    brand = (body.brand or "").strip()
+    size = (body.size or "").strip()
+    limit = int(body.limit or 500)
+    max_pages = int(body.max_pages or 10)
+    multi_pages = bool(body.multi_pages)
+    path = (urlparse(site_url).path or "").strip("/")
+    if not path and not brand and not size:
+        raise HTTPException(400, "يرجى إدخال رابط صفحة ماركة أو تحديد ماركة/مقاس قبل السحب.")
+
+    uploads = _uploads_root()
+    job_id = create_job()
+
+    def run() -> None:
+        def cb(pct: int, msg: str) -> None:
+            update_job(job_id, pct, msg)
+
+        try:
+            out = run_import_pipeline(
+                site_url,
+                uploads,
+                brand=brand,
+                size=size,
+                limit=limit,
+                max_pages=max_pages,
+                multi_pages=multi_pages,
+                progress_cb=cb,
+            )
+            items = out.get("items", [])
+            _attach_importer_previews(items)
+            complete_job(
+                job_id,
+                {
+                    "ok": True,
+                    "count": out.get("count", 0),
+                    "csv_path": out.get("csv_path", ""),
+                    "xlsx_path": out.get("xlsx_path", ""),
+                    "salla_csv_path": out.get("salla_csv_path", ""),
+                    "salla_xlsx_path": out.get("salla_xlsx_path", ""),
+                    "items": items,
+                },
+            )
+        except ValueError as e:
+            fail_job(job_id, str(e))
+        except Exception:
+            fail_job(job_id, "فشل جلب البيانات من الموقع. تأكد من الرابط أو حاول لاحقًا.")
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"ok": True, "job_id": job_id}
+
+
+@router.get("/scrape/job/{job_id}")
+def scrape_importer_job(request: Request, job_id: str) -> Dict[str, Any]:
+    db = SessionLocal()
+    try:
+        require_user(db, request)
+    finally:
+        db.close()
+    state = get_job(job_id)
+    if not state:
+        raise HTTPException(404, "مهمة غير موجودة أو انتهت صلاحيتها")
+    return {"ok": True, **state}
 
 
 @router.post("/scrape")
@@ -77,13 +164,7 @@ def scrape_importer(request: Request, body: ImporterRequest) -> Dict[str, Any]:
     except Exception:
         raise HTTPException(502, "فشل جلب البيانات من الموقع. تأكد من الرابط أو حاول لاحقًا.")
     items = out.get("items", [])
-    for x in items:
-        p = (x.get("image_local") or "").strip()
-        if p:
-            fname = Path(p).name
-            x["image_preview"] = f"/importer/image?name={quote(fname)}"
-        else:
-            x["image_preview"] = ""
+    _attach_importer_previews(items)
     return {
         "ok": True,
         "count": out.get("count", 0),
