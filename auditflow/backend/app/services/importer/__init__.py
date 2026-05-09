@@ -5,6 +5,7 @@ import re
 import csv
 from pathlib import Path
 from typing import Any, Dict, List
+from urllib.parse import unquote, urlparse
 
 from .ai_rewriter import rewrite_description_fallback
 from .cloudinary_uploader import upload_to_cloudinary
@@ -82,6 +83,18 @@ def _normalize_brand_strict(value: str) -> str:
     return low
 
 
+def _infer_brand_from_url(site_url: str) -> str:
+    path = unquote((urlparse(site_url).path or "").strip("/")).lower()
+    if not path:
+        return ""
+    tokens = [t for t in re.split(r"[/\-_]+", path) if t]
+    for token in tokens:
+        candidate = _normalize_brand_strict(token)
+        if candidate in {"alpha", "laufenn"}:
+            return candidate
+    return ""
+
+
 def filter_products(products: List[Dict[str, Any]], brand: str = "", size: str = "", limit: int = 20) -> List[Dict[str, Any]]:
     b_raw = (brand or "").strip()
     b_norm = normalize_brand_name(b_raw) if b_raw else ""
@@ -115,6 +128,10 @@ def run_import_pipeline(
     max_pages: int = 10,
     multi_pages: bool = True,
 ) -> Dict[str, Any]:
+    selected_brand = _normalize_brand_strict(brand) if brand else _infer_brand_from_url(site_url)
+    if not selected_brand:
+        raise ValueError("تعذر تحديد الماركة. أدخل brand أو استخدم رابط قسم ماركة واضح.")
+
     raw_items = scrape_products(site_url, multi_pages=multi_pages, max_pages=max_pages, limit=0)
     products: List[Dict[str, Any]] = []
     seen = set()
@@ -126,7 +143,7 @@ def run_import_pipeline(
         parsed = parse_tire_name(item.get("name") or "")
         prepared.append({**item, "_parsed": parsed})
 
-    scoped_items = filter_products(prepared, brand=brand, size=size, limit=limit)
+    scoped_items = filter_products(prepared, brand=selected_brand, size=size, limit=limit)
     if not scoped_items and prepared and not (brand or size):
         # avoid hard-zero output when strict filter input is mismatched
         scoped_items = prepared[: max(1, limit)]
@@ -140,7 +157,7 @@ def run_import_pipeline(
         "importer filter applied raw=%s scoped=%s brand=%s size=%s limit=%s multi_pages=%s",
         len(raw_items),
         len(scoped_items),
-        brand,
+        selected_brand,
         size,
         limit,
         multi_pages,
@@ -188,8 +205,7 @@ def run_import_pipeline(
         price = _normalize_price(item.get("price", ""))
         if raw_name == "ابحث !" or not parsed.get("size") or not price:
             continue
-        if brand:
-            selected_brand = _normalize_brand_strict(brand)
+        if selected_brand:
             product_brand = _normalize_brand_strict(parsed.get("brand", "") or _infer_brand_from_name(raw_name))
             if selected_brand and product_brand and product_brand != selected_brand:
                 log.info(
@@ -261,8 +277,7 @@ def run_import_pipeline(
             row["status"] = "مراجعة"
         products.append(row)
 
-    if brand:
-        selected_brand = _normalize_brand_strict(brand)
+    if selected_brand:
         for product in products:
             product_brand = _normalize_brand_strict(product.get("brand", ""))
             if selected_brand and product_brand != selected_brand:
