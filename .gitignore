@@ -22,3 +22,12 @@ report_*.xlsx
 # Archives / dumps (optional local copies)
 *.zip
 auditflow_code*.txt
+
+# Importer: تصدير مؤقت (يُعاد إنشاؤه عند السحب)
+auditflow/exports/
+
+# نسخ عشوائية لقالب سلة خارج المسار الرسمي
+# (المسار الصحيح: auditflow/backend/app/services/importer/templates/)
+/Salla Products Template*.xlsx
+auditflow/Salla Products Template*.xlsx
+.cursor/Salla Products Template*.xlsx
