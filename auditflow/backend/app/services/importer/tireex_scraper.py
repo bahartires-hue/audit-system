@@ -67,12 +67,30 @@ def _pick_largest_srcset(srcset: str) -> str:
 
 
 def _extract_price_value(text: str) -> str:
-    raw = _clean(text)
-    nums = re.findall(r"(\d+(?:\.\d+)?)\s*(?:ر\.س|SAR|ريال)?", raw, flags=re.IGNORECASE)
+    raw = _clean(text).replace("٬", ",")
+    nums = re.findall(r"(\d[\d\.,]*)\s*(?:ر\.س|SAR|ريال)?", raw, flags=re.IGNORECASE)
     vals: List[float] = []
     for n in nums:
         try:
-            v = float(n)
+            t = n.strip()
+            if "," in t and "." in t:
+                if t.rfind(",") > t.rfind("."):
+                    t = t.replace(".", "").replace(",", ".")
+                else:
+                    t = t.replace(",", "")
+            elif "," in t and "." not in t:
+                # غالبا فاصلة آلاف
+                if t.count(",") > 1:
+                    t = t.replace(",", "")
+                else:
+                    left, right = t.split(",", 1)
+                    if len(right) == 3:
+                        t = left + right
+                    else:
+                        t = left + "." + right
+            elif "." in t and "," not in t and t.count(".") > 1:
+                t = t.replace(".", "")
+            v = float(t)
             if 10 <= v <= 100000:
                 vals.append(v)
         except Exception:
@@ -82,6 +100,53 @@ def _extract_price_value(text: str) -> str:
     # نرجع أول قيمة صالحة كنص للحفاظ على تنسيق الحقول الحالية.
     v = vals[0]
     return str(int(v)) if v.is_integer() else str(v)
+
+
+def _format_price(v: float) -> str:
+    return str(int(v)) if float(v).is_integer() else str(v)
+
+
+def _extract_price_pair(price_container) -> tuple[str, str]:
+    """
+    يرجّع (current_price, old_price) مع أولوية:
+    - ins/new/current => السعر الحقيقي الحالي
+    - del/old/was => السعر المشطوب
+    """
+    if not price_container:
+        return "", ""
+
+    current_text = ""
+    old_text = ""
+
+    ins_node = price_container.select_one("ins .amount, ins bdi, ins, .new-price, .current-price")
+    del_node = price_container.select_one("del .amount, del bdi, del, .old-price, .was-price")
+
+    if ins_node:
+        current_text = ins_node.get_text(" ", strip=True)
+    if del_node:
+        old_text = del_node.get_text(" ", strip=True)
+
+    current_price = _extract_price_value(current_text) if current_text else ""
+    old_price = _extract_price_value(old_text) if old_text else ""
+
+    # fallback: إذا لم نجد ins/del لكن يوجد أكثر من رقم داخل السعر
+    if not current_price:
+        all_vals: List[float] = []
+        text = price_container.get_text(" ", strip=True)
+        nums = re.findall(r"(\d[\d\.,]*)", text.replace("٬", ","))
+        for n in nums:
+            parsed = _extract_price_value(n)
+            try:
+                all_vals.append(float(parsed))
+            except Exception:
+                continue
+        if all_vals:
+            # في أغلب قوالب WooCommerce السعر الأخير هو الحالي
+            current_price = _format_price(all_vals[-1])
+            if len(all_vals) > 1:
+                old_price = _format_price(all_vals[0])
+
+    return current_price, old_price
 
 
 def _has_tire_size(text: str) -> bool:
@@ -241,9 +306,7 @@ def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str,
             or card_root.select_one("bdi")
             or card_root.select_one(".product-card-price")
         )
-        old_price_node = card_root.select_one(".price del .amount") or card_root.select_one(".old-price") or card_root.select_one(".was-price")
-        price = _extract_price_value(price_node.get_text(" ", strip=True) if price_node else "")
-        old_price = _extract_price_value(old_price_node.get_text(" ", strip=True) if old_price_node else "")
+        price, old_price = _extract_price_pair(price_node)
         img = card_root.select_one("img")
         image_url = ""
         if img:
@@ -306,10 +369,12 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
     if not size_token:
         size_token = _extract_size_token(doc.get_text(" ", strip=True))
     page_text = _clean(doc.get_text(" ", strip=True))
-    price = _extract_price_value(_pick_text(doc, [".price .amount", ".price", "[class*='price'] .amount", "bdi"]))
+    price_node = doc.select_one(".summary .price, .product .price, .woocommerce-variation-price .price, .price")
+    price, old_price = _extract_price_pair(price_node)
+    if not price:
+        price = _extract_price_value(_pick_text(doc, [".price .amount", ".price", "[class*='price'] .amount", "bdi"]))
     if not price:
         price = _extract_price_value(page_text)
-    old_price = _extract_price_value(_pick_text(doc, [".price del .amount", ".price .old", ".was-price"]))
     image = _pick_attr(doc, ["meta[property='og:image']"], "content")
     if not image:
         image = _pick_attr(doc, [".woocommerce-product-gallery img", "img.wp-post-image", ".product img", "img"], "data-src")

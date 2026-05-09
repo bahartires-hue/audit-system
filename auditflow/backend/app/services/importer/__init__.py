@@ -59,6 +59,19 @@ def _normalize_price(raw: str) -> str:
     return f"{v:.2f}".rstrip("0").rstrip(".")
 
 
+def _infer_brand_from_name(name: str) -> str:
+    s = str(name or "").strip()
+    if not s:
+        return ""
+    low = s.lower()
+    if "laufenn" in low or "لاوفين" in low:
+        return "Laufenn"
+    if "alpha" in low or "ألفا" in low or "الفا" in low:
+        return "Alpha"
+    first = s.split()[0] if s.split() else ""
+    return normalize_brand_name(first)
+
+
 def filter_products(products: List[Dict[str, Any]], brand: str = "", size: str = "", limit: int = 20) -> List[Dict[str, Any]]:
     b_raw = (brand or "").strip()
     b_norm = normalize_brand_name(b_raw) if b_raw else ""
@@ -104,7 +117,7 @@ def run_import_pipeline(
         prepared.append({**item, "_parsed": parsed})
 
     scoped_items = filter_products(prepared, brand=brand, size=size, limit=limit)
-    if not scoped_items and prepared:
+    if not scoped_items and prepared and not (brand or size):
         # avoid hard-zero output when strict filter input is mismatched
         scoped_items = prepared[: max(1, limit)]
         log.warning(
@@ -168,6 +181,9 @@ def run_import_pipeline(
         if brand:
             selected = normalize_brand_name(brand).lower().strip()
             parsed_brand = normalize_brand_name(parsed.get("brand", "")).lower().strip()
+            explicit_name_brand = normalize_brand_name(_infer_brand_from_name(raw_name)).lower().strip()
+            if selected and explicit_name_brand and explicit_name_brand != selected:
+                continue
             if selected and parsed_brand and selected != parsed_brand:
                 continue
         price_status = "ok" if price else "price_missing"
