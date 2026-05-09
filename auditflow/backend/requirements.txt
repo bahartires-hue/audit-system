@@ -16,4 +16,5 @@ arabic-reshaper
 python-bidi==0.4.2
 pytest
 httpx
+openai>=1.0.0
 cloudinary

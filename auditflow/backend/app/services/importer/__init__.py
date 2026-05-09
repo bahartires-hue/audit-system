@@ -320,6 +320,19 @@ def run_import_pipeline(
     _report_progress(progress_cb, 88, "بناء الأوصاف والصفوف...")
     _seo_long_history: List[str] = []
     _canonical_base = (os.getenv("AUDITFLOW_STORE_PUBLIC_BASE") or os.getenv("PUBLIC_BASE_URL") or "").strip()
+
+    _openai_client: Optional[Any] = None
+    _openai_model = (os.getenv("OPENAI_MODEL") or "gpt-4o-mini").strip()
+    if (os.getenv("OPENAI_API_KEY") or "").strip():
+        try:
+            from openai import OpenAI
+
+            _openai_client = OpenAI()
+        except Exception as e:
+            log.warning("importer OPENAI_API_KEY is set but OpenAI client init failed: %s", e)
+    else:
+        log.info("importer OPENAI_API_KEY is not set; cart descriptions use non-AI fallback only")
+
     for unit in enriched_units:
         if not unit:
             continue
@@ -386,7 +399,7 @@ def run_import_pipeline(
         )
         apply_bundle_to_row(row, bundle, _canonical_base)
 
-        # وصف سلة/التصدير: من حقول نظيفة فقط — لا نستخدم نص الوصف المسحوب من صفحة المتجر.
+        # ====== AI-ONLY CLEAN LONG DESCRIPTION (NO RAW PAGE TEXT) ======
         clean_for_desc = {
             "brand": str(row.get("brand", "") or parsed.get("brand", "") or ""),
             "size": str(row.get("size", "") or parsed.get("size", "") or ""),
@@ -396,21 +409,83 @@ def run_import_pipeline(
             "year": str(row.get("year", "") or item.get("year", "") or ""),
             "warranty": str(row.get("warranty", "") or item.get("warranty", "") or ""),
         }
-        clean_desc = generate_clean_seo_description(clean_for_desc)
-        if not validate_description(clean_desc):
-            clean_desc = clean_text(clean_desc)
-        if not validate_description(clean_desc):
-            log.warning(
-                "importer clean description validation still failing title=%s len=%s",
-                row.get("product_title", ""),
-                len(clean_desc),
-            )
-        row["description"] = clean_desc
-        row["description_short"] = clean_desc[:260] if len(clean_desc) > 260 else clean_desc
-        row["description_long"] = clean_desc
-        row["description_export"] = clean_desc
 
-        _seo_long_history.append(clean_desc)
+        ai_long_desc = ""
+        if _openai_client is not None:
+            ai_prompt = f"""
+اكتب وصفًا تسويقيًا قصيرًا واحترافيًا لمنتج كفر سيارات بالمواصفات التالية:
+
+- الماركة: {clean_for_desc["brand"]}
+- المقاس: {clean_for_desc["size"]}
+- رمز الحمولة والسرعة: {clean_for_desc["load_speed"]}
+- النقشة: {clean_for_desc["pattern"]}
+- بلد المنشأ: {clean_for_desc["country"] or "كوريا"}
+- سنة الصنع: {clean_for_desc["year"] or "2025"}
+- الضمان: {clean_for_desc["warranty"] or "3 سنوات"}
+
+الشروط الإلزامية:
+- لا تذكر السعر، الضريبة، المخزون، عدد الطلبات، عدد الزوار، التقييم، أو أي أزرار شراء مثل "إضافة إلى السلة" أو "اشتري الآن".
+- لا تذكر أسماء متاجر أو مواقع أخرى نهائيًا.
+- لا تستخدم أي نص من صفحات المتاجر، اكتب وصفًا جديدًا بالكامل.
+- اجعل الوصف طبيعيًا، بشريًا، غير مكرر، ومناسبًا للسيو المحلي في السعودية (يمكن ذكر: كفرات سيارات، كفرات في الدمام، كفرات السعودية بشكل طبيعي داخل النص).
+- ركّز على: الثبات، الراحة، الهدوء، التماسك، الاستخدام اليومي، الطرق السريعة.
+- الطول بين 70 و 130 كلمة.
+- لا تذكر أنه نص مولّد بالذكاء الاصطناعي.
+"""
+
+            try:
+                ai_resp = _openai_client.chat.completions.create(
+                    model=_openai_model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "أنت كاتب محتوى تسويقي عربي محترف في مجال إطارات السيارات، تكتب بأسلوب بشري طبيعي ومناسب للسيو.",
+                        },
+                        {"role": "user", "content": ai_prompt},
+                    ],
+                    temperature=0.9,
+                    max_tokens=400,
+                )
+                raw_msg = ai_resp.choices[0].message.content
+                ai_long_desc = (raw_msg or "").strip()
+
+                banned_patterns = [
+                    r"السعر",
+                    r"الضريبة",
+                    r"شامل الضريبة",
+                    r"متوفر في المخزون",
+                    r"إضافة إلى السلة",
+                    r"أضف إلى السلة",
+                    r"اشتري الآن",
+                    r"عدد الزوار",
+                    r"عدد الطلبات",
+                    r"التقييم",
+                    r"تقييم المنتج",
+                ]
+                for pat in banned_patterns:
+                    ai_long_desc = re.sub(pat, "", ai_long_desc, flags=re.IGNORECASE)
+
+                if not validate_description(ai_long_desc):
+                    ai_long_desc = clean_text(ai_long_desc)
+                if not validate_description(ai_long_desc):
+                    fallback_desc = generate_clean_seo_description(clean_for_desc)
+                    if validate_description(fallback_desc):
+                        ai_long_desc = fallback_desc
+
+            except Exception as e:
+                log.warning("AI description failed for %s: %s", row.get("product_title", ""), e)
+                ai_long_desc = ""
+
+        if not ai_long_desc:
+            ai_long_desc = generate_clean_seo_description(clean_for_desc)
+
+        row["description_long"] = ai_long_desc
+        row["description"] = ai_long_desc
+        row["description_export"] = ai_long_desc
+        row["description_short"] = ai_long_desc[:260] if len(ai_long_desc) > 260 else ai_long_desc
+
+        _seo_long_history.append(ai_long_desc)
+        # ====== END AI-ONLY CLEAN LONG DESCRIPTION ======
 
         products.append(row)
 
