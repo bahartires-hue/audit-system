@@ -1,5 +1,5 @@
 """
-محرك SEO بالذكاء الاصطناعي لكل منتج إطار: توليد فريد، فحص جودة، JSON-LD.
+محرك SEO لوصف منتجات متجر «بحر الإطارات» (الدمام): توليد من حقول منظمة فقط، بدون نسخ وصف أي متجر آخر.
 
 متغيرات البيئة:
 - OPENAI_API_KEY + اختياري OPENAI_MODEL (افتراضي gpt-4o-mini)
@@ -21,10 +21,30 @@ import httpx
 
 log = logging.getLogger("importer.ai_seo")
 
-# عبارات ممنوعة (حشو SEO / قوالب مكررة)
+STORE_AR = "بحر الإطارات"
+
+# يجب أن تظهر في كل وصف (صياغة طبيعية — لا تكرار نفس الجملة بين المنتجات)
+_MANDATORY_PHRASES = [
+    "بحر الإطارات",
+    "كفرات في الدمام",
+    "كفرات الدمام",
+    "شراء كفرات اونلاين",
+    "كفرات سيارات",
+]
+
+# اختر 2–3 من هذه في كل وصف مع تنويع بين المنتجات
+_LOCAL_SEO_POOL = [
+    "بحر الإطارات",
+    "كفرات في الدمام",
+    "كفرات الدمام",
+    "محل كفرات في الدمام",
+    "شراء كفرات اونلاين",
+    "تركيب كفرات في الدمام",
+]
+
+# عبارات ممنوعة (حشو عام / تسويق فارغ)
 _BANNED_PHRASES = [
     "أفضل كفرات",
-    "شراء كفرات",
     "كفرات أصلية",
     "يوفر ثبات ممتاز",
     "يقلل الانزلاق",
@@ -34,28 +54,72 @@ _BANNED_PHRASES = [
     "اشتري الان",
     "سعر كفرات",
     "توصيل كفرات",
-    "كفرات اونلاين",
-    "شراء كفرات اونلاين",
+    "mailto:",
 ]
+
+_DESC_MIN = 700
+_DESC_MAX = 1000
 
 _MIN = {
     "seo_title": 12,
     "meta_description": 80,
-    "description_short": 50,
-    "description_long": 220,
+    "description_short": 40,
+    "description_long": _DESC_MIN,
     "image_alt_text": 20,
 }
 _MAX = {
     "seo_title": 120,
-    "meta_description": 320,
-    "description_short": 600,
-    "description_long": 8000,
+    "meta_description": 300,
+    "description_short": 280,
+    "description_long": _DESC_MAX,
     "image_alt_text": 200,
 }
 
 
 def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip())
+
+
+def _clip_desc(s: str, mx: int = _DESC_MAX) -> str:
+    t = _norm(s)
+    if len(t) <= mx:
+        return t
+    cut = t[:mx]
+    if " " in cut:
+        return cut.rsplit(" ", 1)[0].rstrip() + "…"
+    return cut + "…"
+
+
+def _forbidden_merchant_patterns(text: str) -> List[str]:
+    """أنماط ممنوعة: أسعار، ضريبة، مخزون، روابط، بريد، شروط طويلة."""
+    hits: List[str] = []
+    low = text.lower()
+    if re.search(r"https?://", text, re.I):
+        hits.append("url")
+    if "@" in text or re.search(r"\b[\w.+-]+@[\w.-]+\.\w+\b", text):
+        hits.append("email")
+    if re.search(r"\b\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s*(?:ر\.س|ريال|sar|ريالات)\b", low, re.I):
+        hits.append("price")
+    if re.search(r"\b(?:ضريبة|القيمة المضافة|vat|مخزون|رصيد)\b", low, re.I):
+        hits.append("commerce_meta")
+    return hits
+
+
+def _mandatory_ok(text: str, brand: str, size: str, pattern: str) -> Tuple[bool, List[str]]:
+    miss: List[str] = []
+    for ph in _MANDATORY_PHRASES:
+        if ph not in text:
+            miss.append(f"missing:{ph}")
+    b = _norm(brand)
+    sz = _norm(size)
+    if b and b not in text and b.replace(" ", "") not in text.replace(" ", ""):
+        miss.append("missing_brand")
+    if sz and sz.upper().replace(" ", "") not in text.upper().replace(" ", ""):
+        miss.append("missing_size")
+    pat = _norm(pattern)
+    if pat and pat.lower() not in text.lower():
+        miss.append("missing_pattern")
+    return (len(miss) == 0, miss)
 
 
 def _load_speed_split(load_speed: str) -> Tuple[str, str]:
@@ -143,7 +207,11 @@ def _sentence_fingerprint(text: str) -> List[str]:
 
 
 def quality_check_bundle(
-    bundle: Dict[str, Any], prior_long_texts: List[str], *, strict_internal: bool = True
+    bundle: Dict[str, Any],
+    prior_long_texts: List[str],
+    *,
+    strict_internal: bool = True,
+    prior_openings: Optional[List[str]] = None,
 ) -> Tuple[bool, List[str]]:
     reasons: List[str] = []
     for key, mn in _MIN.items():
@@ -161,49 +229,62 @@ def quality_check_bundle(
         if bad.lower() in low:
             reasons.append(f"banned_phrase:{bad[:24]}")
 
-    # تكرار جمل داخل نفس الوصف (للمخرجات AI فقط — النصوص القصيرة جدًا تُستثنى)
+    for hit in _forbidden_merchant_patterns(long_t):
+        reasons.append(f"forbidden:{hit}")
+
+    ok_m, miss_m = _mandatory_ok(
+        long_t, bundle.get("_brand_ref", ""), bundle.get("_size_ref", ""), bundle.get("_pattern_ref", "")
+    )
+    if not ok_m:
+        reasons.extend(miss_m)
+
+    if "محل كفرات في الدمام" not in long_t and "تركيب كفرات في الدمام" not in long_t:
+        reasons.append("missing_extra_local")
+
     if strict_internal:
         sents = _sentence_fingerprint(long_t)
         if len(sents) != len(set(sents)):
             reasons.append("duplicate_sentences_inside")
 
-    # كثافة تكرار كلمة العلامة
     brand = _norm(bundle.get("_brand_ref", "")).lower()
     if brand and long_t:
-        wc = len(re.findall(r"\w+", long_t.lower()))
+        wc = len(re.findall(r"[\w\u0600-\u06FF]+", long_t.lower()))
         bc = len(re.findall(re.escape(brand), long_t.lower()))
-        if wc and bc / wc > 0.12:
+        if wc and bc / wc > 0.14:
             reasons.append("brand_keyword_stuffing")
 
-    # تشابه مع أصواف سابقة
     bg = _bigrams(long_t)
     for prev in prior_long_texts[-12:]:
         sim = _jaccard(bg, _bigrams(prev))
-        if sim > 0.22:
+        if sim > 0.24:
             reasons.append(f"high_similarity:{sim:.2f}")
             break
 
+    op = long_t[:100].strip()
+    if prior_openings:
+        for p in prior_openings[-20:]:
+            if p and op and (op in p or p in op or _jaccard(_bigrams(op), _bigrams(p)) > 0.35):
+                reasons.append("repeated_opening")
+                break
+
     faq = bundle.get("faq")
-    if not isinstance(faq, list) or len(faq) < 3:
+    if not isinstance(faq, list) or len(faq) < 2:
         reasons.append("faq_too_small")
     else:
-        for i, item in enumerate(faq[:8]):
+        for i, item in enumerate(faq[:6]):
             if not isinstance(item, dict):
                 reasons.append("faq_bad_shape")
                 break
             q, a = _norm(str(item.get("q", ""))), _norm(str(item.get("a", "")))
-            if len(q) < 8 or len(a) < 15:
+            if len(q) < 6 or len(a) < 12:
                 reasons.append(f"faq_item_short:{i}")
                 break
 
     kw = _norm(str(bundle.get("seo_keywords", "")))
     if kw:
         parts = [p.strip() for p in re.split(r"[,،;؛]", kw) if p.strip()]
-        if len(parts) < 4:
+        if len(parts) < 3:
             reasons.append("keywords_sparse")
-        junk = sum(1 for p in parts if any(b in p.lower() for b in ("أفضل كفرات", "شراء كفرات", "كفرات أصلية")))
-        if junk:
-            reasons.append("keywords_junk")
 
     return (len(reasons) == 0, reasons)
 
@@ -218,11 +299,6 @@ def build_json_ld_product(row: Dict[str, Any], canonical_base: str) -> str:
     slug = hashlib.sha1(name.encode("utf-8")).hexdigest()[:12]
     base = (canonical_base or "").rstrip("/")
     url = f"{base}/products/{slug}" if base else ""
-    price = row.get("price", "")
-    try:
-        pval = str(float(str(price).replace(",", "")))
-    except Exception:
-        pval = ""
     obj: Dict[str, Any] = {
         "@context": "https://schema.org",
         "@type": "Product",
@@ -235,15 +311,6 @@ def build_json_ld_product(row: Dict[str, Any], canonical_base: str) -> str:
         obj["image"] = [img]
     if url:
         obj["url"] = url
-    if pval:
-        obj["offers"] = {
-            "@type": "Offer",
-            "priceCurrency": "SAR",
-            "price": pval,
-            "availability": "https://schema.org/InStock",
-            "url": url or None,
-        }
-        obj["offers"] = {k: v for k, v in obj["offers"].items() if v}
     return json.dumps(obj, ensure_ascii=False)
 
 
@@ -257,7 +324,7 @@ def _openai_generate_json(system: str, user: str, model: str) -> Dict[str, Any]:
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         "response_format": {"type": "json_object"},
         "temperature": 0.85,
-        "max_tokens": 3500,
+        "max_tokens": 2200,
     }
     with httpx.Client(timeout=90.0) as client:
         r = client.post(url, headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"}, json=body)
@@ -302,6 +369,8 @@ def _gemini_generate_json(system: str, user: str, model: str) -> Dict[str, Any]:
 def _build_prompts(prod: Dict[str, Any], cls: Dict[str, Any], avoid_snippets: str) -> Tuple[str, str]:
     li, sp = _load_speed_split(str(prod.get("load_speed", "")))
     payload = {
+        "store": STORE_AR,
+        "city": "الدمام",
         "brand": prod.get("brand", ""),
         "model": prod.get("model", ""),
         "size": prod.get("size", ""),
@@ -316,93 +385,144 @@ def _build_prompts(prod: Dict[str, Any], cls: Dict[str, Any], avoid_snippets: st
         "rf": bool(prod.get("rf")),
         "pr": prod.get("pr", ""),
         "classification": cls,
-        "source_hint": (prod.get("source_description") or "")[:800],
     }
-    system = """You are an expert Arabic SEO copywriter for passenger/commercial tires in Saudi Arabia and the Gulf.
-Write natural, human-sounding Arabic. No marketing spam. No keyword stuffing.
-You MUST output a single valid JSON object only (no markdown fences).
+    system = f"""You write unique Arabic SEO product copy for the tire shop «{STORE_AR}» in Dammam only.
+Output ONE valid JSON object (no markdown). Human tone, no spam, no robotic repetition.
 
-Hard rules:
-- Every field must be unique wording vs other SKUs; vary syntax, openings, and paragraph order.
-- Do NOT reuse canned phrases like: "يوفر ثبات ممتاز", "يقلل الانزلاق", "مناسب للاستخدام اليومي", "أفضل كفرات", "شراء كفرات", "كفرات أصلية".
-- Mention realistic driving contexts (heat, highway cruise, urban braking, light gravel, load when relevant) but stay factual.
-- SEO title: Arabic, concise, includes brand + model + size + one differentiator (speed/load/terrain) — max 120 chars.
-- Meta description: 1–2 sentences, benefit + spec hook, CTA-free spam, 80–300 chars preferred window.
-- description_short: 2–4 sentences for listing cards.
-- description_long: rich sections (مقدمة، للمن يصلح، ملاحظات مقاس/تحميل، صيانة بسيطة) — varied connectors; no duplicated sentences inside.
-- seo_keywords: 6–12 items, comma-separated, tightly relevant to THIS size/use case (no generic spam list).
-- faq: array of 4–6 objects {{"q":"...","a":"..."}} in Arabic, practical (noise, fitment, SUV suitability, speed index meaning) tailored to this tire.
-- image_alt_text: descriptive Arabic alt for the product photo, includes brand model size, not keyword-stuffed.
+CRITICAL:
+- Do NOT copy or paraphrase text from any other store or supplier page. Use ONLY the structured fields provided (brand, size, pattern, classification, country, year, warranty, load/speed). Never invent stock, links, email, tax, price, promotions, or competitor names.
+- description_long MUST be between {_DESC_MIN} and {_DESC_MAX} Arabic characters (count characters, not tokens). One flowing Arabic text (no bullet URL lists, no raw links).
+- You MUST naturally include ALL of these exact phrases somewhere in description_long (can be split across sentences): {json.dumps(_MANDATORY_PHRASES, ensure_ascii=False)}
+- Also include the exact tire size string as given in JSON field "size", the brand name, and if "pattern" is non-empty include that pattern text naturally.
+- Additionally include at least ONE of: «محل كفرات في الدمام» OR «تركيب كفرات في الدمام» (pick one; vary vs other SKUs).
+- Do NOT start multiple products with the same opening clause; vary paragraph order and connectors. Avoid repeating one fixed template like «في بحر الإطارات نوفر كفرات في الدمام…» across products.
+- Forbidden inside all text fields: http/https URLs, @ emails, explicit prices/currency words (ريال/ر.س/SAR), VAT words, inventory/stock claims.
 
-If classification says SUV/AT/HT etc., reflect it without contradicting unknown specs."""
+JSON keys required:
+seo_title, meta_description, description_short, description_long, seo_keywords, faq, image_alt_text
+- seo_title ≤120 chars Arabic, includes brand+model+size.
+- meta_description 80–260 chars, no URLs/prices.
+- description_short: 2–3 sentences teaser (≤260 chars), may lightly echo local terms but main compliance is description_long.
+- seo_keywords: 5–10 comma-separated Arabic keywords tightly tied to this SKU + Dammam local intent; no generic spam.
+- faq: 3–5 objects {{"q","a"}} Arabic, practical, no prices/links; mention fitment/speed/load qualitatively only.
+- image_alt_text: Arabic, includes brand+size, mentions {STORE_AR} once max, no stuffing."""
 
-    user = f"""Generate unique Arabic SEO content for ONE tire product.
-Avoid overlapping wording with these previously used snippets (paraphrase completely):
-{avoid_snippets[:2500]}
+    user = f"""Write for ONE SKU at {STORE_AR}.
 
-Product JSON:
+Previously used long-description snippets (do NOT imitate structure; change openings and sentence rhythm):
+{avoid_snippets[:2200]}
+
+Structured product fields (ONLY source of truth):
 {json.dumps(payload, ensure_ascii=False)}
 
-Return JSON with EXACTLY these keys:
-seo_title, meta_description, description_short, description_long, seo_keywords, faq, image_alt_text
-faq must be an array of objects with keys q and a only."""
+Return JSON with keys exactly:
+seo_title, meta_description, description_short, description_long, seo_keywords, faq, image_alt_text"""
 
     return system, user
 
 
+def _mandatory_pack_sentence(brand: str, size: str, pat: str) -> str:
+    p = f" مع ذكر نقشة {pat} ضمن السياق." if pat else ""
+    return (
+        f"في {STORE_AR} نربط بين كفرات في الدمام وكفرات الدمام ضمن خانة كفرات سيارات، "
+        f"مع تسهيل شراء كفرات اونلاين لمقاس {size} وماركة {brand}.{p}"
+    )
+
+
 def _minimal_fact_description(prod: Dict[str, Any], cls: Dict[str, Any]) -> Dict[str, Any]:
-    """بدون AI: وصف حقائق فقط بترتيب فريد حسب الهاش (بدون قوالب تسويقية)."""
+    """بدون AI: وصف يلتزم كلمات بحر الإطارات والدمام مع تنويع آلية حسب الهاش."""
     brand = _norm(prod.get("brand", ""))
     model = _norm(prod.get("model", ""))
     size = _norm(prod.get("size", ""))
     ls = _norm(prod.get("load_speed", ""))
-    seed = "|".join([brand, model, size, ls, cls.get("vehicle_segment", ""), cls.get("terrain_style", "")])
+    pat = _norm(prod.get("pattern", ""))
+    country = _norm(prod.get("country", ""))
+    year = _norm(prod.get("year", ""))
+    warranty = _norm(prod.get("warranty", ""))
+    seed = "|".join([brand, model, size, ls, cls.get("vehicle_segment", ""), cls.get("terrain_style", ""), pat])
     h = int(hashlib.sha256(seed.encode("utf-8")).hexdigest()[:8], 16)
-    lines = [
-        f"منتج إطار: {brand} {model}، المقاس {size}.",
-        f"تصنيف تقريبي: {cls.get('tire_category_ar','')} — مركبة مرجعية: {cls.get('vehicle_segment','')} — أسلوب: {cls.get('terrain_style','')}.",
-        f"مؤشر الحمولة/السرعة الظاهر على المنتج: {ls}." if ls else "تحقق من بطاقة المنتج لمؤشر الحمولة والسرعة.",
-        f"بلد المنشأ (إن وُجد في البيانات): {_norm(prod.get('country',''))}." if prod.get("country") else "",
-        f"نقشة الإطار (إن وُجدت): {_norm(prod.get('pattern',''))}." if prod.get("pattern") else "",
+    extra_local = "تركيب كفرات في الدمام" if h % 2 == 0 else "محل كفرات في الدمام"
+
+    openers = [
+        f"كفر {brand} مقاس {size} يقدّم أسلوب قيادة متزنًا على الطرق المعبدة، مع تركيز على راحة مناسبة للتنقل داخل المدينة والخروج للطرق السريعة.",
+        f"عند اختيار كفرات سيارات بمقاس {size} من ماركة {brand}، غالبًا ما يبحث المستخدم عن توازن بين ثبات المنعطفات وهدوء المقصورة؛ هذا الخيار يستهدف ذلك التوازن بشكل عملي.",
+        f"مقاس {size} لماركة {brand} يُعد من المقاسات الشائعة ضمن فئة {cls.get('tire_category_ar','إطار سيارات')}، مع ملاحظة أن أسلوب الاستخدام المرجّح هنا: {cls.get('terrain_style','طريق معبد')}.",
+        f"لو كنت تفضّل التخطيط مسبقًا، فإن شراء كفرات اونلاين يساعدك على مقارنة الخيارات؛ وفي سياق كفرات الدمام يهمنا أن يكون الوصف واضحًا حول {brand} مقاس {size}.",
     ]
-    lines = [x for x in lines if x]
-    # ترتيب دوّار بسيط لتقليل التطابق بين منتجات متجاورة
-    rot = h % len(lines)
-    lines = lines[rot:] + lines[:rot]
-    long_t = "\n\n".join(lines) + "\n\nيُنصح بمطابقة المقاس مع جدول مصنع المركبة قبل الشراء."
-    title = f"{brand} {model} {size} {ls}".strip()[:118]
-    meta = (lines[0] + " " + (lines[1] if len(lines) > 1 else ""))[:300]
+    op = openers[h % len(openers)]
+
+    pat_line = f"النقشة الظاهرة في البيانات: {pat}." if pat else "لم تُذكر نقشة محددة في البيانات؛ راجع بطاقة المنتج عند الاستلام."
+
+    spec = f"تصنيف تقريبي: {cls.get('tire_category_ar','')} — فئة مركبة مرجعية: {cls.get('vehicle_segment','')} — أسلوب طريق: {cls.get('terrain_style','')}."
+    load_line = f"رمز التحميل والسرعة الظاهر: {ls}." if ls else "تحقق من بطاقة المنتج لرمز التحميل والسرعة المناسب لسيارتك."
+    cy = f"بلد المنشأ: {country}." if country else ""
+    yw = f"سنة الصنع المذكورة في البيانات: {year}." if year else ""
+    wr = f"الضمان المذكور في البيانات: {warranty}." if warranty else ""
+
+    mid_variants = [
+        f"ضمن {STORE_AR} نعمل على تسهيل رحلة من يبحث عن كفرات في الدمام عبر تجربة طلب أوضح، مع اهتمام بأن يجد قارئ كفرات الدمام معلومة مفيدة عن المقاس والاستخدام دون مبالغة.",
+        f"من جهة أخرى، يرتبط طلب كفرات سيارات بمقاس محدد مثل {size} بقراءة جدول الإطارات؛ لذلك نذكّر أن {extra_local} قد يكون خيارًا مناسبًا بعد التأكد من المقاس.",
+        f"لمن يهتم بكفرات الدمام بشكل عام: يبقى {brand} مقاس {size} خيارًا عمليًا ضمن تشكيلة كفرات سيارات متنوعة، مع إبراز {extra_local} كجزء من منظومة خدمات محلية نعمل على تطويرها.",
+    ]
+    mid = mid_variants[h % len(mid_variants)]
+
+    close_variants = [
+        f"باختصار، {STORE_AR} يهدف إلى دعم شراء كفرات اونلاين بخطوات واضحة، مع الحفاظ على صياغة تشرح {size} و{brand} دون حشو مزعج.",
+        f"ختامًا: نركّز في {STORE_AR} على أن تكون كلمات مثل كفرات في الدمام وكفرات الدمام مفيدة للقارئ، مع إبقاء النص قريبًا من واقع الاستخدام اليومي للإطار.",
+        f"أخيرًا، إن كنت تبحث عن كفرات سيارات بمقاس {size}، فالمعلومات أعلاه تساعدك على فهم الصنف قبل الطلب، مع إبراز {STORE_AR} كوجهة محلية تدعم شراء كفرات اونلاين بشكل منظم.",
+    ]
+    close = close_variants[(h >> 3) % len(close_variants)]
+    pack = _mandatory_pack_sentence(brand, size, pat)
+    tail = [op, spec, load_line, pat_line, cy, yw, wr, mid, close]
+    tail = [c for c in tail if c]
+    if tail:
+        r = h % len(tail)
+        tail = tail[r:] + tail[:r]
+    chunks = [pack] + tail
+    long_t = _norm(" ".join(chunks))
+    while len(long_t) < _DESC_MIN:
+        long_t += f" ننصح بمطابقة {size} مع توصية مصنع المركبة قبل الاعتماد النهائي."
+    long_t = _clip_desc(long_t, _DESC_MAX)
+
+    title = f"{brand} {model} {size}".strip()[:118]
+    meta = _clip_desc(
+        f"{STORE_AR}: {brand} مقاس {size} — {cls.get('tire_category_ar','إطار')} — معلومات مختصرة للمقارنة قبل الطلب.",
+        280,
+    )
     kw = ", ".join(
         x
         for x in [
-            f"إطار {brand} {size}".strip(),
-            f"{brand} {model}".strip(),
-            f"مقاس {size}",
+            f"{brand} {size}",
+            "كفرات الدمام",
+            "كفرات في الدمام",
+            extra_local,
             cls.get("terrain_style", ""),
-            cls.get("vehicle_segment", ""),
+            "كفرات سيارات",
         ]
         if x
     )
     faq = [
-        {"q": "هل هذا المقاس مناسب لسيارتي؟", "a": "راجع جدول الإطارات في دليل المركبة أو استشر مركز تركيب معتمد لمطابقة المقاس والتحميل."},
-        {"q": "ما أهمية رمز السرعة ومؤشر الحمولة؟", "a": "يحددان الحد الأقصى للسرعة الآمنة والحمولة لكل إطار؛ التزم بقيم مساوية أو أعلى من توصية المصنع."},
-        {"q": "هل الإطار مناسب لاستخدام SUV؟", "a": f"التصنيف المرجعي للصفحة: {cls.get('vehicle_segment','غير محدد')} — راجع نوع النقشة والتوصية من المصنع لمركبتك."},
-        {"q": "كيف أحافظ على عمر الإطار؟", "a": "ضغط هواء منتظم، موازنة عند التركيب، وتجنب المطبات الشديدة تساعد على توزيع التآكل بشكل أفضل."},
+        {"q": f"هل مقاس {size} يناسب سيارتي؟", "a": "اعتمد على جدول الإطارات في دليل المركبة أو استشر فني تركيب معتمد قبل الاعتماد النهائي."},
+        {"q": "ما أهمية رمز التحميل والسرعة؟", "a": "يحددان حدود التحميل والسرعة الآمنة للإطار؛ التزم بما يوصي به مصنع السيارة."},
+        {"q": f"لماذا يُذكر {STORE_AR} في الوصف؟", "a": "لأن النص مخصص لتجربة تسوق محلية في الدمام ولا يمثل نصًا منسوخًا من متجر آخر."},
     ]
-    alt = f"صورة إطار {brand} {model} مقاس {size}".strip()[:180]
+    alt = _clip_desc(f"{STORE_AR} — {brand} {model} مقاس {size}", 180)
+    short = _clip_desc(op + " " + spec, 250)
     return {
         "seo_title": title,
         "meta_description": meta,
-        "description_short": "\n".join(lines[:2]),
+        "description_short": short,
         "description_long": long_t,
         "seo_keywords": kw,
         "faq": faq,
         "image_alt_text": alt,
         "_brand_ref": brand,
+        "_size_ref": size,
+        "_pattern_ref": pat,
     }
 
 
-def _normalize_ai_bundle(raw: Dict[str, Any], brand: str) -> Dict[str, Any]:
+def _normalize_ai_bundle(raw: Dict[str, Any], brand: str, size: str = "", pattern: str = "") -> Dict[str, Any]:
     faq = raw.get("faq")
     if isinstance(faq, str):
         try:
@@ -418,12 +538,14 @@ def _normalize_ai_bundle(raw: Dict[str, Any], brand: str) -> Dict[str, Any]:
     return {
         "seo_title": _norm(str(raw.get("seo_title", ""))),
         "meta_description": _norm(str(raw.get("meta_description", ""))),
-        "description_short": _norm(str(raw.get("description_short", ""))),
-        "description_long": _norm(str(raw.get("description_long", ""))),
+        "description_short": _clip_desc(str(raw.get("description_short", "")), 260),
+        "description_long": _clip_desc(str(raw.get("description_long", "")), _DESC_MAX),
         "seo_keywords": _norm(str(raw.get("seo_keywords", ""))),
         "faq": clean_faq,
         "image_alt_text": _norm(str(raw.get("image_alt_text", ""))),
         "_brand_ref": brand,
+        "_size_ref": _norm(size),
+        "_pattern_ref": _norm(pattern),
     }
 
 
@@ -437,11 +559,8 @@ def _faq_to_text(faq: List[Dict[str, str]]) -> str:
 
 
 def merge_export_description(bundle: Dict[str, Any]) -> str:
-    """وحدة حقل الوصف للتصدير (سلة/ملفات)."""
-    short = bundle.get("description_short", "")
-    long_t = bundle.get("description_long", "")
-    faq_txt = _faq_to_text(bundle.get("faq") or [])
-    return "\n\n".join(x for x in [short, long_t, faq_txt] if x).strip()
+    """حقل الوصف للتصدير: نص واحد ضمن الحد الأقصى (بدون لصق FAQ لتفادي تجاوز الحد)."""
+    return _clip_desc(str(bundle.get("description_long", "")), _DESC_MAX)
 
 
 def generate_seo_bundle(
@@ -453,7 +572,8 @@ def generate_seo_bundle(
     """
     يولد حزمة SEO كاملة. يحاول OpenAI ثم Gemini ثم الوضع الاحتياطي بدون قوالب تسويقية.
     """
-    merged = {**prod, "source_description": source_description}
+    # لا نستخدم وصف المتجر المصدر — تجاهل source_description عن قصد
+    merged = {**prod}
     cls = classify_tire_product(merged)
     brand = _norm(merged.get("brand", ""))
 
@@ -485,8 +605,11 @@ def generate_seo_bundle(
                     raw = _gemini_generate_json(system, user + ("\nRetry: tighten uniqueness." if attempt else ""), model)
                 else:
                     return None
-                bundle = _normalize_ai_bundle(raw, brand)
-                ok, reasons = quality_check_bundle(bundle, prior_long_samples, strict_internal=True)
+                bundle = _normalize_ai_bundle(raw, brand, str(merged.get("size", "")), str(merged.get("pattern", "")))
+                openings = [t[:120].strip() for t in prior_long_samples[-24:] if t.strip()]
+                ok, reasons = quality_check_bundle(
+                    bundle, prior_long_samples, strict_internal=True, prior_openings=openings
+                )
                 if ok:
                     return bundle
                 log.info("ai_seo qc fail attempt=%s reasons=%s", attempt, reasons)
