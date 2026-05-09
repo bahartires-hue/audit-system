@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import unquote, urlparse
 
-from .ai_rewriter import rewrite_description_fallback
+from .ai_seo_engine import apply_bundle_to_row, generate_seo_bundle
 from .cloudinary_uploader import upload_to_cloudinary
 from .csv_exporter import export_products_files
 from .image_downloader import download_image
@@ -317,12 +317,13 @@ def run_import_pipeline(
                     _report_progress(progress_cb, pct, f"صور {done}/{n_units}")
 
     _report_progress(progress_cb, 88, "بناء الأوصاف والصفوف...")
+    _seo_long_history: List[str] = []
+    _canonical_base = (os.getenv("AUDITFLOW_STORE_PUBLIC_BASE") or os.getenv("PUBLIC_BASE_URL") or "").strip()
     for unit in enriched_units:
         if not unit:
             continue
         item = unit["item"]
         parsed = unit["parsed"]
-        seo = unit["seo"]
         price = unit["price"]
         raw_name = unit["raw_name"]
         local_image = unit.get("local_image", "")
@@ -358,21 +359,7 @@ def run_import_pipeline(
             "warranty": item.get("warranty", ""),
             "country": item.get("country", ""),
             "pattern": item.get("pattern", ""),
-            "description": rewrite_description_fallback(
-                {
-                    **parsed,
-                    "year": item.get("year", ""),
-                    "warranty": item.get("warranty", ""),
-                    "country": item.get("country", ""),
-                    "pattern": item.get("pattern", ""),
-                },
-                source_description=item.get("description", ""),
-            ),
             "parse_status": parsed.get("parse_status", ""),
-            "seo_title": seo["seo_title"],
-            "meta_description": seo["meta_description"],
-            "keywords": seo["keywords"],
-            "image_alt_text": seo["image_alt_text"],
             "image_status": image_status,
             "seo_status": seo_status,
             "price_status": price_status,
@@ -384,6 +371,21 @@ def run_import_pipeline(
         }
         if image_status in {"failed", "no_image_url"} and (item.get("image_url") or "").startswith("https://"):
             row["status"] = "مراجعة"
+        prod_for_seo = {
+            **parsed,
+            "year": item.get("year", ""),
+            "warranty": item.get("warranty", ""),
+            "country": item.get("country", ""),
+            "pattern": item.get("pattern", ""),
+        }
+        bundle = generate_seo_bundle(
+            prod_for_seo,
+            prior_long_samples=_seo_long_history,
+            source_description=item.get("description", "") or "",
+        )
+        apply_bundle_to_row(row, bundle, _canonical_base)
+        _seo_long_history.append(str(bundle.get("description_long", "")))
+
         products.append(row)
 
     if selected_brand:

@@ -27,6 +27,8 @@ BRAND_TRANSLATIONS = {
     "الفا": "Alpha",
     "ألفا": "Alpha",
     "لاوفين": "Laufenn",
+    "اكسيليرا": "Accelera",
+    "أكسيليرا": "Accelera",
 }
 
 MODEL_TRANSLATIONS = {
