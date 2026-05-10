@@ -113,6 +113,22 @@ def _is_bootstrap_admin_registration(db, username: str, email: str) -> bool:
     return False
 
 
+def _ensure_first_user_admin(db) -> None:
+    """
+    ضمان الطوارئ: أول مستخدم في النظام يجب أن يكون مديرًا.
+    يفيد في الحالات القديمة التي سُجل فيها أول حساب بدون صلاحيات الإدارة.
+    """
+    first_user = db.query(User).order_by(User.created_at.asc(), User.id.asc()).first()
+    if not first_user:
+        return
+    if int(first_user.is_admin or 0) == 1:
+        return
+    first_user.is_admin = 1
+    first_user.role_name = "admin"
+    first_user.is_active = 1
+    db.commit()
+
+
 def _require_admin_user(db, request: Request) -> User:
     user = require_user(db, request)
     if int(user.is_admin or 0) != 1:
@@ -216,6 +232,7 @@ async def auth_register(request: Request):
     db = SessionLocal()
     try:
         require_csrf(request)
+        _ensure_first_user_admin(db)
         bootstrap_admin = _is_bootstrap_admin_registration(db, username, email)
         if not bootstrap_admin and not _is_invite_valid(db, invite_code):
             raise HTTPException(400, "كود الدعوة غير صالح أو منتهي")
@@ -880,6 +897,7 @@ async def auth_login(request: Request):
     db = SessionLocal()
     try:
         require_csrf(request)
+        _ensure_first_user_admin(db)
         user = db.query(User).filter(func.lower(User.username) == username.lower()).first()
         if not user:
             raise HTTPException(401, "بيانات الدخول غير صحيحة")
