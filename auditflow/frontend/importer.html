@@ -13,10 +13,10 @@
       })();
     </script>
     <title>مستورد المنتجات | التطابق الأمثل</title>
-    <link rel="icon" href="/static/favicon.svg?v=17" type="image/svg+xml" />
+    <link rel="icon" href="/static/favicon.svg?v=18" type="image/svg+xml" />
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/static/tailwind.css?v=17" />
-    <link rel="stylesheet" href="/static/dark.css?v=17" />
+    <link rel="stylesheet" href="/static/tailwind.css?v=18" />
+    <link rel="stylesheet" href="/static/dark.css?v=18" />
     <style>
       body {
         font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
@@ -159,6 +159,37 @@
             <p id="metaInfo" class="text-xs mt-3 text-slate-500 dark:text-slate-400"></p>
           </div>
 
+          <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-5">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div>
+                <h2 class="text-base font-extrabold">محفوظ في النظام</h2>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  يُحفظ تلقائياً بعد كل سحب ناجح؛ استرجع الجدول والبيانات في أي وقت دون تحميل ملف.
+                </p>
+              </div>
+              <button type="button" id="refreshSessionsBtn" class="text-sm font-extrabold px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-600">
+                تحديث القائمة
+              </button>
+            </div>
+            <p id="savedSessionsErr" class="text-sm text-amber-600 dark:text-amber-400 hidden"></p>
+            <div id="savedSessionsEmpty" class="text-sm text-slate-500 dark:text-slate-400 py-4 hidden">
+              لا توجد جلسات محفوظة بعد. نفّذ سحباً ناجحاً ليُحفظ تلقائياً هنا.
+            </div>
+            <div class="overflow-x-auto">
+              <table class="min-w-full text-sm" id="savedSessionsTableWrap">
+                <thead>
+                  <tr class="border-b border-slate-200 dark:border-slate-700">
+                    <th class="p-2 text-start">الوصف</th>
+                    <th class="p-2 text-start">التاريخ</th>
+                    <th class="p-2 text-start">عدد المنتجات</th>
+                    <th class="p-2 text-start">إجراءات</th>
+                  </tr>
+                </thead>
+                <tbody id="savedSessionsRows"></tbody>
+              </table>
+            </div>
+          </div>
+
           <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-3 overflow-auto">
             <table class="min-w-full text-sm">
               <thead>
@@ -182,7 +213,7 @@
       </main>
     </div>
 
-    <script src="/static/app.js?v=17"></script>
+    <script src="/static/app.js?v=18"></script>
     <script>
       initAuthUI();
       const rows = document.getElementById("previewRows");
@@ -344,6 +375,7 @@
             " - Salla XLSX: " +
             (data.salla_xlsx_path || "");
           showToast("تم سحب المنتجات بنجاح", "#10b981");
+          refreshSavedSessions();
         } catch (e) {
           if (pollTimer) {
             clearInterval(pollTimer);
@@ -383,6 +415,7 @@
           render(data.items || []);
           metaInfo.textContent = "تم السحب العام: " + (data.count || 0) + " منتج - CSV: " + (data.csv_path || "");
           showToast("تم السحب العام بنجاح", "#10b981");
+          refreshSavedSessions();
         } catch (e) {
           showToast(e.message || "فشل السحب العام", "#ef4444");
         } finally {
@@ -399,6 +432,123 @@
       sallaBtn.addEventListener("click", function () {
         window.location.href = "/importer/salla-xlsx";
       });
-    </script>
+
+      const savedSessionsRows = document.getElementById("savedSessionsRows");
+      const savedSessionsEmpty = document.getElementById("savedSessionsEmpty");
+      const savedSessionsErr = document.getElementById("savedSessionsErr");
+      const refreshSessionsBtn = document.getElementById("refreshSessionsBtn");
+
+      function showSavedSessionsError(msg) {
+        if (!msg) {
+          savedSessionsErr.classList.add("hidden");
+          savedSessionsErr.textContent = "";
+          return;
+        }
+        savedSessionsErr.textContent = msg;
+        savedSessionsErr.classList.remove("hidden");
+      }
+
+      function formatSessionDate(iso) {
+        if (!iso) return "—";
+        try {
+          const d = new Date(iso);
+          if (isNaN(d.getTime())) return iso;
+          return d.toLocaleString("ar-SA", { dateStyle: "short", timeStyle: "short" });
+        } catch (e) {
+          return iso;
+        }
+      }
+
+      async function refreshSavedSessions() {
+        showSavedSessionsError("");
+        savedSessionsRows.innerHTML = "";
+        try {
+          const data = await apiGet("/importer/sessions?limit=40");
+          const sessions = (data && data.sessions) || [];
+          if (!sessions.length) {
+            savedSessionsEmpty.classList.remove("hidden");
+            return;
+          }
+          savedSessionsEmpty.classList.add("hidden");
+          sessions.forEach(function (s) {
+            const tr = document.createElement("tr");
+            tr.className = "border-b border-slate-100 dark:border-slate-800 align-top";
+            const label = esc(s.label || s.id);
+            const when = esc(formatSessionDate(s.created_at));
+            const cnt = esc(String(s.count != null ? s.count : "0"));
+            const id = encodeURIComponent(s.id);
+            tr.innerHTML =
+              '<td class="p-2 max-w-md">' +
+              "<div class=\"font-bold\">" +
+              label +
+              "</div>" +
+              (s.url_preview
+                ? '<div class="text-xs text-slate-500 dark:text-slate-400 mt-1 break-all">' + esc(s.url_preview) + "</div>"
+                : "") +
+              "</td>" +
+              '<td class="p-2 whitespace-nowrap">' +
+              when +
+              "</td>" +
+              '<td class="p-2 tabular-nums">' +
+              cnt +
+              "</td>" +
+              '<td class="p-2 whitespace-nowrap">' +
+              '<button type="button" class="session-restore px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-extrabold" data-sid="' +
+              id +
+              '">استرجاع</button> ' +
+              '<button type="button" class="session-del px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-600 text-xs font-extrabold" data-sid="' +
+              id +
+              '">حذف</button>' +
+              "</td>";
+            savedSessionsRows.appendChild(tr);
+          });
+          savedSessionsRows.querySelectorAll(".session-restore").forEach(function (btn) {
+            btn.addEventListener("click", async function () {
+              const sid = decodeURIComponent(btn.getAttribute("data-sid") || "");
+              if (!sid) return;
+              try {
+                const row = await apiGet("/importer/sessions/" + encodeURIComponent(sid));
+                const res = (row && row.result_json) || {};
+                const items = res.items || [];
+                render(items);
+                metaInfo.textContent =
+                  "استرجاع من النظام — " +
+                  (row.label || sid) +
+                  " — " +
+                  (res.count != null ? res.count : items.length) +
+                  " منتج" +
+                  (res.csv_path ? " — CSV: " + res.csv_path : "");
+                showToast("تم استرجاع الجلسة من النظام", "#10b981");
+              } catch (e) {
+                showToast(e.message || "تعذر الاسترجاع", "#ef4444");
+              }
+            });
+          });
+          savedSessionsRows.querySelectorAll(".session-del").forEach(function (btn) {
+            btn.addEventListener("click", async function () {
+              const sid = decodeURIComponent(btn.getAttribute("data-sid") || "");
+              if (!sid) return;
+              if (!confirm("حذف هذه الجلسة من النظام؟")) return;
+              try {
+                syncCsrfFromCookie();
+                await apiDelete("/importer/sessions/" + encodeURIComponent(sid));
+                showToast("تم الحذف", "#10b981");
+                refreshSavedSessions();
+              } catch (e) {
+                showToast(e.message || "تعذر الحذف", "#ef4444");
+              }
+            });
+          });
+        } catch (e) {
+          savedSessionsEmpty.classList.add("hidden");
+          showSavedSessionsError(e.message || "تعذر تحميل الجلسات. تأكد من تسجيل الدخول.");
+        }
+      }
+
+      refreshSessionsBtn.addEventListener("click", function () {
+        refreshSavedSessions();
+      });
+
+      refreshSavedSessions();
   </body>
 </html>

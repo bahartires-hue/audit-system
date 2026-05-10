@@ -15,6 +15,12 @@ from ..auth_core import require_csrf, require_user
 from ..db import SessionLocal
 from ..services.importer import run_import_pipeline
 from ..services.importer.scrape_jobs import complete_job, create_job, fail_job, get_job, update_job
+from ..services.importer.snapshot_store import (
+    delete_importer_snapshot,
+    get_importer_snapshot,
+    list_importer_snapshots,
+    save_importer_snapshot,
+)
 from ..services.importer.universal_scraper import run_universal_import
 
 router = APIRouter(prefix="/importer", tags=["importer"])
@@ -58,7 +64,8 @@ def scrape_importer_start(request: Request, body: ImporterRequest) -> Dict[str, 
     require_csrf(request)
     db = SessionLocal()
     try:
-        require_user(db, request)
+        user = require_user(db, request)
+        user_id = user.id
     finally:
         db.close()
 
@@ -76,6 +83,14 @@ def scrape_importer_start(request: Request, body: ImporterRequest) -> Dict[str, 
 
     uploads = _uploads_root()
     job_id = create_job()
+    request_meta = {
+        "site_url": site_url,
+        "brand": brand,
+        "size": size,
+        "limit": limit,
+        "max_pages": max_pages,
+        "multi_pages": multi_pages,
+    }
 
     def run() -> None:
         def cb(pct: int, msg: str) -> None:
@@ -94,18 +109,17 @@ def scrape_importer_start(request: Request, body: ImporterRequest) -> Dict[str, 
             )
             items = out.get("items", [])
             _attach_importer_previews(items)
-            complete_job(
-                job_id,
-                {
-                    "ok": True,
-                    "count": out.get("count", 0),
-                    "csv_path": out.get("csv_path", ""),
-                    "xlsx_path": out.get("xlsx_path", ""),
-                    "salla_csv_path": out.get("salla_csv_path", ""),
-                    "salla_xlsx_path": out.get("salla_xlsx_path", ""),
-                    "items": items,
-                },
-            )
+            result = {
+                "ok": True,
+                "count": out.get("count", 0),
+                "csv_path": out.get("csv_path", ""),
+                "xlsx_path": out.get("xlsx_path", ""),
+                "salla_csv_path": out.get("salla_csv_path", ""),
+                "salla_xlsx_path": out.get("salla_xlsx_path", ""),
+                "items": items,
+            }
+            complete_job(job_id, result)
+            save_importer_snapshot(user_id, "tireex", request_meta, result)
         except ValueError as e:
             fail_job(job_id, str(e))
         except Exception:
@@ -133,7 +147,8 @@ def scrape_importer(request: Request, body: ImporterRequest) -> Dict[str, Any]:
     require_csrf(request)
     db = SessionLocal()
     try:
-        require_user(db, request)
+        user = require_user(db, request)
+        user_id = user.id
     finally:
         db.close()
 
@@ -165,7 +180,7 @@ def scrape_importer(request: Request, body: ImporterRequest) -> Dict[str, Any]:
         raise HTTPException(502, "فشل جلب البيانات من الموقع. تأكد من الرابط أو حاول لاحقًا.")
     items = out.get("items", [])
     _attach_importer_previews(items)
-    return {
+    result = {
         "ok": True,
         "count": out.get("count", 0),
         "csv_path": out.get("csv_path", ""),
@@ -174,6 +189,20 @@ def scrape_importer(request: Request, body: ImporterRequest) -> Dict[str, Any]:
         "salla_xlsx_path": out.get("salla_xlsx_path", ""),
         "items": items,
     }
+    save_importer_snapshot(
+        user_id,
+        "tireex",
+        {
+            "site_url": site_url,
+            "brand": brand,
+            "size": size,
+            "limit": limit,
+            "max_pages": max_pages,
+            "multi_pages": multi_pages,
+        },
+        result,
+    )
+    return result
 
 
 @router.post("/universal/scrape")
@@ -181,7 +210,8 @@ def scrape_importer_universal(request: Request, body: UniversalImporterRequest) 
     require_csrf(request)
     db = SessionLocal()
     try:
-        require_user(db, request)
+        user = require_user(db, request)
+        user_id = user.id
     finally:
         db.close()
 
@@ -207,12 +237,66 @@ def scrape_importer_universal(request: Request, body: UniversalImporterRequest) 
     except Exception:
         raise HTTPException(502, "فشل تشغيل السحب العام. تأكد من site_key والرابط.")
 
-    return {
+    items = out.get("items", [])
+    _attach_importer_previews(items)
+    result = {
         "ok": True,
         "count": out.get("count", 0),
         "csv_path": out.get("csv_path", ""),
-        "items": out.get("items", []),
+        "items": items,
     }
+    save_importer_snapshot(
+        user_id,
+        "universal",
+        {
+            "site_key": site_key,
+            "category_url": category_url,
+            "brand": (body.brand or "").strip(),
+            "max_pages": int(body.max_pages or 10),
+            "limit": int(body.limit or 0),
+        },
+        result,
+    )
+    return result
+
+
+@router.get("/sessions")
+def importer_sessions_list(request: Request, limit: int = Query(40, ge=1, le=100)) -> Dict[str, Any]:
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+    finally:
+        db.close()
+    return {"ok": True, "sessions": list_importer_snapshots(user.id, limit)}
+
+
+@router.get("/sessions/{snapshot_id}")
+def importer_session_get(request: Request, snapshot_id: str) -> Dict[str, Any]:
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+    finally:
+        db.close()
+    row = get_importer_snapshot(user.id, snapshot_id)
+    if not row:
+        raise HTTPException(404, "جلسة غير موجودة")
+    items = (row.get("result_json") or {}).get("items") or []
+    if isinstance(items, list):
+        _attach_importer_previews(items)
+    return {"ok": True, **row}
+
+
+@router.delete("/sessions/{snapshot_id}")
+def importer_session_delete(request: Request, snapshot_id: str) -> Dict[str, Any]:
+    require_csrf(request)
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+    finally:
+        db.close()
+    if not delete_importer_snapshot(user.id, snapshot_id):
+        raise HTTPException(404, "جلسة غير موجودة")
+    return {"ok": True}
 
 
 @router.get("/image")

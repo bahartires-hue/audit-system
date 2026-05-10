@@ -440,6 +440,20 @@ class BranchTransferLine(Base):
     qty = Column(Float, nullable=False, default=0.0)
 
 
+class ImporterSnapshot(Base):
+    """حفظ داخل النظام لنتائج سحب المستورد (استرجاع لاحقاً دون الاعتماد على تحميل ملفات)."""
+
+    __tablename__ = "importer_snapshots"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    kind = Column(String, nullable=False, index=True)
+    label = Column(String, nullable=True)
+    request_json = Column(JSON, nullable=False, default=dict)
+    result_json = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False, index=True)
+
+
 def init_db() -> None:
     from .db import engine
     from .migrate import run_migrations

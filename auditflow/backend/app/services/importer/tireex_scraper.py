@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 log = logging.getLogger("importer.tireex")
 
 _UA = {"User-Agent": "Mozilla/5.0"}
-_SIZE_RE = re.compile(r"(\d{3})\s*/\s*(\d{2})\s*(?:ZR|R)?\s*(\d{2})", re.IGNORECASE)
+_SIZE_RE = re.compile(r"(\d{3})\s*/\s*(\d{2,3})\s*(?:ZR|R)?\s*(\d{2})", re.IGNORECASE)
 _GENERIC_TITLE_RE = re.compile(r"(تصنيف|عروض|منتجات|product category|category)", re.IGNORECASE)
 
 

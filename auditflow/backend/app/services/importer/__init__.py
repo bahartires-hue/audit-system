@@ -14,7 +14,7 @@ from .clean_seo_description import make_simple_description, normalize_pattern_di
 from .cloudinary_uploader import upload_to_cloudinary
 from .csv_exporter import export_products_files
 from .image_downloader import download_image
-from .parser import BRAND_TRANSLATIONS, normalize_brand_name, parse_tire_name
+from .parser import BRAND_TRANSLATIONS, hydrate_parsed_from_size_token, normalize_brand_name, parse_tire_name
 from .scraper import scrape_products
 from .seo_optimizer import build_seo_fields
 
@@ -215,6 +215,11 @@ def run_import_pipeline(
 
     for item in raw_items:
         parsed = parse_tire_name(item.get("name") or "")
+        parsed = hydrate_parsed_from_size_token(
+            item.get("name") or "",
+            item.get("_size_token"),
+            parsed,
+        )
         prepared.append({**item, "_parsed": parsed})
 
     scoped_items = filter_products(prepared, brand=selected_brand, size=size, limit=limit)

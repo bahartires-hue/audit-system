@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 log = logging.getLogger("importer.parser")
 
@@ -162,4 +162,34 @@ def parse_tire_name(raw_name: str) -> Dict[str, Any]:
         "product_title": improved or name,
         "parse_status": parse_status,
     }
+
+
+def hydrate_parsed_from_size_token(raw_name: str, size_token: Optional[str], parsed: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    إذا استخرج الساحب مقاساً من صفحة المنتج (_size_token) والعنوان لا يحتوي مقاساً بصيغة
+    parse_tire_name، نملأ الحقول لتفادي استبعاد منتجات صالحة.
+    """
+    if parsed.get("size"):
+        return parsed
+    tok = (size_token or "").strip().replace(" ", "")
+    if not tok:
+        return parsed
+    m = re.match(r"^(\d{3})/(\d{2,3})R(\d{2})$", tok, flags=re.IGNORECASE)
+    if not m:
+        return parsed
+    out = dict(parsed)
+    w, prof, rim = m.group(1), m.group(2), m.group(3)
+    out["width"] = w
+    out["profile"] = prof
+    out["rim"] = rim
+    out["size"] = f"{w}/{prof}R{rim}"
+    if not out.get("load_speed"):
+        mls = _LOAD_SPEED_RE.search(raw_name or "")
+        if mls:
+            out["load_speed"] = mls.group(1).upper()
+    if _contains_arabic(out.get("brand", "")) or _contains_arabic(out.get("model", "")):
+        out["parse_status"] = "non_english_name"
+    else:
+        out["parse_status"] = "ok"
+    return out
 
