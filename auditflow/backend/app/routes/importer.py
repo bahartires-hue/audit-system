@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from ..auth_core import require_csrf, require_user
 from ..db import SessionLocal
 from ..services.importer import run_import_pipeline
+from ..services.importer.csv_exporter import export_products_files
 from ..services.importer.scrape_jobs import complete_job, create_job, fail_job, get_job, update_job
 from ..services.importer.snapshot_store import (
     delete_importer_snapshot,
@@ -57,6 +58,33 @@ def _attach_importer_previews(items: List[Any]) -> None:
             x["image_preview"] = f"/importer/image?name={quote(fname)}"
         else:
             x["image_preview"] = ""
+
+
+def _snapshot_exports_dir(user_id: str, snapshot_id: str) -> Path:
+    return _uploads_root().parent / "exports" / "snapshots" / user_id / snapshot_id
+
+
+def _ensure_snapshot_exports(user_id: str, snapshot_id: str, row: Dict[str, Any]) -> Dict[str, Path]:
+    result = (row.get("result_json") or {}) if isinstance(row, dict) else {}
+    items = result.get("items") or []
+    if not isinstance(items, list) or not items:
+        raise HTTPException(400, "هذه الجلسة لا تحتوي منتجات قابلة للتصدير")
+    if not all(isinstance(x, dict) for x in items):
+        raise HTTPException(400, "بيانات الجلسة غير صالحة للتصدير")
+
+    out_dir = _snapshot_exports_dir(user_id, snapshot_id)
+    csv_path = out_dir / "tire_products.csv"
+    xlsx_path = out_dir / "tire_products.xlsx"
+    salla_xlsx_path = out_dir / "salla_products_ready.xlsx"
+
+    if not (csv_path.exists() and xlsx_path.exists() and salla_xlsx_path.exists()):
+        export_products_files(items, csv_path, xlsx_path)
+
+    return {
+        "csv_path": csv_path,
+        "xlsx_path": xlsx_path,
+        "salla_xlsx_path": salla_xlsx_path,
+    }
 
 
 @router.post("/scrape/start")
@@ -297,6 +325,60 @@ def importer_session_delete(request: Request, snapshot_id: str) -> Dict[str, Any
     if not delete_importer_snapshot(user.id, snapshot_id):
         raise HTTPException(404, "جلسة غير موجودة")
     return {"ok": True}
+
+
+@router.get("/sessions/{snapshot_id}/csv")
+def importer_session_csv(request: Request, snapshot_id: str) -> FileResponse:
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+    finally:
+        db.close()
+    row = get_importer_snapshot(user.id, snapshot_id)
+    if not row:
+        raise HTTPException(404, "جلسة غير موجودة")
+    paths = _ensure_snapshot_exports(user.id, snapshot_id, row)
+    return FileResponse(
+        str(paths["csv_path"]),
+        media_type="text/csv",
+        filename=f"tire_products_{snapshot_id}.csv",
+    )
+
+
+@router.get("/sessions/{snapshot_id}/xlsx")
+def importer_session_xlsx(request: Request, snapshot_id: str) -> FileResponse:
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+    finally:
+        db.close()
+    row = get_importer_snapshot(user.id, snapshot_id)
+    if not row:
+        raise HTTPException(404, "جلسة غير موجودة")
+    paths = _ensure_snapshot_exports(user.id, snapshot_id, row)
+    return FileResponse(
+        str(paths["xlsx_path"]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=f"tire_products_{snapshot_id}.xlsx",
+    )
+
+
+@router.get("/sessions/{snapshot_id}/salla-xlsx")
+def importer_session_salla_xlsx(request: Request, snapshot_id: str) -> FileResponse:
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+    finally:
+        db.close()
+    row = get_importer_snapshot(user.id, snapshot_id)
+    if not row:
+        raise HTTPException(404, "جلسة غير موجودة")
+    paths = _ensure_snapshot_exports(user.id, snapshot_id, row)
+    return FileResponse(
+        str(paths["salla_xlsx_path"]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=f"salla_products_{snapshot_id}.xlsx",
+    )
 
 
 @router.get("/image")

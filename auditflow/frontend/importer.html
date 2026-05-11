@@ -13,10 +13,10 @@
       })();
     </script>
     <title>مستورد المنتجات | التطابق الأمثل</title>
-    <link rel="icon" href="/static/favicon.svg?v=18" type="image/svg+xml" />
+    <link rel="icon" href="/static/favicon.svg?v=19" type="image/svg+xml" />
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/static/tailwind.css?v=18" />
-    <link rel="stylesheet" href="/static/dark.css?v=18" />
+    <link rel="stylesheet" href="/static/tailwind.css?v=19" />
+    <link rel="stylesheet" href="/static/dark.css?v=19" />
     <style>
       body {
         font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
@@ -213,7 +213,7 @@
       </main>
     </div>
 
-    <script src="/static/app.js?v=18"></script>
+    <script src="/static/app.js?v=19"></script>
     <script>
       initAuthUI();
       const rows = document.getElementById("previewRows");
@@ -234,6 +234,7 @@
       const scrapeProgressMsg = document.getElementById("scrapeProgressMsg");
       const scrapeProgressPct = document.getElementById("scrapeProgressPct");
       const scrapeProgressBar = document.getElementById("scrapeProgressBar");
+      let restoredSessionId = "";
 
       function setScrapeProgress(visible, pct, msg) {
         scrapeProgressWrap.classList.toggle("hidden", !visible);
@@ -364,6 +365,7 @@
             tick();
           });
           setScrapeProgress(true, 100, "تم");
+          restoredSessionId = "";
           render(data.items || []);
           metaInfo.textContent =
             "تم جلب " +
@@ -412,6 +414,7 @@
           });
           if (!res.ok) throw new Error(await readErrorMessage(res));
           const data = await res.json();
+          restoredSessionId = "";
           render(data.items || []);
           metaInfo.textContent = "تم السحب العام: " + (data.count || 0) + " منتج - CSV: " + (data.csv_path || "");
           showToast("تم السحب العام بنجاح", "#10b981");
@@ -424,12 +427,24 @@
       });
 
       csvBtn.addEventListener("click", function () {
+        if (restoredSessionId) {
+          window.location.href = "/importer/sessions/" + encodeURIComponent(restoredSessionId) + "/csv";
+          return;
+        }
         window.location.href = "/importer/csv";
       });
       xlsxBtn.addEventListener("click", function () {
+        if (restoredSessionId) {
+          window.location.href = "/importer/sessions/" + encodeURIComponent(restoredSessionId) + "/xlsx";
+          return;
+        }
         window.location.href = "/importer/xlsx";
       });
       sallaBtn.addEventListener("click", function () {
+        if (restoredSessionId) {
+          window.location.href = "/importer/sessions/" + encodeURIComponent(restoredSessionId) + "/salla-xlsx";
+          return;
+        }
         window.location.href = "/importer/salla-xlsx";
       });
 
@@ -510,6 +525,7 @@
                 const row = await apiGet("/importer/sessions/" + encodeURIComponent(sid));
                 const res = (row && row.result_json) || {};
                 const items = res.items || [];
+                restoredSessionId = sid;
                 render(items);
                 metaInfo.textContent =
                   "استرجاع من النظام — " +
@@ -517,8 +533,8 @@
                   " — " +
                   (res.count != null ? res.count : items.length) +
                   " منتج" +
-                  (res.csv_path ? " — CSV: " + res.csv_path : "");
-                showToast("تم استرجاع الجلسة من النظام", "#10b981");
+                  " — يمكنك الآن تحميل CSV / Excel / Excel سلة لهذه الجلسة";
+                showToast("تم الاسترجاع. أزرار التحميل أصبحت مرتبطة بهذه الجلسة", "#10b981");
               } catch (e) {
                 showToast(e.message || "تعذر الاسترجاع", "#ef4444");
               }
@@ -532,6 +548,7 @@
               try {
                 syncCsrfFromCookie();
                 await apiDelete("/importer/sessions/" + encodeURIComponent(sid));
+                if (restoredSessionId === sid) restoredSessionId = "";
                 showToast("تم الحذف", "#10b981");
                 refreshSavedSessions();
               } catch (e) {
