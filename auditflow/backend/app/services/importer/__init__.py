@@ -204,8 +204,24 @@ def run_import_pipeline(
         raise ValueError("تعذر تحديد الماركة. أدخل brand أو استخدم رابط قسم ماركة واضح.")
     listing_brand_display = _display_brand_from_key((brand or "").strip()) if (brand or "").strip() else _display_brand_from_key(selected_brand)
 
+    # كان limit=0 يعني «سحب غير محدود» في Tireex فيتوقف شريط التقدم عند 2% لساعات.
+    user_lim = max(1, int(limit or 500))
+    scrape_cap = min(max(user_lim * 3, user_lim + 120), 1800)
+
+    def on_scrape_progress(local_pct: int, msg: str) -> None:
+        """مرحلة السحب من الموقع: 0–100 محلية → تقريباً 3–14 عالمياً."""
+        lp = max(0, min(100, int(local_pct)))
+        g = 3 + int(lp * 11 / 100)
+        _report_progress(progress_cb, g, msg)
+
     _report_progress(progress_cb, 2, "جاري جلب صفحات المنتجات...")
-    raw_items = scrape_products(site_url, multi_pages=multi_pages, max_pages=max_pages, limit=0)
+    raw_items = scrape_products(
+        site_url,
+        multi_pages=multi_pages,
+        max_pages=max_pages,
+        limit=scrape_cap,
+        progress_cb=on_scrape_progress if progress_cb else None,
+    )
     _report_progress(progress_cb, 16, f"تم جلب {len(raw_items)} عنصر من الموقع")
     products: List[Dict[str, Any]] = []
     seen = set()

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Dict, List, Set
+from typing import Any, Callable, Dict, List, Optional, Set
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import requests
@@ -441,12 +441,33 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
     }
 
 
-def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 10, limit: int = 100) -> List[Dict[str, Any]]:
+def _tireex_progress(progress_cb: Optional[Callable[[int, str], None]], pct: int, msg: str) -> None:
+    if not progress_cb:
+        return
+    try:
+        progress_cb(max(0, min(100, int(pct))), msg)
+    except Exception:
+        pass
+
+
+def scrape_tireex(
+    url: str,
+    *,
+    multi_pages: bool = False,
+    max_pages: int = 10,
+    limit: int = 100,
+    progress_cb: Optional[Callable[[int, str], None]] = None,
+) -> List[Dict[str, Any]]:
     links: List[str] = []
     listing_items: List[Dict[str, Any]] = []
-    max_items = int(limit) if int(limit or 0) > 0 else 10**9
+    if int(limit or 0) > 0:
+        max_items = int(limit)
+    else:
+        # تجنب سحب غير محدود (كان يسبب توقف شريط التقدم عند 2% لساعات)
+        max_items = min(max_pages * 100, 1200)
     if _is_product_url(url):
         links = [url]
+        _tireex_progress(progress_cb, 15, "جاري تحليل صفحة المنتج...")
     else:
         current = url
         visited_pages: Set[str] = set()
@@ -454,6 +475,11 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 10, l
         while current and current not in visited_pages and page_count < max_pages:
             visited_pages.add(current)
             page_count += 1
+            _tireex_progress(
+                progress_cb,
+                max(4, int(20 * (page_count - 1) / max(max_pages, 1))),
+                f"جاري فتح صفحة القائمة {page_count}/{max_pages}...",
+            )
             try:
                 doc = _fetch(current)
             except Exception as e:
@@ -500,6 +526,11 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 10, l
                 len(links),
                 next_page_url,
             )
+            _tireex_progress(
+                progress_cb,
+                int(22 * page_count / max(max_pages, 1)),
+                f"صفحات القائمة {page_count}/{max_pages} — جمع {len(links)} رابط منتج",
+            )
             if len(links) >= max_items:
                 break
             if not multi_pages:
@@ -508,7 +539,9 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 10, l
                 break
             current = next_page_url
     products: List[Dict[str, Any]] = []
-    for u in links[: max_items * 2]:
+    parse_urls = links[: max_items * 2]
+    n_parse = len(parse_urls)
+    for i, u in enumerate(parse_urls):
         if len(products) >= max_items:
             break
         try:
@@ -527,8 +560,15 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 10, l
             products.append(p)
         except Exception as e:
             log.warning("skip product %s: %s", u, e)
+        if progress_cb and n_parse and (i % 2 == 0 or i + 1 == n_parse):
+            _tireex_progress(
+                progress_cb,
+                25 + int(75 * (i + 1) / n_parse),
+                f"تحليل صفحات المنتجات {i + 1}/{n_parse} — مكتمل {len(products)}",
+            )
     if products:
-        return products if int(limit or 0) <= 0 else products[:max_items]
+        _tireex_progress(progress_cb, 100, f"اكتمل جمع {len(products)} منتج من الموقع")
+        return products[:max_items]
     # fallback إذا فشل parsing صفحات المنتج: نعيد منتجات الكروت من صفحة الماركة/البحث.
     if not listing_items:
         log.warning("tireex no products found on listing; trying link extraction fallback")
@@ -548,7 +588,8 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 10, l
                 log.warning("skip fallback product %s: %s", u, e)
     # إن رجعت من الكروت فقط، نحاول ترقية البيانات بدخول صفحات المنتج.
     upgraded: List[Dict[str, Any]] = []
-    for item in listing_items:
+    n_list = min(len(listing_items), max_items)
+    for j, item in enumerate(listing_items):
         if len(upgraded) >= max_items:
             break
         u = item.get("product_url", "")
@@ -561,5 +602,12 @@ def scrape_tireex(url: str, *, multi_pages: bool = False, max_pages: int = 10, l
                 log.info("tireex skip upgraded card reason=missing_required url=%s", u)
         except Exception as e:
             log.warning("skip upgraded card %s: %s", u, e)
-    return upgraded if int(limit or 0) <= 0 else upgraded[:max_items]
+        if progress_cb and n_list and (j % 2 == 0 or j + 1 == n_list):
+            _tireex_progress(
+                progress_cb,
+                30 + int(70 * (j + 1) / max(n_list, 1)),
+                f"ترقية بيانات المنتجات {j + 1}/{n_list} — مكتمل {len(upgraded)}",
+            )
+    _tireex_progress(progress_cb, 100, f"اكتمل جمع {len(upgraded)} منتج من الموقع")
+    return upgraded[:max_items]
 

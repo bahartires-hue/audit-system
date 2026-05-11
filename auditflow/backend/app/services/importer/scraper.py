@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -146,17 +146,32 @@ def scrape_generic(site_url: str, *, multi_pages: bool = False, max_pages: int =
     return products
 
 
-def scrape_products(site_url: str, *, multi_pages: bool = False, max_pages: int = 10, limit: int = 100) -> List[Dict[str, Any]]:
+def scrape_products(
+    site_url: str,
+    *,
+    multi_pages: bool = False,
+    max_pages: int = 10,
+    limit: int = 100,
+    progress_cb: Optional[Callable[[int, str], None]] = None,
+) -> List[Dict[str, Any]]:
     domain = (urlparse(site_url).netloc or "").lower()
     kind = classify_url(site_url)
     log.info("importer domain=%s kind=%s multi_pages=%s limit=%s url=%s", domain, kind, multi_pages, limit, site_url)
     if "tireex.com" in domain or "tireex" in domain:
-        primary = scrape_tireex(site_url, multi_pages=multi_pages, max_pages=max_pages, limit=limit)
+        primary = scrape_tireex(
+            site_url, multi_pages=multi_pages, max_pages=max_pages, limit=limit, progress_cb=progress_cb
+        )
         if primary:
             return primary
         log.warning("tireex primary scraper returned 0; trying multi-page fallback")
-        expanded_limit = max(limit * 2, 40) if int(limit or 0) > 0 else 0
-        secondary = scrape_tireex(site_url, multi_pages=True, max_pages=max(5, max_pages), limit=expanded_limit)
+        expanded_limit = max(limit * 2, 40) if int(limit or 0) > 0 else min(max_pages * 100, 1200)
+        secondary = scrape_tireex(
+            site_url,
+            multi_pages=True,
+            max_pages=max(5, max_pages),
+            limit=expanded_limit,
+            progress_cb=progress_cb,
+        )
         if secondary:
             return secondary[:limit] if int(limit or 0) > 0 else secondary
         log.warning("tireex multi-page scraper returned 0; skipping generic fallback for tireex")
