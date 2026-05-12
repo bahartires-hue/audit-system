@@ -285,18 +285,95 @@ def _with_paged_query(url: str, page: int) -> str:
     return urlunparse((p.scheme, p.netloc, p.path, p.params, query, p.fragment))
 
 
+def _with_page_num_query(url: str, page: int) -> str:
+    """بعض القوالب تستخدم ?page=N بدل ?paged=N."""
+    p = urlparse(url)
+    q = dict(parse_qsl(p.query, keep_blank_values=True))
+    q["page"] = str(page)
+    query = urlencode(q, doseq=True)
+    return urlunparse((p.scheme, p.netloc, p.path, p.params, query, p.fragment))
+
+
+def _implicit_next_listing_urls(seed_url: str, current_page_one_based: int) -> List[str]:
+    """صفحة القائمة التالية بأشكال URL شائعة دون الاعتماد على رابط «التالي» في HTML."""
+    nxt = current_page_one_based + 1
+    out: List[str] = []
+    for factory in (_with_page_path, _with_paged_query, _with_page_num_query):
+        u = factory(seed_url, nxt)
+        if u and u not in out:
+            out.append(u)
+    return out
+
+
 def _pagination_candidates(seed_url: str, current_url: str, current_page: int, soup: BeautifulSoup) -> List[str]:
     out: List[str] = []
     seen: Set[str] = set()
     explicit_next = _next_page_url(current_url, soup)
-    for candidate in [explicit_next, _with_page_path(seed_url, current_page + 1), _with_paged_query(seed_url, current_page + 1)]:
+    for candidate in [
+        explicit_next,
+        _with_page_path(seed_url, current_page + 1),
+        _with_paged_query(seed_url, current_page + 1),
+        _with_page_num_query(seed_url, current_page + 1),
+    ]:
         if not candidate:
             continue
         if candidate in seen:
             continue
         seen.add(candidate)
         out.append(candidate)
+    # روابط أرقام الصفحات في ووكومرس (أحياناً لا يوجد class next واضح)
+    for a in soup.select(".woocommerce-pagination a.page-numbers, ul.page-numbers a.page-numbers"):
+        href = (a.get("href") or "").strip()
+        if not href:
+            continue
+        u = urljoin(current_url, href)
+        if u in seen:
+            continue
+        seen.add(u)
+        out.append(u)
     return out
+
+
+def _bruteforce_listing_pages(
+    seed_url: str,
+    *,
+    visited_pages: Set[str],
+    max_pages: int,
+    max_items: int,
+    links: List[str],
+    listing_items: List[Dict[str, Any]],
+) -> None:
+    """
+    يزور صفحات 2..max_pages بأشكال URL شائعة حتى لو فشل الترقيم عبر DOM.
+    لا يتوقف مبكراً بعد صفحات فارغة — يكمّل حتى max_pages (أو حتى يكتمل max_items).
+    """
+    for pnum in range(2, max_pages + 1):
+        if len(links) >= max_items:
+            break
+        probes: List[str] = []
+        for factory in (_with_page_path, _with_paged_query, _with_page_num_query):
+            probe = factory(seed_url, pnum)
+            if probe and probe not in visited_pages and probe not in probes:
+                probes.append(probe)
+        page_added = 0
+        for probe in probes:
+            if not _in_same_scope(seed_url, probe):
+                continue
+            try:
+                docx = _fetch(probe)
+            except Exception as e:
+                log.info("tireex bruteforce skip fetch p=%s url=%s err=%s", pnum, probe, e)
+                continue
+            visited_pages.add(probe)
+            for u in _extract_product_links(probe, docx):
+                if u not in links:
+                    links.append(u)
+                    page_added += 1
+            for row in _extract_list_products(probe, docx):
+                pu = row.get("product_url") or ""
+                if pu and not any((x.get("product_url") or "") == pu for x in listing_items):
+                    listing_items.append(row)
+        log.info("tireex bruteforce page=%s new_product_links=%s total_links=%s", pnum, page_added, len(links))
 
 
 def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str, Any]]:
@@ -563,10 +640,38 @@ def scrape_tireex(
             if not multi_pages:
                 break
             if not next_page_url:
-                break
+                for fb in _implicit_next_listing_urls(url, page_count):
+                    if fb and fb not in visited_pages and _in_same_scope(url, fb):
+                        next_page_url = fb
+                        break
+                if not next_page_url:
+                    break
             current = next_page_url
+        if multi_pages:
+            _bruteforce_listing_pages(
+                url,
+                visited_pages=visited_pages,
+                max_pages=max_pages,
+                max_items=max_items,
+                links=links,
+                listing_items=listing_items,
+            )
     products: List[Dict[str, Any]] = []
-    parse_urls = links[: max_items * 2]
+    # كان التحليل يعتمد على links فقط؛ listing_items (كروت القائمة) قد تجمع كل المنتجات
+    # بينما _extract_product_links يفوّت روابطاً (عرض شبكي، href داخل عنصر آخر، إلخ).
+    parse_order: List[str] = []
+    seen_u: Set[str] = set()
+    for u in links:
+        if u and u not in seen_u:
+            seen_u.add(u)
+            parse_order.append(u)
+    for row in listing_items:
+        u = (row.get("product_url") or "").strip()
+        if u and u not in seen_u:
+            seen_u.add(u)
+            parse_order.append(u)
+    cap_parse = min(500_000, max(len(parse_order), max_items * 10, 500))
+    parse_urls = parse_order[:cap_parse]
     n_parse = len(parse_urls)
     for i, u in enumerate(parse_urls):
         if len(products) >= max_items:
