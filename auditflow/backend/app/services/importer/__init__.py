@@ -269,14 +269,22 @@ def run_import_pipeline(
             user_size,
         )
     log.info(
-        "importer filter applied raw=%s scoped=%s brand=%s size=%s limit=%s multi_pages=%s",
+        "importer filter applied raw=%s scoped=%s brand=%s size=%s limit=%s multi_pages=%s user_brand=%s",
         len(raw_items),
         len(scoped_items),
         selected_brand,
         user_size,
         limit,
         multi_pages,
+        user_brand,
     )
+    if int(limit or 0) > 0 and len(raw_items) > len(scoped_items) * 3:
+        log.warning(
+            "importer limit=%s may truncate results (scoped=%s raw=%s); use limit=0 for full export",
+            limit,
+            len(scoped_items),
+            len(raw_items),
+        )
     _report_progress(progress_cb, 22, f"بعد الفلترة: {len(scoped_items)} منتج للمعالجة")
 
     work_units: List[Dict[str, Any]] = []
@@ -522,6 +530,9 @@ def run_import_pipeline(
     _report_progress(progress_cb, 99, "اكتمل التجهيز")
     return {
         "count": len(products),
+        "scraped_count": len(raw_items),
+        "after_filter_count": len(scoped_items),
+        "import_limit": int(limit or 0),
         "csv_path": exports["csv_path"],
         "xlsx_path": exports["xlsx_path"],
         "salla_csv_path": exports["salla_csv_path"],

@@ -254,6 +254,8 @@ def _next_page_url(base_url: str, soup: BeautifulSoup) -> str:
         ".pagination a.next",
         "a[rel='next']",
         ".woocommerce-pagination a.next",
+        ".wd-pagination a.next.page-numbers",
+        ".wd-pagination a.next",
     ]
     for sel in candidates:
         a = soup.select_one(sel)
@@ -322,7 +324,9 @@ def _pagination_candidates(seed_url: str, current_url: str, current_page: int, s
         seen.add(candidate)
         out.append(candidate)
     # روابط أرقام الصفحات في ووكومرس (أحياناً لا يوجد class next واضح)
-    for a in soup.select(".woocommerce-pagination a.page-numbers, ul.page-numbers a.page-numbers"):
+    for a in soup.select(
+        ".woocommerce-pagination a.page-numbers, ul.page-numbers a.page-numbers, .wd-pagination a.page-numbers"
+    ):
         href = (a.get("href") or "").strip()
         if not href:
             continue
@@ -672,6 +676,13 @@ def scrape_tireex(
             parse_order.append(u)
     cap_parse = min(500_000, max(len(parse_order), max_items * 10, 500))
     parse_urls = parse_order[:cap_parse]
+    log.info(
+        "tireex parse_queue links=%s listing_items=%s merged_unique=%s parse_cap=%s",
+        len(links),
+        len(listing_items),
+        len(parse_order),
+        cap_parse,
+    )
     n_parse = len(parse_urls)
     for i, u in enumerate(parse_urls):
         if len(products) >= max_items:

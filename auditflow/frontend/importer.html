@@ -104,7 +104,7 @@
               <input
                 id="brandInp"
                 class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2"
-                placeholder="اسم الماركة (مثال: Michelin)"
+                placeholder="اسم الماركة (مثال: Michelin) — اتركه فارغًا لسحب كل ما يظهر في الرابط"
               />
               <input
                 id="sizeInp"
@@ -214,7 +214,7 @@
       </main>
     </div>
 
-    <script src="/static/app.js?v=20"></script>
+    <script src="/static/app.js?v=21"></script>
     <script>
       initAuthUI();
       const rows = document.getElementById("previewRows");
@@ -373,13 +373,19 @@
           restoredSessionId = "";
           render(data.items || []);
           metaInfo.textContent =
-            "تم جلب " +
+            "في الملف: " +
             (data.count || 0) +
-            " منتج - CSV: " +
+            " منتج — من الموقع (خام): " +
+            (data.scraped_count != null ? data.scraped_count : "؟") +
+            " — بعد الفلترة/الحد: " +
+            (data.after_filter_count != null ? data.after_filter_count : "؟") +
+            " — الحد المُرسل: " +
+            (data.import_limit != null ? data.import_limit : "؟") +
+            " (0 = بدون حد) — CSV: " +
             (data.csv_path || "") +
-            " - XLSX: " +
+            " — XLSX: " +
             (data.xlsx_path || "") +
-            " - Salla XLSX: " +
+            " — Salla XLSX: " +
             (data.salla_xlsx_path || "");
           showToast("تم سحب المنتجات بنجاح", "#10b981");
           refreshSavedSessions();
