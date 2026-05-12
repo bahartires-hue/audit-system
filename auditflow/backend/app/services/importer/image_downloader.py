@@ -10,6 +10,10 @@ import logging
 
 log = logging.getLogger("importer.images")
 _BANNED_TOKENS = {"tireex", "competitor", "img", "image", "photo", "cdn", "site"}
+_CHROME_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
 
 
 def _guess_ext(url: str) -> str:
@@ -73,10 +77,15 @@ def download_image(image_url: str, target_dir: Path, seo_slug: str) -> tuple[str
     if fpath.exists():
         status = "needs_review" if _watermark_suspected(image_url, fname) else "exists"
         return str(fpath), status
+    host = (urlparse(image_url).netloc or "").lower()
+    referer = f"{urlparse(image_url).scheme}://{urlparse(image_url).netloc}/"
+    if "tireex" in host or "tireex" in image_url.lower():
+        referer = "https://tireex.com/"
     headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
-        "Referer": f"{urlparse(image_url).scheme}://{urlparse(image_url).netloc}/",
+        "User-Agent": _CHROME_UA,
+        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        "Accept-Language": "ar,en-US;q=0.9,en;q=0.8",
+        "Referer": referer,
     }
     last_err = None
     for timeout_s in (12, 20, 30):

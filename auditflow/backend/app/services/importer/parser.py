@@ -8,6 +8,10 @@ log = logging.getLogger("importer.parser")
 
 _SIZE_RE = re.compile(r"(\d{3})\s*/\s*(\d{2,3})\s*Z?R\s*(\d{2})", re.IGNORECASE)
 _LOAD_SPEED_RE = re.compile(r"\b(\d{2,3}[A-Z])\b")
+# حرف سرعة بعد قطر العجلة: «215/55 R17 W» — ليست 91W ولذلك لا تُلتقط بـ _LOAD_SPEED_RE
+_RIM_SPEED_TAIL = re.compile(r"\bR(\d{2})\s+([A-Z]{1,2})\s*$", re.IGNORECASE)
+# حرف تصنيف سرعة شائع يبقى وحده ك«موديل» بعد إزالة المقاس
+_SPEED_LETTER_ONLY = frozenset("HLMNPQRSTVWYZ")
 _RF_RE = re.compile(r"\b(RF|RUNFLAT|RUN FLAT)\b", re.IGNORECASE)
 _PR_RE = re.compile(r"\b(\d{1,2}\s*PR)\b", re.IGNORECASE)
 _AR_RE = re.compile(r"[\u0600-\u06FF]")
@@ -109,6 +113,14 @@ def parse_tire_name(raw_name: str) -> Dict[str, Any]:
     size = f"{width}/{profile}R{rim}" if width and profile and rim else ""
     m_ls = _LOAD_SPEED_RE.search(name)
     load_speed = m_ls.group(1).upper() if m_ls else ""
+    if not load_speed and m_size and rim:
+        m_tail = _RIM_SPEED_TAIL.search(name.strip())
+        if m_tail and m_tail.group(1) == rim:
+            sym = (m_tail.group(2) or "").upper()
+            if len(sym) == 1 and sym in _SPEED_LETTER_ONLY:
+                load_speed = sym
+            elif sym == "ZR":
+                load_speed = "ZR"
     xl = bool(re.search(r"\bXL\b", name, re.IGNORECASE))
     rf = bool(_RF_RE.search(name))
     pr = (_PR_RE.search(name).group(1).upper().replace(" ", "") if _PR_RE.search(name) else "")
@@ -128,7 +140,13 @@ def parse_tire_name(raw_name: str) -> Dict[str, Any]:
         model = re.sub(r"\b(RF|RUNFLAT|RUN FLAT)\b", "", model, flags=re.IGNORECASE).strip()
     if pr:
         model = re.sub(rf"\b{re.escape(pr)}\b", "", model, flags=re.IGNORECASE).strip()
-    model = re.sub(r"\s+", " ", model)
+    model = re.sub(r"\s+", " ", model).strip()
+    # إن بقي الحقل حرف سرعة فقط (مثلاً W) بعد إزالة المقاس
+    if model and not load_speed and len(model) <= 2 and re.fullmatch(r"[A-Za-z]+", model):
+        sym = model.upper()
+        if len(sym) == 1 and sym in _SPEED_LETTER_ONLY and sym != "R":
+            load_speed = sym
+            model = ""
     model = normalize_model_name(model)
     # fallback ترجمة الماركة إذا كانت بالعربي داخل الاسم الكامل
     if not brand:
