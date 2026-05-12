@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from typing import Any, Callable, Dict, List, Optional, Set
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
@@ -11,6 +12,21 @@ from bs4 import BeautifulSoup
 log = logging.getLogger("importer.tireex")
 
 _UA = {"User-Agent": "Mozilla/5.0"}
+
+
+def _effective_max_items(limit: int, max_pages: int) -> int:
+    """
+    limit > 0: سقف صريح بعدد المنتجات.
+    limit <= 0: سحب كامل للكتالوج ضمن سقف أمان (بيئة AUDITFLOW_IMPORTER_MAX_ITEMS، افتراضي 200000).
+    """
+    if int(limit or 0) > 0:
+        return int(limit)
+    try:
+        cap = int((os.getenv("AUDITFLOW_IMPORTER_MAX_ITEMS") or "200000").strip())
+    except ValueError:
+        cap = 200_000
+    cap = max(10_000, min(cap, 2_000_000))
+    return max(cap, int(max_pages or 1) * 1000)
 _SIZE_RE = re.compile(r"(\d{3})\s*/\s*(\d{2,3})\s*(?:ZR|R)?\s*(\d{2})", re.IGNORECASE)
 _GENERIC_TITLE_RE = re.compile(r"(تصنيف|عروض|منتجات|product category|category)", re.IGNORECASE)
 
@@ -206,7 +222,7 @@ def _extract_product_links(base_url: str, soup: BeautifulSoup) -> List[str]:
 def _extract_product_links_by_anchor_text(base_url: str, soup: BeautifulSoup) -> List[Dict[str, str]]:
     products: List[Dict[str, str]] = []
     seen: Set[str] = set()
-    bad_words = ("add-to-cart", "cart", "checkout", "category", "tag")
+    bad_words = ("add-to-cart", "cart", "checkout", "tag")
     all_links = soup.select("a[href]")
     log.info("tireex total anchors=%s url=%s", len(all_links), base_url)
     for a in all_links:
@@ -372,12 +388,27 @@ def _in_same_scope(seed_url: str, candidate_url: str) -> bool:
     cand = urlparse(candidate_url)
     if seed.netloc != cand.netloc:
         return False
-    seed_path = (seed.path or "").strip("/")
-    cand_path = (cand.path or "").strip("/")
+    seed_path = (seed.path or "").strip("/").lower()
+    cand_path = (cand.path or "").strip("/").lower()
     if not seed_path:
         # للرابط الجذري: نسمح فقط بروابط pagination المعروفة.
         return ("page/" in cand_path) or ("paged=" in cand.query) or (cand_path == "")
-    base_prefix = seed_path.split("/")[0]
+    if cand_path.startswith(seed_path):
+        return True
+    seed_parts = seed_path.split("/")
+    cand_parts = cand_path.split("/")
+    # WooCommerce: نفس مسار التصنيف ثم page/N
+    if len(cand_parts) >= len(seed_parts) + 2 and cand_parts[len(seed_parts)] == "page":
+        if cand_parts[: len(seed_parts)] == seed_parts:
+            return True
+    cand_q = {k.lower(): v for k, v in parse_qsl(cand.query, keep_blank_values=True)}
+    cat_slug = seed_parts[-1] if seed_parts else ""
+    # شكل شائع: /page/2/?product_cat=sailun-tires
+    if cand_parts and cand_parts[0] == "page" and len(cand_parts) >= 2 and re.fullmatch(r"\d+", cand_parts[1] or ""):
+        pc = (cand_q.get("product_cat") or cand_q.get("category_name") or "").strip().lower().replace(" ", "-")
+        if cat_slug and pc and (pc == cat_slug or pc in cat_slug or cat_slug in pc):
+            return True
+    base_prefix = seed_parts[0]
     return cand_path.startswith(base_prefix)
 
 
@@ -460,11 +491,7 @@ def scrape_tireex(
 ) -> List[Dict[str, Any]]:
     links: List[str] = []
     listing_items: List[Dict[str, Any]] = []
-    if int(limit or 0) > 0:
-        max_items = int(limit)
-    else:
-        # تجنب سحب غير محدود (كان يسبب توقف شريط التقدم عند 2% لساعات)
-        max_items = min(max_pages * 100, 1200)
+    max_items = _effective_max_items(limit, max_pages)
     if _is_product_url(url):
         links = [url]
         _tireex_progress(progress_cb, 15, "جاري تحليل صفحة المنتج...")
@@ -550,8 +577,7 @@ def scrape_tireex(
                 log.info("tireex skip product reason=no_name url=%s", u)
                 continue
             if not p.get("_size_token"):
-                log.info("tireex skip product reason=no_size name=%s url=%s", p.get("name", ""), u)
-                continue
+                log.info("tireex product no_size_token (keeping) name=%s url=%s", p.get("name", ""), u)
             if not p.get("product_url"):
                 log.info("tireex skip product reason=no_product_url url=%s", u)
                 continue
@@ -582,7 +608,7 @@ def scrape_tireex(
                 break
             try:
                 p = _parse_product_page(u)
-                if p.get("name") and p.get("_size_token") and p.get("product_url"):
+                if p.get("name") and p.get("product_url"):
                     listing_items.append(p)
             except Exception as e:
                 log.warning("skip fallback product %s: %s", u, e)
@@ -596,7 +622,7 @@ def scrape_tireex(
         try:
             p = _parse_product_page(u) if u else {}
             merged = {**item, **p}
-            if merged.get("name") and merged.get("_size_token") and merged.get("product_url"):
+            if merged.get("name") and merged.get("product_url"):
                 upgraded.append(merged)
             else:
                 log.info("tireex skip upgraded card reason=missing_required url=%s", u)

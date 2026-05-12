@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -324,7 +325,17 @@ def export_salla_like_csv(products: List[Dict[str, Any]], csv_path: Path) -> Non
 # 7) البايبلاين الكامل
 # =========================
 
-MAX_SCRAPE_PRODUCTS = 500
+
+def _universal_effective_limit(limit: int) -> int:
+    """limit > 0: سقف صريح. limit <= 0: سقف أمان من AUDITFLOW_IMPORTER_MAX_ITEMS (نفس منطق Tireex)."""
+    li = int(limit or 0)
+    if li > 0:
+        return min(li, 2_000_000)
+    try:
+        cap = int((os.getenv("AUDITFLOW_IMPORTER_MAX_ITEMS") or "200000").strip())
+    except ValueError:
+        cap = 200_000
+    return max(10_000, min(cap, 2_000_000))
 
 
 def run_universal_import(
@@ -336,8 +347,7 @@ def run_universal_import(
     brand: str = "",
     exports_root: Path = Path("exports"),
 ) -> Dict[str, Any]:
-    # limit=0 يعني جمع حتى السقف الأقصى (500). أي قيمة أعلى من 500 تُقصّ إلى 500.
-    effective_limit = MAX_SCRAPE_PRODUCTS if int(limit or 0) <= 0 else min(int(limit), MAX_SCRAPE_PRODUCTS)
+    effective_limit = _universal_effective_limit(limit)
     raw_items = scrape_products(site_key, category_url, max_pages=max_pages, limit=effective_limit)
 
     products: List[Dict[str, Any]] = []

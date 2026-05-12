@@ -164,7 +164,7 @@ def scrape_products(
         if primary:
             return primary
         log.warning("tireex primary scraper returned 0; trying multi-page fallback")
-        expanded_limit = max(limit * 2, 40) if int(limit or 0) > 0 else min(max_pages * 100, 1200)
+        expanded_limit = max(limit * 2, 40) if int(limit or 0) > 0 else 0
         secondary = scrape_tireex(
             site_url,
             multi_pages=True,

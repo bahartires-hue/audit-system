@@ -13,10 +13,10 @@
       })();
     </script>
     <title>مستورد المنتجات | التطابق الأمثل</title>
-    <link rel="icon" href="/static/favicon.svg?v=19" type="image/svg+xml" />
+    <link rel="icon" href="/static/favicon.svg?v=20" type="image/svg+xml" />
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/static/tailwind.css?v=19" />
-    <link rel="stylesheet" href="/static/dark.css?v=19" />
+    <link rel="stylesheet" href="/static/tailwind.css?v=20" />
+    <link rel="stylesheet" href="/static/dark.css?v=20" />
     <style>
       body {
         font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
@@ -114,24 +114,25 @@
               <input
                 id="limitInp"
                 type="number"
-                min="1"
-                max="500"
-                value="500"
-                title="حد أقصى 500 منتج"
+                min="0"
+                max="500000"
+                value="0"
+                title="0 = سحب كل المنتجات المتاحة (سقف أمان على الخادم). أي رقم أكبر من 0 = حد أقصى بعد الفلترة."
+                placeholder="0 = الكل"
                 class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2"
               />
               <input
                 id="maxPagesInp"
                 type="number"
                 min="1"
-                max="500"
-                value="10"
-                title="حد أقصى 500 صفحة ترقيم للسحب"
+                max="5000"
+                value="500"
+                title="أقصى عدد صفحات ترقيم للسحب (زِد القيمة للكتالوجات الكبيرة)"
                 class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2"
               />
               <select id="pageMode" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2">
                 <option value="single">صفحة واحدة فقط</option>
-                <option value="multi">عدة صفحات</option>
+                <option value="multi" selected>عدة صفحات</option>
               </select>
             </div>
             <div id="scrapeProgressWrap" class="hidden mt-4">
@@ -213,7 +214,7 @@
       </main>
     </div>
 
-    <script src="/static/app.js?v=19"></script>
+    <script src="/static/app.js?v=20"></script>
     <script>
       initAuthUI();
       const rows = document.getElementById("previewRows");
@@ -294,8 +295,12 @@
         const site_url = (urlInp.value || "").trim();
         const brand = (brandInp.value || "").trim();
         const size = (sizeInp.value || "").trim();
-        const limit = Math.min(500, Math.max(1, Number(limitInp.value || 100)));
-        const max_pages = Math.min(500, Math.max(1, Number(maxPagesInp.value || 10)));
+        let limit = Math.floor(Number(limitInp.value));
+        if (!Number.isFinite(limit) || limit < 0) limit = 0;
+        else if (limit > 500000) limit = 500000;
+        let max_pages = Math.floor(Number(maxPagesInp.value));
+        if (!Number.isFinite(max_pages) || max_pages < 1) max_pages = 500;
+        else if (max_pages > 5000) max_pages = 5000;
         const multi_pages = pageMode.value === "multi";
         if (!site_url) {
           showToast("أدخل رابط صفحة الماركة أو البحث", "#ef4444");
@@ -396,8 +401,14 @@
         const category_url = (urlInp.value || "").trim();
         const site_key = (siteKeyInp.value || "").trim();
         const brand = (brandInp.value || "").trim();
-        const max_pages = Math.min(500, Math.max(1, Number(maxPagesInp.value || 10)));
-        const limit = Math.min(500, Math.max(0, Number(limitInp.value || 500)));
+        let max_pages_u = Math.floor(Number(maxPagesInp.value));
+        if (!Number.isFinite(max_pages_u) || max_pages_u < 1) max_pages_u = 500;
+        else if (max_pages_u > 5000) max_pages_u = 5000;
+        let limit_u = Math.floor(Number(limitInp.value));
+        if (!Number.isFinite(limit_u) || limit_u < 0) limit_u = 0;
+        else if (limit_u > 500000) limit_u = 500000;
+        const max_pages = max_pages_u;
+        const limit = limit_u;
         if (!category_url) {
           showToast("أدخل رابط الصفحة", "#ef4444");
           return;

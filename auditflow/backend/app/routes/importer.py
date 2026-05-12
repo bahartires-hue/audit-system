@@ -31,17 +31,18 @@ class ImporterRequest(BaseModel):
     site_url: str
     brand: str = ""
     size: str = ""
-    limit: int = Field(default=500, ge=1, le=500)
-    max_pages: int = Field(default=10, ge=1, le=500)
-    multi_pages: bool = False
+    # 0 = سحب كل المنتجات المتاحة (مع سقف أمان على الخادم، راجع AUDITFLOW_IMPORTER_MAX_ITEMS)
+    limit: int = Field(default=0, ge=0, le=500_000)
+    max_pages: int = Field(default=500, ge=1, le=5000)
+    multi_pages: bool = True
 
 
 class UniversalImporterRequest(BaseModel):
     site_key: str
     category_url: str
     brand: str = ""
-    max_pages: int = Field(default=10, ge=1, le=500)
-    limit: int = Field(default=0, ge=0, le=500)
+    max_pages: int = Field(default=500, ge=1, le=5000)
+    limit: int = Field(default=0, ge=0, le=500_000)
 
 
 def _uploads_root() -> Path:
@@ -102,8 +103,8 @@ def scrape_importer_start(request: Request, body: ImporterRequest) -> Dict[str, 
         raise HTTPException(400, "أدخل رابطًا صحيحًا يبدأ بـ http:// أو https://")
     brand = (body.brand or "").strip()
     size = (body.size or "").strip()
-    limit = int(body.limit or 500)
-    max_pages = int(body.max_pages or 10)
+    limit = int(body.limit)
+    max_pages = int(body.max_pages)
     multi_pages = bool(body.multi_pages)
     path = (urlparse(site_url).path or "").strip("/")
     if not path and not brand and not size:
@@ -185,8 +186,8 @@ def scrape_importer(request: Request, body: ImporterRequest) -> Dict[str, Any]:
         raise HTTPException(400, "أدخل رابطًا صحيحًا يبدأ بـ http:// أو https://")
     brand = (body.brand or "").strip()
     size = (body.size or "").strip()
-    limit = int(body.limit or 500)
-    max_pages = int(body.max_pages or 10)
+    limit = int(body.limit)
+    max_pages = int(body.max_pages)
     multi_pages = bool(body.multi_pages)
     path = (urlparse(site_url).path or "").strip("/")
     if not path and not brand and not size:

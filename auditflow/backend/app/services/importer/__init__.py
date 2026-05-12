@@ -133,6 +133,14 @@ def _infer_brand_from_url(site_url: str) -> str:
         candidate = _normalize_brand_strict(token.replace("-", " "))
         if candidate in {"alpha", "laufenn"}:
             return candidate
+    # أقسام WooCommerce: /product-category/sailun-tires/ → استنتاج «sailun» من أول جزء في slug
+    m_cat = re.match(r"^product-category/([^/]+)/?", path)
+    if m_cat:
+        slug_raw = (m_cat.group(1) or "").strip()
+        if slug_raw and slug_raw not in skip_next:
+            brand_guess = slug_raw.split("-")[0].strip()
+            if brand_guess:
+                return _normalize_brand_strict(brand_guess.replace("-", " "))
     return ""
 
 
@@ -199,14 +207,24 @@ def run_import_pipeline(
     multi_pages: bool = True,
     progress_cb: Optional[Callable[[int, str], None]] = None,
 ) -> Dict[str, Any]:
-    selected_brand = _normalize_brand_strict(brand) if brand else _infer_brand_from_url(site_url)
+    user_brand = (brand or "").strip()
+    user_size = (size or "").strip()
+    full_catalog = int(limit or 0) <= 0
+    # عند limit<=0 وبدون ماركة يدوية: لا نفلتر بماركة الصفحة حتى لا نُسقط منتجات يُفسَّر اسمها/ماركته خطأً.
+    relaxed_brand_scope = full_catalog and not user_brand
+
+    selected_brand = _normalize_brand_strict(user_brand) if user_brand else _infer_brand_from_url(site_url)
     if not selected_brand:
         raise ValueError("تعذر تحديد الماركة. أدخل brand أو استخدم رابط قسم ماركة واضح.")
-    listing_brand_display = _display_brand_from_key((brand or "").strip()) if (brand or "").strip() else _display_brand_from_key(selected_brand)
+    listing_brand_display = _display_brand_from_key(user_brand) if user_brand else _display_brand_from_key(selected_brand)
 
-    # كان limit=0 يعني «سحب غير محدود» في Tireex فيتوقف شريط التقدم عند 2% لساعات.
-    user_lim = max(1, int(limit or 500))
-    scrape_cap = min(max(user_lim * 3, user_lim + 120), 1800)
+    # limit <= 0: سحب كامل للكتالوج (السقف الفعلي في scrape_tireex عبر AUDITFLOW_IMPORTER_MAX_ITEMS).
+    # limit > 0: نجمع هامشاً أكبر من العدد المطلوب لأن الفلترة تقلل النتائج.
+    if int(limit or 0) <= 0:
+        scrape_cap = 0
+    else:
+        user_lim = max(1, int(limit))
+        scrape_cap = min(max(user_lim * 4, user_lim + 200), 500_000)
 
     def on_scrape_progress(local_pct: int, msg: str) -> None:
         """مرحلة السحب من الموقع: 0–100 محلية → تقريباً 3–14 عالمياً."""
@@ -238,22 +256,24 @@ def run_import_pipeline(
         )
         prepared.append({**item, "_parsed": parsed})
 
-    scoped_items = filter_products(prepared, brand=selected_brand, size=size, limit=limit)
-    if not scoped_items and prepared and not (brand or size):
+    scope_brand = "" if relaxed_brand_scope else (user_brand if user_brand else selected_brand)
+    scoped_items = filter_products(prepared, brand=scope_brand, size=user_size, limit=limit)
+    if not scoped_items and prepared and not (user_brand or user_size):
         # avoid hard-zero output when strict filter input is mismatched
-        scoped_items = prepared[: max(1, limit)]
+        cap_slice = max(1, int(limit)) if int(limit or 0) > 0 else len(prepared)
+        scoped_items = prepared[:cap_slice]
         log.warning(
             "importer relaxed filters because scoped=0 raw=%s brand=%s size=%s",
             len(prepared),
-            brand,
-            size,
+            user_brand,
+            user_size,
         )
     log.info(
         "importer filter applied raw=%s scoped=%s brand=%s size=%s limit=%s multi_pages=%s",
         len(raw_items),
         len(scoped_items),
         selected_brand,
-        size,
+        user_size,
         limit,
         multi_pages,
     )
@@ -280,6 +300,18 @@ def run_import_pipeline(
             parsed["brand"] = re.sub(r"[\u0600-\u06FF]+", "", parsed.get("brand", "")).strip() or parsed.get("brand", "")
             parsed["model"] = re.sub(r"[\u0600-\u06FF]+", "", parsed.get("model", "")).strip() or "Standard"
             parsed["parse_status"] = "ok" if parsed.get("size") else "size_missing"
+        if not parsed.get("size"):
+            sz_guess = _extract_size_from_text(raw_name)
+            if sz_guess:
+                m_sz = re.match(r"^(\d{3})/(\d{2,3})R(\d{2})$", sz_guess, flags=re.IGNORECASE)
+                if m_sz:
+                    parsed = {
+                        **parsed,
+                        "width": m_sz.group(1),
+                        "profile": m_sz.group(2),
+                        "rim": m_sz.group(3),
+                        "size": sz_guess,
+                    }
         seo = build_seo_fields(parsed)
         key = (
             parsed.get("brand", "").lower(),
@@ -292,9 +324,13 @@ def run_import_pipeline(
         seen.add(key)
 
         price = _normalize_price(item.get("price", ""))
-        if raw_name == "ابحث !" or not parsed.get("size") or not price:
+        if raw_name == "ابحث !" or not parsed.get("size"):
             continue
-        if selected_brand:
+        if not price:
+            if not full_catalog:
+                continue
+            price = "0"
+        if selected_brand and not relaxed_brand_scope:
             product_brand = _normalize_brand_strict(parsed.get("brand", "") or _infer_brand_from_name(raw_name))
             if product_brand and product_brand != selected_brand:
                 if _name_signals_brand(item, selected_brand):
@@ -315,6 +351,10 @@ def run_import_pipeline(
                 _normalize_brand_strict(parsed.get("brand", "")),
                 raw_name,
             )
+        elif selected_brand and relaxed_brand_scope:
+            pb = _normalize_brand_strict(parsed.get("brand", "") or _infer_brand_from_name(raw_name))
+            if not pb:
+                parsed["brand"] = listing_brand_display or parsed.get("brand", "") or "Tire"
         work_units.append({"item": item, "parsed": parsed, "seo": seo, "price": price, "raw_name": raw_name, "image_dir": image_dir_str})
 
     enriched_units: List[Dict[str, Any]] = []
