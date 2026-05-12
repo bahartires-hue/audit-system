@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -11,7 +12,14 @@ from bs4 import BeautifulSoup
 
 log = logging.getLogger("importer.tireex")
 
-_UA = {"User-Agent": "Mozilla/5.0"}
+_REQUEST_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "ar,en-US;q=0.9,en;q=0.8",
+}
 
 
 def _effective_max_items(limit: int, max_pages: int) -> int:
@@ -36,7 +44,7 @@ def _clean(s: str) -> str:
 
 
 def _fetch(url: str) -> BeautifulSoup:
-    r = requests.get(url, timeout=30, headers=_UA)
+    r = requests.get(url, timeout=45, headers=_REQUEST_HEADERS)
     r.raise_for_status()
     return BeautifulSoup(r.text, "lxml")
 
@@ -199,6 +207,79 @@ def _extract_size_token(text: str) -> str:
     if not m:
         return ""
     return f"{m.group(1)}/{m.group(2)}R{m.group(3)}"
+
+
+def _extract_gtm_embedded_listings(base_url: str, soup: BeautifulSoup) -> List[Dict[str, Any]]:
+    """
+    Tireex/WoodMart + GTM4WP: كل بطاقة غالبًا تحوي JSON في data-gtm4wp_product_data
+    (item_name, productlink, price, image) — يبقى مكتملًا حتى لو DOM الكروت ناقص على بعض الاستضافات.
+    """
+    out: List[Dict[str, Any]] = []
+    seen: Set[str] = set()
+    for el in soup.select("[data-gtm4wp_product_data]"):
+        raw = (el.get("data-gtm4wp_product_data") or "").strip()
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        name = _clean(str(data.get("item_name") or ""))
+        product_url = _clean(str(data.get("productlink") or ""))
+        if not product_url:
+            continue
+        if not product_url.startswith("http"):
+            product_url = urljoin(base_url, product_url)
+        if urlparse(product_url).netloc != urlparse(base_url).netloc:
+            continue
+        pth = (urlparse(product_url).path or "").lower()
+        if "/product/" not in pth and "/shop/" not in pth:
+            continue
+        if product_url in seen:
+            continue
+        seen.add(product_url)
+        price = ""
+        try:
+            pv = float(data.get("price"))
+            if 0 < pv <= 1_000_000:
+                price = str(int(pv)) if pv == int(pv) else str(pv)
+        except (TypeError, ValueError):
+            pass
+        img = str(data.get("image") or "").strip()
+        if img and not img.startswith("http"):
+            img = urljoin(base_url, img)
+        out.append(
+            {
+                "name": name,
+                "price": price,
+                "old_price": "",
+                "product_url": product_url,
+                "image_url": img,
+                "year": "",
+                "country": "",
+                "warranty": "",
+                "pattern": "",
+                "description": "",
+                "_size_token": _extract_size_token(name),
+            }
+        )
+    log.info("tireex gtm_embedded products=%s url=%s", len(out), base_url)
+    return out
+
+
+def _merge_listing_rows_unique(listing_items: List[Dict[str, Any]], rows: List[Dict[str, Any]]) -> int:
+    added = 0
+    for row in rows:
+        pu = (row.get("product_url") or "").strip()
+        if not pu:
+            continue
+        if any((x.get("product_url") or "") == pu for x in listing_items):
+            continue
+        listing_items.append(row)
+        added += 1
+    return added
 
 
 def _extract_product_links(base_url: str, soup: BeautifulSoup) -> List[str]:
@@ -377,6 +458,7 @@ def _bruteforce_listing_pages(
                 pu = row.get("product_url") or ""
                 if pu and not any((x.get("product_url") or "") == pu for x in listing_items):
                     listing_items.append(row)
+            _merge_listing_rows_unique(listing_items, _extract_gtm_embedded_listings(probe, docx))
         log.info("tireex bruteforce page=%s new_product_links=%s total_links=%s", pnum, page_added, len(links))
 
 
@@ -595,6 +677,7 @@ def scrape_tireex(
                 break
             page_products = _extract_list_products(current, doc)
             listing_items.extend(page_products)
+            _merge_listing_rows_unique(listing_items, _extract_gtm_embedded_listings(current, doc))
             # fallback سريع: روابط a التي تحمل مقاسًا في النص.
             for p in _extract_product_links_by_anchor_text(current, doc):
                 if p.get("product_url") and all(x.get("product_url") != p["product_url"] for x in listing_items):
