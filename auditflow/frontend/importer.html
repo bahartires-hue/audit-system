@@ -93,7 +93,7 @@
               <input
                 id="siteUrl"
                 class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 md:col-span-2"
-                placeholder="https://tireex.com/brands/michelin"
+                placeholder="Tireex: رابط القسم — سحب عام: رابط تصنيف أو deep-scan + ماركة"
               />
               <select id="siteKeyInp" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2">
                 <option value="tireex">tireex</option>
@@ -214,7 +214,7 @@
       </main>
     </div>
 
-    <script src="/static/app.js?v=21"></script>
+    <script src="/static/app.js?v=22"></script>
     <script>
       initAuthUI();
       const rows = document.getElementById("previewRows");
@@ -416,7 +416,11 @@
         const max_pages = max_pages_u;
         const limit = limit_u;
         if (!category_url) {
-          showToast("أدخل رابط الصفحة", "#ef4444");
+          showToast("أدخل رابط التصنيف أو اكتب deep-scan لوضع Brand Deep Scan", "#ef4444");
+          return;
+        }
+        if (category_url.toLowerCase() === "deep-scan" && !brand) {
+          showToast("Brand Deep Scan: اكتب اسم الماركة في خانة الماركة (مثل Accelera)", "#ef4444");
           return;
         }
         setLoading(scrapeUniversalBtn, true, "جارٍ السحب العام...");
@@ -433,7 +437,12 @@
           const data = await res.json();
           restoredSessionId = "";
           render(data.items || []);
-          metaInfo.textContent = "تم السحب العام: " + (data.count || 0) + " منتج - CSV: " + (data.csv_path || "");
+          metaInfo.textContent =
+            (data.mode === "brand_deep_scan" ? "[Brand Deep Scan] " : "") +
+            "تم السحب العام: " +
+            (data.count || 0) +
+            " منتج - CSV: " +
+            (data.csv_path || "");
           showToast("تم السحب العام بنجاح", "#10b981");
           refreshSavedSessions();
         } catch (e) {

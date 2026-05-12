@@ -6,7 +6,8 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional, Set
+import json
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 import requests
@@ -58,6 +59,362 @@ SITES_CONFIG: Dict[str, Dict[str, Any]] = {
         "pagination_param": "paged",
     },
 }
+
+
+# إعدادات Brand Deep Scan (قائمة + صفحة منتج + مطابقة الاسم مع البراند)
+DEEP_SCAN_SITES: Dict[str, Dict[str, Any]] = {
+    "tireex": {
+        "base_url": "https://tireex.com",
+        "start_urls": ["https://tireex.com/product-category/accelera-tires/"],
+        "product_link_selectors": [
+            "a.product-card-content-title[href]",
+            "ul.products li.product a.woocommerce-LoopProduct-link[href]",
+            "a.woocommerce-LoopProduct-link[href]",
+        ],
+        "use_gtm_embed": True,
+        "product_title_selector": "h1.product_title, h1.product-title, h1",
+        "brand_selector": None,
+        "price_selector": "p.price, .summary .price, .price",
+        "image_selector": "figure.woocommerce-product-gallery__wrapper img, .woocommerce-product-gallery img, .product img",
+        "description_selector": (
+            "div.woocommerce-Tabs-panel--description, #tab-description, "
+            ".woocommerce-product-details__short-description"
+        ),
+    },
+    "lumitires": {
+        "base_url": "https://lumitiress.com",
+        "start_urls": ["https://lumitiress.com/shop/"],
+        "product_link_selectors": ["ul.products li.product a[href]"],
+        "use_gtm_embed": False,
+        "product_title_selector": "h1.product_title",
+        "brand_selector": None,
+        "price_selector": "p.price",
+        "image_selector": "div.woocommerce-product-gallery__wrapper img, figure.woocommerce-product-gallery__wrapper img",
+        "description_selector": "div.woocommerce-product-details__short-description",
+    },
+    "kafaratplus": {
+        "base_url": "https://kafaratplus.com",
+        "start_urls": ["https://kafaratplus.com/shop/"],
+        "product_link_selectors": ["ul.products li.product a[href]"],
+        "use_gtm_embed": False,
+        "product_title_selector": "h1.product_title",
+        "brand_selector": None,
+        "price_selector": "p.price",
+        "image_selector": "figure.woocommerce-product-gallery__wrapper img",
+        "description_selector": "div.woocommerce-product-details__short-description",
+    },
+    "etar": {
+        "base_url": "https://etar.com",
+        "start_urls": ["https://etar.com/shop/"],
+        "product_link_selectors": ["ul.products li.product a[href]"],
+        "use_gtm_embed": False,
+        "product_title_selector": "h1.product_title",
+        "brand_selector": None,
+        "price_selector": "p.price",
+        "image_selector": "figure.woocommerce-product-gallery__wrapper img",
+        "description_selector": "div.woocommerce-product-details__short-description",
+    },
+}
+
+_DEEP_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "ar,en-US;q=0.9,en;q=0.8",
+}
+
+_BRAND_TITLE_ALIASES: Dict[str, tuple[str, ...]] = {
+    "accelera": ("accelera", "اكسيليرا", "أكسيليرا", "إطارات اكسيليرا"),
+    "hankook": ("hankook", "هانكوك"),
+    "michelin": ("michelin", "ميشلان"),
+    "goodyear": ("goodyear", "جوديير"),
+}
+
+
+def _deep_brand_tokens(brand_name: str) -> tuple[str, ...]:
+    key = re.sub(r"\s+", " ", (brand_name or "").strip().lower())
+    extra = _BRAND_TITLE_ALIASES.get(key, ())
+    return (key,) + tuple(x.lower() for x in extra if x)
+
+
+def _deep_title_matches_brand(title: str, brand_name: str) -> bool:
+    t = (title or "").lower()
+    for tok in _deep_brand_tokens(brand_name):
+        if tok and tok in t:
+            return True
+    return False
+
+
+def _deep_get_soup(url: str) -> BeautifulSoup:
+    r = requests.get(url, headers=_DEEP_HEADERS, timeout=45)
+    r.raise_for_status()
+    return BeautifulSoup(r.text, "lxml")
+
+
+def _deep_normalize_shop_url(base_url: str, href: str) -> str:
+    if not href:
+        return ""
+    full = urljoin(base_url, href.split("?")[0])
+    path = (urlparse(full).path or "").lower()
+    if "/product/" not in path and "/shop/" not in path:
+        return ""
+    return full
+
+
+def _deep_collect_gtm_links(base_url: str, soup: BeautifulSoup, out: Set[str]) -> None:
+    for el in soup.select("[data-gtm4wp_product_data]"):
+        raw = (el.get("data-gtm4wp_product_data") or "").strip()
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        link = (data.get("productlink") or "").strip()
+        if not link:
+            continue
+        if not link.startswith("http"):
+            link = urljoin(base_url, link)
+        u = _deep_normalize_shop_url(base_url, link)
+        if u:
+            out.add(u)
+
+
+def _deep_extract_text(el) -> str:
+    return el.get_text(" ", strip=True) if el else ""
+
+
+def _deep_extract_image_url(el, page_url: str) -> str:
+    if not el:
+        return ""
+    for attr in ("data-large_image", "data-src", "data-lazy-src"):
+        v = (el.get(attr) or "").strip()
+        if v:
+            return urljoin(page_url, v)
+    srcset = el.get("srcset") or ""
+    if srcset:
+        part = srcset.split(",")[0].strip().split()
+        if part:
+            return urljoin(page_url, part[0])
+    src = (el.get("src") or "").strip()
+    return urljoin(page_url, src) if src else ""
+
+
+def _deep_collect_product_links(
+    site_key: str,
+    *,
+    max_pages: int,
+    start_urls: Optional[List[str]] = None,
+) -> List[str]:
+    cfg = DEEP_SCAN_SITES[site_key]
+    base = cfg["base_url"].rstrip("/")
+    visited_pages: Set[str] = set()
+    product_links: Set[str] = set()
+    seeds = list(start_urls) if start_urls else list(cfg["start_urls"])
+    to_visit: List[str] = seeds
+    selectors: List[str] = list(cfg.get("product_link_selectors") or [])
+    pages_opened = 0
+
+    while to_visit and pages_opened < max_pages:
+        url = to_visit.pop(0)
+        if url in visited_pages:
+            continue
+        visited_pages.add(url)
+        pages_opened += 1
+        try:
+            soup = _deep_get_soup(url)
+        except Exception as e:
+            log.warning("deep_scan listing skip url=%s err=%s", url, e)
+            continue
+
+        for sel in selectors:
+            for a in soup.select(sel):
+                href = a.get("href")
+                u = _deep_normalize_shop_url(base, href or "")
+                if u:
+                    product_links.add(u)
+
+        if cfg.get("use_gtm_embed"):
+            _deep_collect_gtm_links(base, soup, product_links)
+
+        for a in soup.select(
+            "a.next.page-numbers, a[rel='next'], .woocommerce-pagination a.next, "
+            ".wd-pagination a.next, .wd-pagination a.next.page-numbers, "
+            "a.page-numbers, a.pagination-next"
+        ):
+            href = a.get("href")
+            if not href:
+                continue
+            full = urljoin(base, href)
+            if full not in visited_pages and full not in to_visit:
+                if urlparse(full).netloc == urlparse(base).netloc:
+                    to_visit.append(full)
+
+    return sorted(product_links)
+
+
+def _deep_parse_product_row(site_key: str, url: str, target_brand: str) -> Optional[Dict[str, str]]:
+    cfg = DEEP_SCAN_SITES[site_key]
+    try:
+        soup = _deep_get_soup(url)
+    except Exception as e:
+        log.warning("deep_scan product skip url=%s err=%s", url, e)
+        return None
+
+    title = ""
+    for sel in (cfg["product_title_selector"] or "h1").split(","):
+        el = soup.select_one(sel.strip())
+        if el:
+            title = _deep_extract_text(el)
+            if title:
+                break
+
+    brand: Optional[str] = None
+    if cfg.get("brand_selector"):
+        brand = _deep_extract_text(soup.select_one(cfg["brand_selector"])) or None
+
+    if not brand:
+        if _deep_title_matches_brand(title, target_brand):
+            brand = target_brand.strip()
+        else:
+            return None
+    else:
+        if brand.lower() != target_brand.strip().lower() and not _deep_title_matches_brand(title, target_brand):
+            return None
+
+    price = ""
+    for sel in (cfg["price_selector"] or "p.price").split(","):
+        el = soup.select_one(sel.strip())
+        if el:
+            price = _deep_extract_text(el)
+            if price:
+                break
+
+    img_el = None
+    for sel in (cfg["image_selector"] or "img").split(","):
+        img_el = soup.select_one(sel.strip())
+        if img_el:
+            break
+    image_url = _deep_extract_image_url(img_el, url) if img_el else ""
+
+    description = ""
+    for sel in (cfg["description_selector"] or "div").split(","):
+        el = soup.select_one(sel.strip())
+        if el:
+            description = _deep_extract_text(el)
+            if description:
+                break
+
+    return {
+        "url": url,
+        "title": title,
+        "brand": brand or target_brand,
+        "price": price,
+        "image": image_url,
+        "description": description,
+    }
+
+
+def _deep_row_to_universal_product(row: Dict[str, str], target_brand: str) -> Dict[str, Any]:
+    name = row.get("title") or ""
+    parsed = parse_tire_name(name)
+    price = normalize_price(row.get("price") or "")
+    product_url = (row.get("url") or "").strip()
+    image_url = (row.get("image") or "").strip()
+    description = (row.get("description") or "").strip() or (
+        f"كفر {parsed.brand} {parsed.model} مقاس {parsed.size} — مطابقة Brand Deep Scan للماركة {target_brand}."
+    )
+    seo = build_seo_fields(parsed, "", "", "")
+    product_title = " ".join(
+        x for x in [parsed.brand, parsed.model, parsed.size, parsed.load_speed] if x
+    ).strip()
+    return {
+        "name": name,
+        "product_title": product_title,
+        "brand": parsed.brand,
+        "model": parsed.model,
+        "size": parsed.size,
+        "width": parsed.width,
+        "profile": parsed.profile,
+        "rim": parsed.rim,
+        "load_speed": parsed.load_speed,
+        "price": price,
+        "product_url": product_url,
+        "image_url": image_url,
+        "year": "",
+        "country": "",
+        "pattern": "",
+        "description": description,
+        "seo_title": seo["seo_title"],
+        "meta_description": seo["meta_description"],
+        "keywords": seo["keywords"],
+        "image_alt_text": seo["image_alt_text"],
+        "status": "needs_review" if (not parsed.size or not price) else "ok",
+    }
+
+
+def brand_deep_scan(
+    site_key: str,
+    brand: str,
+    *,
+    max_pages: int = 200,
+    limit: int = 0,
+    exports_root: Path = Path("exports"),
+    progress_cb: Optional[Callable[[int, str], None]] = None,
+    start_urls: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Brand Deep Scan: يجمع روابط من صفحات البداية/الترقيم، يفتح كل منتج،
+    ويحتفظ فقط بما يطابق البراند في عنوان الصفحة (أو حقل brand إن وُجد).
+    """
+    if site_key not in DEEP_SCAN_SITES:
+        raise ValueError(f"site_key غير مدعوم لـ Brand Deep Scan: {site_key}")
+    b = (brand or "").strip()
+    if not b:
+        raise ValueError("Brand Deep Scan يتطلب brand (اسم الماركة)")
+
+    eff_limit = _universal_effective_limit(limit)
+    links = _deep_collect_product_links(site_key, max_pages=max(1, int(max_pages or 1)), start_urls=start_urls)
+    log.info("brand_deep_scan site=%s brand=%s links=%s", site_key, b, len(links))
+
+    raw_rows: List[Dict[str, str]] = []
+    total = len(links)
+    for i, link in enumerate(links, start=1):
+        if progress_cb and total:
+            progress_cb(max(1, min(99, int(i / max(total, 1) * 90))), f"Brand Deep Scan {i}/{total}")
+        row = _deep_parse_product_row(site_key, link, b)
+        if row:
+            raw_rows.append(row)
+        if eff_limit > 0 and len(raw_rows) >= eff_limit:
+            break
+
+    products: List[Dict[str, Any]] = []
+    seen: Set[str] = set()
+    for row in raw_rows:
+        p = _deep_row_to_universal_product(row, b)
+        key = (p.get("product_url") or "").strip().lower() or (p.get("name") or "").strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        products.append(p)
+
+    exports_root = Path(exports_root)
+    csv_path = exports_root / f"{site_key}_deep_scan_salla_like.csv"
+    export_salla_like_csv(products, csv_path)
+    if progress_cb:
+        progress_cb(100, f"Brand Deep Scan اكتمل — {len(products)} منتج")
+
+    log.info("brand_deep_scan done site=%s count=%s csv=%s", site_key, len(products), csv_path)
+    return {
+        "ok": True,
+        "count": len(products),
+        "items": products,
+        "csv_path": str(csv_path),
+    }
 
 
 # =========================

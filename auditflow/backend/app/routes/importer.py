@@ -22,7 +22,7 @@ from ..services.importer.snapshot_store import (
     list_importer_snapshots,
     save_importer_snapshot,
 )
-from ..services.importer.universal_scraper import run_universal_import
+from ..services.importer.universal_scraper import brand_deep_scan, run_universal_import
 
 router = APIRouter(prefix="/importer", tags=["importer"])
 
@@ -252,25 +252,45 @@ def scrape_importer_universal(request: Request, body: UniversalImporterRequest) 
 
     category_url = (body.category_url or "").strip()
     site_key = (body.site_key or "").strip().lower()
-    if not category_url.startswith("http://") and not category_url.startswith("https://"):
-        raise HTTPException(400, "أدخل رابطًا صحيحًا يبدأ بـ http:// أو https://")
     if not site_key:
         raise HTTPException(400, "site_key مطلوب.")
 
     exports_root = _uploads_root().parent / "exports"
-    try:
-        out = run_universal_import(
-            site_key=site_key,
-            category_url=category_url,
-            max_pages=int(body.max_pages or 10),
-            limit=int(body.limit or 0),
-            brand=(body.brand or "").strip(),
-            exports_root=exports_root,
-        )
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    except Exception:
-        raise HTTPException(502, "فشل تشغيل السحب العام. تأكد من site_key والرابط.")
+    is_deep_scan = category_url.lower() == "deep-scan"
+
+    if is_deep_scan:
+        brand = (body.brand or "").strip()
+        if not brand:
+            raise HTTPException(400, "Brand Deep Scan: أدخل اسم الماركة في الحقل brand.")
+        try:
+            out = brand_deep_scan(
+                site_key=site_key,
+                brand=brand,
+                max_pages=int(body.max_pages or 200),
+                limit=int(body.limit or 0),
+                exports_root=exports_root,
+                progress_cb=None,
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except Exception:
+            raise HTTPException(502, "فشل Brand Deep Scan. تأكد من site_key والماركة.")
+    else:
+        if not category_url.startswith("http://") and not category_url.startswith("https://"):
+            raise HTTPException(400, "أدخل رابطًا صحيحًا يبدأ بـ http:// أو https://")
+        try:
+            out = run_universal_import(
+                site_key=site_key,
+                category_url=category_url,
+                max_pages=int(body.max_pages or 10),
+                limit=int(body.limit or 0),
+                brand=(body.brand or "").strip(),
+                exports_root=exports_root,
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except Exception:
+            raise HTTPException(502, "فشل تشغيل السحب العام. تأكد من site_key والرابط.")
 
     items = out.get("items", [])
     _attach_importer_previews(items)
@@ -279,6 +299,7 @@ def scrape_importer_universal(request: Request, body: UniversalImporterRequest) 
         "count": out.get("count", 0),
         "csv_path": out.get("csv_path", ""),
         "items": items,
+        "mode": "brand_deep_scan" if is_deep_scan else "universal",
     }
     save_importer_snapshot(
         user_id,
@@ -289,6 +310,7 @@ def scrape_importer_universal(request: Request, body: UniversalImporterRequest) 
             "brand": (body.brand or "").strip(),
             "max_pages": int(body.max_pages or 10),
             "limit": int(body.limit or 0),
+            "mode": result["mode"],
         },
         result,
     )
