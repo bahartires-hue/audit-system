@@ -21,6 +21,19 @@ _REQUEST_HEADERS = {
     "Accept-Language": "ar,en-US;q=0.9,en;q=0.8",
 }
 
+_API_HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+}
+
+
+def _http_get(url: str, *, timeout: int = 45, headers: Optional[Dict[str, str]] = None) -> requests.Response:
+    hdrs = headers or _REQUEST_HEADERS
+    try:
+        return requests.get(url, timeout=timeout, headers=hdrs)
+    except requests.exceptions.SSLError:
+        log.warning("tireex ssl verify failed; retrying without verification url=%s", url)
+        return requests.get(url, timeout=timeout, headers=hdrs, verify=False)
+
 
 def _effective_max_items(limit: int, max_pages: int) -> int:
     """
@@ -44,7 +57,7 @@ def _clean(s: str) -> str:
 
 
 def _fetch(url: str) -> BeautifulSoup:
-    r = requests.get(url, timeout=45, headers=_REQUEST_HEADERS)
+    r = _http_get(url, timeout=45)
     r.raise_for_status()
     return BeautifulSoup(r.text, "lxml")
 
@@ -207,6 +220,106 @@ def _extract_size_token(text: str) -> str:
     if not m:
         return ""
     return f"{m.group(1)}/{m.group(2)}R{m.group(3)}"
+
+
+def _store_api_category_slug(seed_url: str) -> str:
+    path = (urlparse(seed_url).path or "").strip("/").lower()
+    m = re.match(r"^product-category/([^/]+)/?$", path)
+    return (m.group(1) or "").strip() if m else ""
+
+
+def _store_api_price_string(prices: Dict[str, Any]) -> str:
+    if not isinstance(prices, dict):
+        return ""
+    raw = str(prices.get("price") or "").strip()
+    try:
+        minor = int(prices.get("currency_minor_unit") or 2)
+    except (TypeError, ValueError):
+        minor = 2
+    if not raw or not raw.isdigit():
+        return ""
+    value = int(raw) / (10**minor)
+    return str(int(value)) if float(value).is_integer() else f"{value:.{minor}f}".rstrip("0").rstrip(".")
+
+
+def _store_api_listing_rows(seed_url: str, max_pages: int, max_items: int) -> List[Dict[str, Any]]:
+    """
+    WooCommerce Store API fallback for Tireex category pages.
+    يتجاوز مشاكل HTML الناقص/الحماية ويعيد منتجات التصنيف مباشرة من الـ API.
+    """
+    slug = _store_api_category_slug(seed_url)
+    if not slug:
+        return []
+
+    base = f"{urlparse(seed_url).scheme}://{urlparse(seed_url).netloc}"
+    cat_api = f"{base}/wp-json/wp/v2/product_cat?slug={slug}"
+    try:
+        r = _http_get(cat_api, timeout=30, headers=_API_HEADERS)
+        r.raise_for_status()
+        cats = r.json()
+    except Exception as e:
+        log.info("tireex store_api category lookup failed slug=%s err=%s", slug, e)
+        return []
+
+    if not isinstance(cats, list) or not cats:
+        log.info("tireex store_api category not found slug=%s", slug)
+        return []
+
+    cat = next((x for x in cats if str(x.get("slug") or "").strip().lower() == slug), cats[0])
+    cat_id = cat.get("id")
+    if not cat_id:
+        return []
+
+    out: List[Dict[str, Any]] = []
+    seen: Set[str] = set()
+    per_page = min(100, max(20, min(max_items, 100))) if int(max_items or 0) > 0 else 100
+    for page in range(1, max(1, int(max_pages or 1)) + 1):
+        api_url = f"{base}/wp-json/wc/store/v1/products?category={cat_id}&page={page}&per_page={per_page}"
+        try:
+            r = _http_get(api_url, timeout=30, headers=_API_HEADERS)
+            r.raise_for_status()
+            rows = r.json()
+        except Exception as e:
+            log.info("tireex store_api products failed page=%s cat_id=%s err=%s", page, cat_id, e)
+            break
+        if not isinstance(rows, list) or not rows:
+            break
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            product_url = _clean(str(row.get("permalink") or ""))
+            if not product_url or product_url in seen:
+                continue
+            seen.add(product_url)
+            images = row.get("images") or []
+            image_url = ""
+            if isinstance(images, list) and images:
+                first = images[0] or {}
+                if isinstance(first, dict):
+                    image_url = _clean(str(first.get("src") or first.get("thumbnail") or ""))
+            name = _clean(str(row.get("name") or ""))
+            out.append(
+                {
+                    "name": name,
+                    "price": _store_api_price_string(row.get("prices") or {}),
+                    "old_price": "",
+                    "product_url": product_url,
+                    "image_url": image_url,
+                    "year": "",
+                    "country": "",
+                    "warranty": "",
+                    "pattern": "",
+                    "description": "",
+                    "_size_token": _extract_size_token(name),
+                }
+            )
+            if len(out) >= max_items:
+                break
+        if len(out) >= max_items or len(rows) < per_page:
+            break
+
+    log.info("tireex store_api products=%s slug=%s seed_url=%s", len(out), slug, seed_url)
+    return out
 
 
 def _extract_gtm_embedded_listings(base_url: str, soup: BeautifulSoup) -> List[Dict[str, Any]]:
@@ -659,6 +772,16 @@ def scrape_tireex(
         links = [url]
         _tireex_progress(progress_cb, 15, "جاري تحليل صفحة المنتج...")
     else:
+        # WooCommerce Store API هو fallback أقوى من HTML على بعض البيئات (مثل Render)
+        # عندما تُرجع الصفحة HTML ناقصًا أو بلا كروت منتجات.
+        store_rows = _store_api_listing_rows(url, max_pages=max_pages, max_items=max_items)
+        if store_rows:
+            _merge_listing_rows_unique(listing_items, store_rows)
+            for row in store_rows:
+                pu = (row.get("product_url") or "").strip()
+                if pu and pu not in links:
+                    links.append(pu)
+            _tireex_progress(progress_cb, 12, f"Store API: تم جمع {len(store_rows)} منتجًا")
         current = url
         visited_pages: Set[str] = set()
         page_count = 0
@@ -711,16 +834,17 @@ def scrape_tireex(
                 next_page_url = nxt
                 break
             log.info(
-                "pagination current_page=%s products_found_on_page=%s total_products_collected=%s next_page_url=%s",
+                "pagination current_page=%s products_found_on_page=%s total_products_collected=%s listing_items=%s next_page_url=%s",
                 page_count,
                 len(page_products),
                 len(links),
+                len(listing_items),
                 next_page_url,
             )
             _tireex_progress(
                 progress_cb,
                 int(22 * page_count / max(max_pages, 1)),
-                f"صفحات القائمة {page_count}/{max_pages} — جمع {len(links)} رابط منتج",
+                f"صفحات القائمة {page_count}/{max_pages} — روابط {len(links)} / عناصر {len(listing_items)}",
             )
             if len(links) >= max_items:
                 break
