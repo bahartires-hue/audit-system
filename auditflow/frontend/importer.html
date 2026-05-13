@@ -88,12 +88,20 @@
       <main class="erp-main">
         <div class="max-w-7xl mx-auto w-full px-4 py-6 md:px-6 space-y-4">
           <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-5">
-            <label class="block text-sm font-extrabold mb-2">رابط صفحة الماركة أو نتائج البحث</label>
+            <label id="siteUrlLabel" class="block text-sm font-extrabold mb-2">مصدر السحب</label>
+            <p id="siteUrlHelp" class="text-xs text-slate-500 dark:text-slate-400 mb-2">
+              اختر الوضع أولاً: سحب Tireex التقليدي، أو سحب عام من رابط تصنيف، أو Brand Deep Scan بالماركة.
+            </p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <select id="importModeInp" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 md:col-span-2">
+                <option value="classic" selected>الوضع التقليدي: رابط ماركة / نتائج بحث Tireex</option>
+                <option value="universal-category">السحب العام: من رابط تصنيف</option>
+                <option value="brand-deep-scan">Brand Deep Scan: بالماركة فقط</option>
+              </select>
               <input
                 id="siteUrl"
                 class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 md:col-span-2"
-                placeholder="Tireex: رابط القسم — سحب عام: رابط تصنيف أو deep-scan + ماركة"
+                placeholder="أدخل رابط صفحة الماركة أو نتائج البحث"
               />
               <select id="siteKeyInp" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2">
                 <option value="tireex">tireex</option>
@@ -149,8 +157,8 @@
               </div>
             </div>
             <div class="mt-2">
-              <button id="scrapeBtn" class="btn-primary-analyze px-5 py-2 rounded-xl" type="button">سحب المنتجات</button>
-              <button id="scrapeUniversalBtn" class="px-5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 ms-2" type="button">
+              <button id="scrapeBtn" class="btn-primary-analyze px-5 py-2 rounded-xl" type="button">بدء السحب</button>
+              <button id="scrapeUniversalBtn" class="hidden px-5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 ms-2" type="button">
                 سحب عام (متعدد المواقع)
               </button>
               <button id="downloadCsvBtn" class="px-5 py-2 rounded-xl border border-slate-300 dark:border-slate-600 ms-2" type="button">تحميل CSV</button>
@@ -224,7 +232,10 @@
       const xlsxBtn = document.getElementById("downloadXlsxBtn");
       const sallaBtn = document.getElementById("downloadSallaBtn");
       const scrapeUniversalBtn = document.getElementById("scrapeUniversalBtn");
+      const importModeInp = document.getElementById("importModeInp");
       const urlInp = document.getElementById("siteUrl");
+      const siteUrlLabel = document.getElementById("siteUrlLabel");
+      const siteUrlHelp = document.getElementById("siteUrlHelp");
       const siteKeyInp = document.getElementById("siteKeyInp");
       const brandInp = document.getElementById("brandInp");
       const sizeInp = document.getElementById("sizeInp");
@@ -254,32 +265,38 @@
       function render(items) {
         rows.innerHTML = "";
         items.forEach(function (x) {
+          const previewSrc = x.image_preview || x.image || "";
+          const originalName = x.name || x.title || "";
+          const seoName = x.product_title || x.title || x.name || "";
+          const model = x.model || x.description || "";
+          const size = x.size || "";
+          const year = x.year || "";
           const tr = document.createElement("tr");
           tr.className = "border-b border-slate-100 dark:border-slate-800";
           tr.innerHTML =
             '<td class="p-2">' +
-            (x.image_preview ? '<img class="preview-img" src="' + esc(x.image_preview) + '" alt="" />' : "") +
+            (previewSrc ? '<img class="preview-img" src="' + esc(previewSrc) + '" alt="" />' : "") +
             "</td>" +
             '<td class="p-2">' +
-            esc(x.name) +
+            esc(originalName) +
             "</td>" +
             '<td class="p-2">' +
-            esc(x.product_title) +
+            esc(seoName) +
             "</td>" +
             '<td class="p-2">' +
             esc(x.brand) +
             "</td>" +
             '<td class="p-2">' +
-            esc(x.model) +
+            esc(model) +
             "</td>" +
             '<td class="p-2">' +
-            esc(x.size) +
+            esc(size) +
             "</td>" +
             '<td class="p-2">' +
             esc(x.price) +
             "</td>" +
             '<td class="p-2">' +
-            esc(x.year) +
+            esc(year) +
             "</td>" +
             '<td class="p-2">' +
             esc(x.image_status || "") +
@@ -291,16 +308,50 @@
         });
       }
 
-      btn.addEventListener("click", async function () {
+      function parseBoundedInt(value, fallback, minValue, maxValue) {
+        let n = Math.floor(Number(value));
+        if (!Number.isFinite(n) || n < minValue) n = fallback;
+        else if (n > maxValue) n = maxValue;
+        return n;
+      }
+
+      function syncImportModeUI() {
+        const mode = importModeInp.value;
+        const isClassic = mode === "classic";
+        const isDeepScan = mode === "brand-deep-scan";
+
+        siteKeyInp.disabled = isClassic;
+        sizeInp.disabled = !isClassic;
+        pageMode.disabled = !isClassic;
+        urlInp.disabled = isDeepScan;
+
+        if (isClassic) {
+          siteUrlLabel.textContent = "رابط صفحة الماركة أو نتائج البحث";
+          siteUrlHelp.textContent = "هذا هو وضع Tireex الحالي داخل النظام. يمكنك فلترة النتائج بالمقاس والصفحات.";
+          urlInp.placeholder = "أدخل رابط صفحة الماركة أو نتائج البحث";
+          brandInp.placeholder = "اسم الماركة اختياري لتضييق النتائج";
+          btn.textContent = "سحب المنتجات";
+        } else if (isDeepScan) {
+          siteUrlLabel.textContent = "Deep Scan بالماركة";
+          siteUrlHelp.textContent = "في هذا الوضع لا تحتاج رابطًا؛ فقط اختر الموقع واكتب اسم الماركة، وسيزور النظام صفحات المنتجات مباشرة.";
+          urlInp.placeholder = "غير مطلوب في Deep Scan";
+          brandInp.placeholder = "اسم الماركة مطلوب، مثال: Accelera";
+          btn.textContent = "بدء Brand Deep Scan";
+        } else {
+          siteUrlLabel.textContent = "رابط التصنيف";
+          siteUrlHelp.textContent = "اختر الموقع ثم أدخل رابط التصنيف. خانة الماركة اختيارية لتصفية النتائج بعد السحب.";
+          urlInp.placeholder = "أدخل رابط التصنيف الكامل";
+          brandInp.placeholder = "اسم الماركة اختياري لتصفية النتائج";
+          btn.textContent = "سحب من رابط التصنيف";
+        }
+      }
+
+      async function runClassicImport() {
         const site_url = (urlInp.value || "").trim();
         const brand = (brandInp.value || "").trim();
         const size = (sizeInp.value || "").trim();
-        let limit = Math.floor(Number(limitInp.value));
-        if (!Number.isFinite(limit) || limit < 0) limit = 0;
-        else if (limit > 500000) limit = 500000;
-        let max_pages = Math.floor(Number(maxPagesInp.value));
-        if (!Number.isFinite(max_pages) || max_pages < 1) max_pages = 500;
-        else if (max_pages > 5000) max_pages = 5000;
+        const limit = parseBoundedInt(limitInp.value, 0, 0, 500000);
+        const max_pages = parseBoundedInt(maxPagesInp.value, 500, 1, 5000);
         const multi_pages = pageMode.value === "multi";
         if (!site_url) {
           showToast("أدخل رابط صفحة الماركة أو البحث", "#ef4444");
@@ -401,29 +452,29 @@
             setScrapeProgress(false, 1, "");
           }, 600);
         }
-      });
+      }
 
-      scrapeUniversalBtn.addEventListener("click", async function () {
-        const category_url = (urlInp.value || "").trim();
+      async function runUniversalImport(mode) {
         const site_key = (siteKeyInp.value || "").trim();
         const brand = (brandInp.value || "").trim();
-        let max_pages_u = Math.floor(Number(maxPagesInp.value));
-        if (!Number.isFinite(max_pages_u) || max_pages_u < 1) max_pages_u = 500;
-        else if (max_pages_u > 5000) max_pages_u = 5000;
-        let limit_u = Math.floor(Number(limitInp.value));
-        if (!Number.isFinite(limit_u) || limit_u < 0) limit_u = 0;
-        else if (limit_u > 500000) limit_u = 500000;
-        const max_pages = max_pages_u;
-        const limit = limit_u;
-        if (!category_url) {
-          showToast("أدخل رابط التصنيف أو اكتب deep-scan لوضع Brand Deep Scan", "#ef4444");
+        const max_pages = parseBoundedInt(maxPagesInp.value, 500, 1, 5000);
+        const limit = parseBoundedInt(limitInp.value, 0, 0, 500000);
+        const isDeepScan = mode === "brand-deep-scan";
+        const category_url = isDeepScan ? "deep-scan" : (urlInp.value || "").trim();
+        if (!site_key) {
+          showToast("اختر الموقع أولاً", "#ef4444");
           return;
         }
-        if (category_url.toLowerCase() === "deep-scan" && !brand) {
+        if (!isDeepScan && !category_url) {
+          showToast("أدخل رابط التصنيف", "#ef4444");
+          return;
+        }
+        if (isDeepScan && !brand) {
           showToast("Brand Deep Scan: اكتب اسم الماركة في خانة الماركة (مثل Accelera)", "#ef4444");
           return;
         }
-        setLoading(scrapeUniversalBtn, true, "جارٍ السحب العام...");
+        setLoading(btn, true, isDeepScan ? "جارٍ Deep Scan..." : "جارٍ السحب...");
+        setScrapeProgress(true, 10, isDeepScan ? "بدء Brand Deep Scan..." : "بدء السحب من رابط التصنيف...");
         try {
           syncCsrfFromCookie();
           const csrf = localStorage.getItem("csrf_token") || "";
@@ -435,22 +486,42 @@
           });
           if (!res.ok) throw new Error(await readErrorMessage(res));
           const data = await res.json();
+          setScrapeProgress(true, 100, "تم");
           restoredSessionId = "";
           render(data.items || []);
           metaInfo.textContent =
             (data.mode === "brand_deep_scan" ? "[Brand Deep Scan] " : "") +
-            "تم السحب العام: " +
+            (data.mode === "brand_deep_scan" ? "تم فحص الماركة: " : "تم السحب من رابط التصنيف: ") +
             (data.count || 0) +
-            " منتج - CSV: " +
+            " منتج — CSV: " +
             (data.csv_path || "");
-          showToast("تم السحب العام بنجاح", "#10b981");
+          showToast(data.mode === "brand_deep_scan" ? "تم Brand Deep Scan بنجاح" : "تم السحب من رابط التصنيف بنجاح", "#10b981");
           refreshSavedSessions();
         } catch (e) {
-          showToast(e.message || "فشل السحب العام", "#ef4444");
+          showToast(e.message || "فشل السحب", "#ef4444");
         } finally {
-          setLoading(scrapeUniversalBtn, false, "سحب عام (متعدد المواقع)");
+          setLoading(btn, false, btn.textContent);
+          setTimeout(function () {
+            setScrapeProgress(false, 1, "");
+          }, 600);
         }
+      }
+
+      btn.addEventListener("click", async function () {
+        const mode = importModeInp.value;
+        if (mode === "classic") {
+          await runClassicImport();
+          return;
+        }
+        await runUniversalImport(mode);
       });
+
+      scrapeUniversalBtn.addEventListener("click", async function () {
+        await runUniversalImport("universal-category");
+      });
+
+      importModeInp.addEventListener("change", syncImportModeUI);
+      syncImportModeUI();
 
       csvBtn.addEventListener("click", function () {
         if (restoredSessionId) {
