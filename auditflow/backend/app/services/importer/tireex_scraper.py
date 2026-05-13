@@ -791,9 +791,42 @@ def scrape_tireex(
                 25 + int(75 * (i + 1) / n_parse),
                 f"تحليل صفحات المنتجات {i + 1}/{n_parse} — مكتمل {len(products)}",
             )
-    if products:
-        _tireex_progress(progress_cb, 100, f"اكتمل جمع {len(products)} منتج من الموقع")
-        return products[:max_items]
+    # لا نُرجع المنتجات المحللة فقط؛ إذا فشل فتح بعض صفحات المنتج نبقي صفوف الكروت
+    # كـ fallback حتى لا ينخفض العدد النهائي بسبب timeouts / blocking / parsing failures.
+    merged_products: List[Dict[str, Any]] = []
+    parsed_by_url: Dict[str, Dict[str, Any]] = {}
+    for item in products:
+        pu = (item.get("product_url") or "").strip()
+        if pu and pu not in parsed_by_url:
+            parsed_by_url[pu] = item
+
+    seen_final: Set[str] = set()
+    for item in listing_items:
+        pu = (item.get("product_url") or "").strip()
+        if not pu or pu in seen_final:
+            continue
+        seen_final.add(pu)
+        merged = {**item, **parsed_by_url.get(pu, {})}
+        if merged.get("name") and merged.get("product_url"):
+            merged_products.append(merged)
+
+    for item in products:
+        pu = (item.get("product_url") or "").strip()
+        if not pu or pu in seen_final:
+            continue
+        seen_final.add(pu)
+        if item.get("name") and item.get("product_url"):
+            merged_products.append(item)
+
+    if merged_products:
+        log.info(
+            "tireex merged result parsed=%s listing_items=%s final=%s",
+            len(products),
+            len(listing_items),
+            len(merged_products),
+        )
+        _tireex_progress(progress_cb, 100, f"اكتمل جمع {len(merged_products)} منتج من الموقع")
+        return merged_products[:max_items]
     # fallback إذا فشل parsing صفحات المنتج: نعيد منتجات الكروت من صفحة الماركة/البحث.
     if not listing_items:
         log.warning("tireex no products found on listing; trying link extraction fallback")

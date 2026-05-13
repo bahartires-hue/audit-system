@@ -332,7 +332,11 @@ def run_import_pipeline(
         seen.add(key)
 
         price = _normalize_price(item.get("price", ""))
-        if raw_name == "ابحث !" or not parsed.get("size"):
+        if raw_name == "ابحث !":
+            continue
+        # في وضع الكتالوج الكامل نبقي المنتجات ذات المقاس غير القياسي للمراجعة
+        # بدل حذفها نهائياً (مثل: 175 R13 C). في الأوضاع المقيّدة نظل أكثر صرامة.
+        if not parsed.get("size") and not full_catalog:
             continue
         if not price:
             if not full_catalog:
