@@ -601,7 +601,8 @@ startBtn.addEventListener("click", async () => {
   itemsTbody.innerHTML = "";
 
   try {
-    const res = await fetch("/api/import", {
+    const apiUrl = window.location.pathname.replace(/\/$/, "") + "/api/import";
+    const res = await fetch(apiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

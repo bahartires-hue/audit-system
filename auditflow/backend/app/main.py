@@ -32,6 +32,7 @@ from .services.ai_insights import full_analysis
 from .services.pdf_convert import pdf_to_excel_bytes
 from .services.reports import mismatches_to_csv_bytes, mismatches_to_excel_bytes, mismatches_to_pdf_bytes
 from .services.storage import save_upload_file
+from brand_scan_app.app import app as brand_scan_subapp
 
 # يظهر في رأس HTTP للتحقق من أن الخادم يقدّم أحدث واجهة بعد النشر
 UI_ASSET_VERSION = "22"
@@ -152,6 +153,11 @@ def ui_importer(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "importer.html")
 
 
+@app.get("/brand-scan", response_class=HTMLResponse)
+def ui_brand_scan_redirect():
+    return RedirectResponse(url="/brand-scan/", status_code=302)
+
+
 @app.get("/trade", response_class=HTMLResponse)
 def ui_trade_dashboard(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "trade_sales.html")
@@ -264,6 +270,9 @@ def ui_social():
 @app.get("/healthz")
 def healthz():
     return {"ok": True, "service": "optimalmatch-api", "time": dt.datetime.utcnow().isoformat() + "Z"}
+
+
+app.mount("/brand-scan", brand_scan_subapp)
 
 
 @app.get("/metrics")
