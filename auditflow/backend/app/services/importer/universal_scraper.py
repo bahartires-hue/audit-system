@@ -750,6 +750,19 @@ def export_salla_like_csv(products: List[Dict[str, Any]], csv_path: Path) -> Non
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for p in products:
+            year = str(p.get("year", "") or "").strip()
+            country = str(p.get("country", "") or "").strip()
+            warranty = str(p.get("warranty", "") or "").strip()
+            promo_bits: List[str] = []
+            if year and country:
+                promo_bits.append(f"سنة الصنع {year} - بلد الصنع {country}")
+            elif year:
+                promo_bits.append(f"سنة الصنع {year}")
+            elif country:
+                promo_bits.append(f"بلد الصنع {country}")
+            if warranty:
+                promo_bits.append(f"الضمان {warranty}")
+            promo_title = " - ".join(x for x in promo_bits if x).strip() or str(p.get("seo_title", "") or "").strip()
             writer.writerow(
                 {
                     "أسم المنتج": p.get("product_title", ""),
@@ -758,7 +771,7 @@ def export_salla_like_csv(products: List[Dict[str, Any]], csv_path: Path) -> Non
                     "الوصف": p.get("description", ""),
                     "الماركة": p.get("brand", ""),
                     "المقاس": p.get("size", ""),
-                    "العنوان الترويجي": p.get("seo_title", ""),
+                    "العنوان الترويجي": promo_title,
                     "الكلمات المفتاحية": p.get("keywords", ""),
                     "رابط المنتج الأصلي": p.get("product_url", ""),
                 }
