@@ -16,9 +16,8 @@ from bs4 import BeautifulSoup
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("universal_scraper")
 
-
 # =========================
-# 1) إعداد المواقع
+# 1) إعداد المواقع (قابل للتوسّع)
 # =========================
 
 SITES_CONFIG: Dict[str, Dict[str, Any]] = {
@@ -60,8 +59,7 @@ SITES_CONFIG: Dict[str, Dict[str, Any]] = {
     },
 }
 
-
-# إعدادات Brand Deep Scan (قائمة + صفحة منتج + مطابقة الاسم مع البراند)
+# إعدادات Brand Deep Scan
 DEEP_SCAN_SITES: Dict[str, Dict[str, Any]] = {
     "tireex": {
         "base_url": "https://tireex.com",
@@ -192,6 +190,10 @@ def _clean_meta_text(value: str) -> str:
     return re.sub(r"\s+", " ", str(value or "").strip())
 
 
+# =========================
+# 2) أنماط استخراج البلد/السنة/الضمان
+# =========================
+
 CARD_COUNTRY_YEAR_PATTERN = re.compile(r"([أ-يA-Za-z\s]+)\s*/\s*تاريخ\s*(\d{4})")
 
 
@@ -243,7 +245,6 @@ def _extract_country_year_from_text(text: str) -> tuple[str, str]:
             country = _clean_meta_text(m_country.group(1))
 
     if not country and year:
-        # fallback لسطر بطاقة مثل "رومانيا / تاريخ 2024"
         pre_year = re.split(r"\b20[1-9][0-9]\b", t, maxsplit=1, flags=re.IGNORECASE)[0]
         if "/" in pre_year:
             country = _clean_meta_text(pre_year.split("/", 1)[0])
@@ -259,6 +260,27 @@ def _extract_country_year_from_text(text: str) -> tuple[str, str]:
     if len(country) > 40:
         country = ""
     return country, year
+
+
+def extract_warranty_from_text(text: str) -> str:
+    """
+    أمثلة:
+    - الضمان: خمس سنوات
+    - الضمان سنتين
+    - Warranty: 5 Years
+    """
+    t = _clean_meta_text(text)
+    if not t:
+        return ""
+    # عربي
+    m = re.search(r"الضمان[:\s]*([^\n\r]+)", t)
+    if m:
+        return _clean_meta_text(m.group(1))
+    # إنجليزي
+    m = re.search(r"(?:warranty|guarantee)[:\s]*([^\n\r]+)", t, flags=re.IGNORECASE)
+    if m:
+        return _clean_meta_text(m.group(1))
+    return ""
 
 
 def _deep_extract_image_url(el, page_url: str) -> str:
@@ -392,10 +414,15 @@ def _deep_parse_product_row(site_key: str, url: str, target_brand: str) -> Optio
             meta_text = _deep_extract_text(el)
             if meta_text:
                 break
+
     page_text = _deep_extract_text(soup.body or soup)
-    country, year = extract_country_year_from_card(" ".join(x for x in [meta_text, description, page_text] if x))
+    combined = " ".join(x for x in [meta_text, description, page_text] if x)
+
+    country, year = extract_country_year_from_card(combined)
     if not country and not year:
-        country, year = _extract_country_year_from_text(" ".join(x for x in [meta_text, description, page_text] if x))
+        country, year = _extract_country_year_from_text(combined)
+
+    warranty = extract_warranty_from_text(combined)
 
     return {
         "url": url,
@@ -406,8 +433,303 @@ def _deep_parse_product_row(site_key: str, url: str, target_brand: str) -> Optio
         "description": description,
         "year": year,
         "country": country,
+        "warranty": warranty,
     }
 
+
+# =========================
+# 3) أدوات مساعدة عامة
+# =========================
+
+def build_page_url(base_url: str, page: int, page_param: str) -> str:
+    parsed = urlparse(base_url)
+    qs = parse_qs(parsed.query)
+    qs[page_param] = [str(page)]
+    new_query = urlencode(qs, doseq=True)
+    return urlunparse(parsed._replace(query=new_query))
+
+
+def normalize_price(raw: str) -> str:
+    t = re.sub(r"[^\d,\.]", "", str(raw or "").strip())
+    if not t:
+        return ""
+    if "," in t and "." in t:
+        if t.rfind(",") > t.rfind("."):
+            t = t.replace(".", "").replace(",", ".")
+        else:
+            t = t.replace(",", "")
+    else:
+        if t.count(",") == 1 and t.count(".") == 0:
+            t = t.replace(",", ".")
+        elif t.count(",") > 1 and t.count(".") == 0:
+            t = t.replace(",", "")
+        elif t.count(".") > 1 and t.count(",") == 0:
+            t = t.replace(".", "")
+    try:
+        v = float(t)
+    except Exception:
+        return ""
+    if v <= 0:
+        return ""
+    return f"{v:.2f}".rstrip("0").rstrip(".")
+
+
+def normalize_brand(value: str) -> str:
+    v = str(value or "").strip().lower()
+    if v in {"ألفا", "الفا", "alpha"}:
+        return "alpha"
+    if v in {"لاوفين", "laufenn"}:
+        return "laufenn"
+    return v
+
+
+# =========================
+# 4) تحليل اسم الكفر
+# =========================
+
+@dataclass
+class ParsedTire:
+    brand: str
+    model: str
+    size: str
+    width: str
+    profile: str
+    rim: str
+    load_speed: str
+
+
+def parse_tire_name(name: str) -> ParsedTire:
+    s = str(name or "").strip()
+    parts = s.split()
+    brand = parts[0] if parts else ""
+    model = parts[1] if len(parts) > 1 else ""
+
+    size_match = re.search(r"(\d{3})\s*/\s*(\d{2})\s*R\s*(\d{2})", s, flags=re.IGNORECASE)
+    size = ""
+    width = ""
+    profile = ""
+    rim = ""
+    if size_match:
+        width = size_match.group(1)
+        profile = size_match.group(2)
+        rim = size_match.group(3)
+        size = f"{width}/{profile}R{rim}"
+
+    load_speed_match = re.search(r"\b(\d{2,3}[A-Z])\b", s)
+    load_speed = load_speed_match.group(1) if load_speed_match else ""
+
+    return ParsedTire(
+        brand=brand,
+        model=model,
+        size=size,
+        width=width,
+        profile=profile,
+        rim=rim,
+        load_speed=load_speed,
+    )
+
+
+# =========================
+# 5) SEO ذكي لكل إطار
+# =========================
+
+def build_seo_fields(parsed: ParsedTire, year: str = "", country: str = "", pattern: str = "") -> Dict[str, str]:
+    brand = parsed.brand or ""
+    model = parsed.model or ""
+    size = parsed.size or ""
+    load_speed = parsed.load_speed or ""
+    year_txt = year or "غير محددة"
+    country_txt = country or "غير محدد"
+    pattern_txt = pattern or "غير محددة"
+
+    seo_title = (
+        f"كفر {brand} {model} مقاس {size} {load_speed} "
+        f"- سنة {year_txt} - أداء عالي وثبات ممتاز"
+    )
+
+    meta_description = (
+        f"كفر {brand} {model} مقاس {size} {load_speed} يتميز بثبات ممتاز وتماسك عالي "
+        f"على الطرق المختلفة. سنة الصنع: {year_txt}، بلد المنشأ: {country_txt}، "
+        f"نقشة الإطار: {pattern_txt}. خيار مثالي للاستخدام اليومي والرحلات."
+    )
+
+    keywords = (
+        f"كفر {brand}, اطارات {brand}, {brand} {model}, كفر {model}, "
+        f"مقاس {size}, اطارات سيارات {size}, كفرات {brand}, "
+        f"افضل كفرات {brand}, سعر كفر {brand} {model}, "
+        f"شراء كفر {brand}, اطارات {country_txt}, كفر نقشة {pattern_txt}"
+    )
+
+    image_alt = f"صورة كفر {brand} {model} مقاس {size} نقشة {pattern_txt}"
+
+    return {
+        "seo_title": seo_title,
+        "meta_description": meta_description,
+        "keywords": keywords,
+        "image_alt_text": image_alt,
+    }
+
+
+# =========================
+# 6) نموذج المنتج الخام + Scraper عام
+# =========================
+
+@dataclass
+class RawProduct:
+    name: str
+    price_raw: str
+    image_url: str
+    product_url: str
+    year: str = ""
+    warranty: str = ""
+    country: str = ""
+    pattern: str = ""
+
+
+def _extract_card_meta_for_kafaratplus(card) -> tuple[str, str, str]:
+    """
+    يقرأ نص الكرت كامل، ويستخرج:
+    - country/year من سطر مثل: رومانيا / تاريخ 2025
+    - warranty من سطر منفصل مثل: الضمان: خمس سنوات
+    بدون خلط بينهما.
+    """
+    card_text = _deep_extract_text(card)
+    lines = [l.strip() for l in card_text.splitlines() if l.strip()]
+    country = ""
+    year = ""
+    warranty = ""
+
+    for line in lines:
+        # أولاً: سطر البلد/السنة
+        c, y = extract_country_year_from_card(line)
+        if c and y:
+            country = c
+            year = y
+            continue
+        # ثانياً: سطر الضمان
+        if not warranty:
+            w = extract_warranty_from_text(line)
+            if w:
+                warranty = w
+
+    # fallback لو ما لقينا في الأسطر
+    if not country and not year:
+        country, year = extract_country_year_from_card(card_text)
+    if not country and not year:
+        country, year = _extract_country_year_from_text(card_text)
+    if not warranty:
+        warranty = extract_warranty_from_text(card_text)
+
+    return country, year, warranty
+
+
+def scrape_single_page(url: str, cfg: Dict[str, Any]) -> List[RawProduct]:
+    items: List[RawProduct] = []
+
+    try:
+        resp = requests.get(url, timeout=20)
+    except Exception as e:
+        log.warning("request_failed url=%s err=%s", url, e)
+        return items
+
+    if resp.status_code != 200:
+        log.warning("bad_status url=%s status=%s", url, resp.status_code)
+        return items
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    for card in soup.select(cfg["product_selector"]):
+        title_el = card.select_one(cfg["title_selector"])
+        price_el = card.select_one(cfg["price_selector"])
+        img_el = card.select_one(cfg["image_selector"])
+        link_el = card.select_one(cfg["link_selector"])
+
+        name = title_el.get_text(strip=True) if title_el else ""
+        price_raw = price_el.get_text(strip=True) if price_el else ""
+        image_url = img_el.get("src", "") if img_el else ""
+        product_url = link_el.get("href", "") if link_el else ""
+        image_url = urljoin(url, image_url) if image_url else ""
+        product_url = urljoin(url, product_url) if product_url else ""
+
+        country = ""
+        year = ""
+        warranty = ""
+
+        # مسار خاص لـ KafaratPlus: قراءة الكرت نفسه
+        if "kafaratplus.com" in url or cfg.get("base_url", "").endswith("kafaratplus.com"):
+            country, year, warranty = _extract_card_meta_for_kafaratplus(card)
+        else:
+            # مواقع أخرى: نحاول من عناصر meta داخل الكرت
+            meta_text = ""
+            for sel in (
+                ".product-card-year, .product-box-year, .year, .origin, .country, [class*='year'], [class*='origin']"
+            ).split(","):
+                el = card.select_one(sel.strip())
+                if el:
+                    meta_text = _deep_extract_text(el)
+                    if meta_text:
+                        break
+            card_text = _deep_extract_text(card)
+            if not meta_text:
+                meta_text = card_text
+            country, year = extract_country_year_from_card(card_text)
+            if not country and not year:
+                country, year = _extract_country_year_from_text(meta_text)
+            warranty = extract_warranty_from_text(card_text)
+
+        if not name:
+            continue
+
+        items.append(
+            RawProduct(
+                name=name,
+                price_raw=price_raw,
+                image_url=image_url,
+                product_url=product_url,
+                year=year,
+                country=country,
+                warranty=warranty,
+            )
+        )
+
+    return items
+
+
+def scrape_products(
+    site_key: str,
+    category_url: str,
+    *,
+    max_pages: int = 10,
+    limit: int = 0,
+) -> List[RawProduct]:
+    if site_key not in SITES_CONFIG:
+        raise ValueError(f"Unknown site_key={site_key}")
+
+    cfg = SITES_CONFIG[site_key]
+    page_param = cfg.get("pagination_param", "page")
+
+    all_items: List[RawProduct] = []
+
+    for page in range(1, max_pages + 1):
+        page_url = build_page_url(category_url, page, page_param)
+        log.info("scraping site=%s page=%s url=%s", site_key, page, page_url)
+
+        page_items = scrape_single_page(page_url, cfg)
+        if not page_items:
+            break
+
+        all_items.extend(page_items)
+
+        if limit > 0 and len(all_items) >= limit:
+            all_items = all_items[:limit]
+            break
+
+    return all_items
+
+
+# =========================
+# 7) تحويل Brand Deep Scan إلى Universal Product
+# =========================
 
 def _deep_row_to_universal_product(row: Dict[str, str], target_brand: str) -> Dict[str, Any]:
     name = row.get("title") or ""
@@ -418,7 +740,10 @@ def _deep_row_to_universal_product(row: Dict[str, str], target_brand: str) -> Di
     description = (row.get("description") or "").strip() or (
         f"كفر {parsed.brand} {parsed.model} مقاس {parsed.size} — مطابقة Brand Deep Scan للماركة {target_brand}."
     )
-    seo = build_seo_fields(parsed, "", "", "")
+    year = (row.get("year") or "").strip()
+    country = (row.get("country") or "").strip()
+    pattern = (row.get("pattern") or "").strip()
+    seo = build_seo_fields(parsed, year, country, pattern)
     product_title = " ".join(
         x for x in [parsed.brand, parsed.model, parsed.size, parsed.load_speed] if x
     ).strip()
@@ -435,15 +760,102 @@ def _deep_row_to_universal_product(row: Dict[str, str], target_brand: str) -> Di
         "price": price,
         "product_url": product_url,
         "image_url": image_url,
-        "year": (row.get("year") or "").strip(),
-        "country": (row.get("country") or "").strip(),
-        "pattern": "",
+        "year": year,
+        "country": country,
+        "pattern": pattern,
         "description": description,
         "seo_title": seo["seo_title"],
         "meta_description": seo["meta_description"],
         "keywords": seo["keywords"],
         "image_alt_text": seo["image_alt_text"],
         "status": "needs_review" if (not parsed.size or not price) else "ok",
+    }
+
+
+def _universal_effective_limit(limit: int) -> int:
+    try:
+        v = int(limit or 0)
+    except Exception:
+        return 0
+    return max(0, v)
+
+
+def run_universal_import(
+    site_key: str,
+    category_url: str,
+    *,
+    max_pages: int = 10,
+    limit: int = 0,
+    brand: str = "",
+    exports_root: Path = Path("exports"),
+) -> Dict[str, Any]:
+    eff_limit = _universal_effective_limit(limit)
+    raw_items = scrape_products(site_key, category_url, max_pages=max_pages, limit=eff_limit)
+
+    products: List[Dict[str, Any]] = []
+    seen: Set[str] = set()
+    selected_brand = normalize_brand(brand)
+
+    for item in raw_items:
+        parsed = parse_tire_name(item.name)
+        price = normalize_price(item.price_raw)
+        product_brand = normalize_brand(parsed.brand)
+        if selected_brand and product_brand != selected_brand:
+            continue
+
+        seo = build_seo_fields(parsed, item.year, item.country, item.pattern)
+        product_title = " ".join(
+            x for x in [parsed.brand, parsed.model, parsed.size, parsed.load_speed] if x
+        ).strip()
+
+        key = (item.product_url or "").strip().lower() or (item.name or "").strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+
+        description = (
+            f"كفر {parsed.brand} {parsed.model} مقاس {parsed.size} يوفر ثباتاً ممتازاً "
+            f"وأداءً عملياً للاستخدام اليومي. بلد المنشأ: {item.country or 'غير محدد'}، "
+            f"سنة الصنع: {item.year or 'غير محددة'}، نقشة: {item.pattern or 'غير محددة'}."
+        )
+
+        products.append(
+            {
+                "name": item.name,
+                "product_title": product_title,
+                "brand": parsed.brand,
+                "model": parsed.model,
+                "size": parsed.size,
+                "width": parsed.width,
+                "profile": parsed.profile,
+                "rim": parsed.rim,
+                "load_speed": parsed.load_speed,
+                "price": price,
+                "product_url": item.product_url,
+                "image_url": item.image_url,
+                "year": item.year,
+                "country": item.country,
+                "pattern": item.pattern,
+                "description": description,
+                "seo_title": seo["seo_title"],
+                "meta_description": seo["meta_description"],
+                "keywords": seo["keywords"],
+                "image_alt_text": seo["image_alt_text"],
+                "warranty": item.warranty,
+                "status": "needs_review" if (not parsed.size or not price) else "ok",
+            }
+        )
+
+    exports_root = Path(exports_root)
+    exports_root.mkdir(parents=True, exist_ok=True)
+    csv_path = exports_root / f"{site_key}_products_salla_like.csv"
+    export_salla_like_csv(products, csv_path)
+
+    log.info("done site=%s count=%s csv=%s", site_key, len(products), csv_path)
+    return {
+        "count": len(products),
+        "csv_path": str(csv_path),
+        "items": products,
     }
 
 
@@ -493,6 +905,7 @@ def brand_deep_scan(
         products.append(p)
 
     exports_root = Path(exports_root)
+    exports_root.mkdir(parents=True, exist_ok=True)
     csv_path = exports_root / f"{site_key}_deep_scan_salla_like.csv"
     export_salla_like_csv(products, csv_path)
     if progress_cb:
@@ -508,248 +921,7 @@ def brand_deep_scan(
 
 
 # =========================
-# 2) أدوات مساعدة
-# =========================
-
-def build_page_url(base_url: str, page: int, page_param: str) -> str:
-    parsed = urlparse(base_url)
-    qs = parse_qs(parsed.query)
-    qs[page_param] = [str(page)]
-    new_query = urlencode(qs, doseq=True)
-    return urlunparse(parsed._replace(query=new_query))
-
-
-def normalize_price(raw: str) -> str:
-    t = re.sub(r"[^\d,\.]", "", str(raw or "").strip())
-    if not t:
-        return ""
-    if "," in t and "." in t:
-        if t.rfind(",") > t.rfind("."):
-            t = t.replace(".", "").replace(",", ".")
-        else:
-            t = t.replace(",", "")
-    else:
-        if t.count(",") == 1 and t.count(".") == 0:
-            t = t.replace(",", ".")
-        elif t.count(",") > 1 and t.count(".") == 0:
-            t = t.replace(",", "")
-        elif t.count(".") > 1 and t.count(",") == 0:
-            t = t.replace(".", "")
-    try:
-        v = float(t)
-    except Exception:
-        return ""
-    if v <= 0:
-        return ""
-    return f"{v:.2f}".rstrip("0").rstrip(".")
-
-
-def normalize_brand(value: str) -> str:
-    v = str(value or "").strip().lower()
-    if v in {"ألفا", "الفا", "alpha"}:
-        return "alpha"
-    if v in {"لاوفين", "laufenn"}:
-        return "laufenn"
-    return v
-
-
-# =========================
-# 3) تحليل اسم الكفر
-# =========================
-
-@dataclass
-class ParsedTire:
-    brand: str
-    model: str
-    size: str
-    width: str
-    profile: str
-    rim: str
-    load_speed: str
-
-
-def parse_tire_name(name: str) -> ParsedTire:
-    s = str(name or "").strip()
-    parts = s.split()
-    brand = parts[0] if parts else ""
-    model = parts[1] if len(parts) > 1 else ""
-
-    size_match = re.search(r"(\d{3})\s*/\s*(\d{2})\s*R\s*(\d{2})", s, flags=re.IGNORECASE)
-    size = ""
-    width = ""
-    profile = ""
-    rim = ""
-    if size_match:
-        width = size_match.group(1)
-        profile = size_match.group(2)
-        rim = size_match.group(3)
-        size = f"{width}/{profile}R{rim}"
-
-    load_speed_match = re.search(r"\b(\d{2,3}[A-Z])\b", s)
-    load_speed = load_speed_match.group(1) if load_speed_match else ""
-
-    return ParsedTire(
-        brand=brand,
-        model=model,
-        size=size,
-        width=width,
-        profile=profile,
-        rim=rim,
-        load_speed=load_speed,
-    )
-
-
-# =========================
-# 4) SEO ذكي لكل إطار
-# =========================
-
-def build_seo_fields(parsed: ParsedTire, year: str = "", country: str = "", pattern: str = "") -> Dict[str, str]:
-    brand = parsed.brand or ""
-    model = parsed.model or ""
-    size = parsed.size or ""
-    load_speed = parsed.load_speed or ""
-    year_txt = year or "غير محددة"
-    country_txt = country or "غير محدد"
-    pattern_txt = pattern or "غير محددة"
-
-    seo_title = (
-        f"كفر {brand} {model} مقاس {size} {load_speed} "
-        f"- سنة {year_txt} - أداء عالي وثبات ممتاز"
-    )
-
-    meta_description = (
-        f"كفر {brand} {model} مقاس {size} {load_speed} يتميز بثبات ممتاز وتماسك عالي "
-        f"على الطرق المختلفة. سنة الصنع: {year_txt}، بلد المنشأ: {country_txt}، "
-        f"نقشة الإطار: {pattern_txt}. خيار مثالي للاستخدام اليومي والرحلات."
-    )
-
-    keywords = (
-        f"كفر {brand}, اطارات {brand}, {brand} {model}, كفر {model}, "
-        f"مقاس {size}, اطارات سيارات {size}, كفرات {brand}, "
-        f"افضل كفرات {brand}, سعر كفر {brand} {model}, "
-        f"شراء كفر {brand}, اطارات {country_txt}, كفر نقشة {pattern_txt}"
-    )
-
-    image_alt = f"صورة كفر {brand} {model} مقاس {size} نقشة {pattern_txt}"
-
-    return {
-        "seo_title": seo_title,
-        "meta_description": meta_description,
-        "keywords": keywords,
-        "image_alt_text": image_alt,
-    }
-
-
-# =========================
-# 5) السكربر العام
-# =========================
-
-@dataclass
-class RawProduct:
-    name: str
-    price_raw: str
-    image_url: str
-    product_url: str
-    year: str = ""
-    warranty: str = ""
-    country: str = ""
-    pattern: str = ""
-
-
-def scrape_single_page(url: str, cfg: Dict[str, Any]) -> List[RawProduct]:
-    items: List[RawProduct] = []
-
-    try:
-        resp = requests.get(url, timeout=20)
-    except Exception as e:
-        log.warning("request_failed url=%s err=%s", url, e)
-        return items
-
-    if resp.status_code != 200:
-        log.warning("bad_status url=%s status=%s", url, resp.status_code)
-        return items
-
-    soup = BeautifulSoup(resp.text, "html.parser")
-
-    for card in soup.select(cfg["product_selector"]):
-        title_el = card.select_one(cfg["title_selector"])
-        price_el = card.select_one(cfg["price_selector"])
-        img_el = card.select_one(cfg["image_selector"])
-        link_el = card.select_one(cfg["link_selector"])
-
-        name = title_el.get_text(strip=True) if title_el else ""
-        price_raw = price_el.get_text(strip=True) if price_el else ""
-        image_url = img_el.get("src", "") if img_el else ""
-        product_url = link_el.get("href", "") if link_el else ""
-        image_url = urljoin(url, image_url) if image_url else ""
-        product_url = urljoin(url, product_url) if product_url else ""
-        meta_text = ""
-        for sel in (
-            ".product-card-year, .product-box-year, .year, .origin, .country, [class*='year'], [class*='origin']"
-        ).split(","):
-            el = card.select_one(sel.strip())
-            if el:
-                meta_text = _deep_extract_text(el)
-                if meta_text:
-                    break
-        card_text = _deep_extract_text(card)
-        if not meta_text:
-            meta_text = card_text
-        country, year = extract_country_year_from_card(card_text)
-        if not country and not year:
-            country, year = _extract_country_year_from_text(meta_text)
-
-        if not name:
-            continue
-
-        items.append(
-            RawProduct(
-                name=name,
-                price_raw=price_raw,
-                image_url=image_url,
-                product_url=product_url,
-                year=year,
-                country=country,
-            )
-        )
-
-    return items
-
-
-def scrape_products(
-    site_key: str,
-    category_url: str,
-    *,
-    max_pages: int = 10,
-    limit: int = 0,
-) -> List[RawProduct]:
-    if site_key not in SITES_CONFIG:
-        raise ValueError(f"Unknown site_key={site_key}")
-
-    cfg = SITES_CONFIG[site_key]
-    page_param = cfg.get("pagination_param", "page")
-
-    all_items: List[RawProduct] = []
-
-    for page in range(1, max_pages + 1):
-        page_url = build_page_url(category_url, page, page_param)
-        log.info("scraping site=%s page=%s url=%s", site_key, page, page_url)
-
-        page_items = scrape_single_page(page_url, cfg)
-        if not page_items:
-            break
-
-        all_items.extend(page_items)
-
-        if limit > 0 and len(all_items) >= limit:
-            all_items = all_items[:limit]
-            break
-
-    return all_items
-
-
-# =========================
-# 6) تصدير CSV جاهز لسلة
+# 8) تصدير CSV جاهز لسلة (مع promo_title صحيح)
 # =========================
 
 def export_salla_like_csv(products: List[Dict[str, Any]], csv_path: Path) -> None:
@@ -766,13 +938,15 @@ def export_salla_like_csv(products: List[Dict[str, Any]], csv_path: Path) -> Non
     ]
 
     csv_path.parent.mkdir(parents=True, exist_ok=True)
-    with csv_path.open("w", encoding="utf-8-sig", newline="") as f:
+    with csv_path.open("w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
+
         for p in products:
             year = str(p.get("year", "") or "").strip()
             country = str(p.get("country", "") or "").strip()
             warranty = str(p.get("warranty", "") or "").strip()
+
             promo_bits: List[str] = []
             if year and country:
                 promo_bits.append(f"سنة الصنع {year} - بلد الصنع {country}")
@@ -782,10 +956,12 @@ def export_salla_like_csv(products: List[Dict[str, Any]], csv_path: Path) -> Non
                 promo_bits.append(f"بلد الصنع {country}")
             if warranty:
                 promo_bits.append(f"الضمان {warranty}")
+
             promo_title = " - ".join(x for x in promo_bits if x).strip() or str(p.get("seo_title", "") or "").strip()
+
             writer.writerow(
                 {
-                    "أسم المنتج": p.get("product_title", ""),
+                    "أسم المنتج": p.get("product_title") or p.get("name") or "",
                     "صورة المنتج": p.get("image_url", ""),
                     "سعر المنتج": p.get("price", ""),
                     "الوصف": p.get("description", ""),
@@ -799,65 +975,30 @@ def export_salla_like_csv(products: List[Dict[str, Any]], csv_path: Path) -> Non
 
 
 # =========================
-# 7) البايبلاين الكامل
+# 9) نقطة تشغيل بسيطة (اختيارية)
 # =========================
 
+if __name__ == "__main__":
+    # مثال تشغيل سريع لـ KafaratPlus
+    site = "kafaratplus"
+    category = "https://kafaratplus.com/shop/"
+    exports_root = Path("exports")
 
-def _universal_effective_limit(limit: int) -> int:
-    """limit > 0: سقف صريح. limit <= 0: سقف أمان من AUDITFLOW_IMPORTER_MAX_ITEMS (نفس منطق Tireex)."""
-    li = int(limit or 0)
-    if li > 0:
-        return min(li, 2_000_000)
-    try:
-        cap = int((os.getenv("AUDITFLOW_IMPORTER_MAX_ITEMS") or "200000").strip())
-    except ValueError:
-        cap = 200_000
-    return max(10_000, min(cap, 2_000_000))
+    log.info("Start scraping %s ...", site)
+    raw_items = scrape_products(site, category_url=category, max_pages=5, limit=0)
 
-
-def run_universal_import(
-    site_key: str,
-    category_url: str,
-    *,
-    max_pages: int = 10,
-    limit: int = 0,
-    brand: str = "",
-    exports_root: Path = Path("exports"),
-) -> Dict[str, Any]:
-    effective_limit = _universal_effective_limit(limit)
-    raw_items = scrape_products(site_key, category_url, max_pages=max_pages, limit=effective_limit)
-
+    # تحويل RawProduct إلى dict متوافق مع export_salla_like_csv
     products: List[Dict[str, Any]] = []
-    seen: set[str] = set()
-    selected_brand = normalize_brand(brand)
-
-    for item in raw_items:
-        parsed = parse_tire_name(item.name)
-        price = normalize_price(item.price_raw)
-        product_brand = normalize_brand(parsed.brand)
-        if selected_brand and product_brand != selected_brand:
-            continue
-
-        seo = build_seo_fields(parsed, item.year, item.country, item.pattern)
-
+    for r in raw_items:
+        parsed = parse_tire_name(r.name)
+        price = normalize_price(r.price_raw)
+        seo = build_seo_fields(parsed, r.year, r.country, r.pattern)
         product_title = " ".join(
             x for x in [parsed.brand, parsed.model, parsed.size, parsed.load_speed] if x
         ).strip()
-
-        key = (item.product_url or "").strip().lower() or (item.name or "").strip().lower()
-        if key in seen:
-            continue
-        seen.add(key)
-
-        description = (
-            f"كفر {parsed.brand} {parsed.model} مقاس {parsed.size} يوفر ثباتاً ممتازاً "
-            f"وأداءً عملياً للاستخدام اليومي. بلد المنشأ: {item.country or 'غير محدد'}، "
-            f"سنة الصنع: {item.year or 'غير محددة'}، نقشة: {item.pattern or 'غير محددة'}."
-        )
-
         products.append(
             {
-                "name": item.name,
+                "name": r.name,
                 "product_title": product_title,
                 "brand": parsed.brand,
                 "model": parsed.model,
@@ -867,60 +1008,20 @@ def run_universal_import(
                 "rim": parsed.rim,
                 "load_speed": parsed.load_speed,
                 "price": price,
-                "product_url": item.product_url,
-                "image_url": item.image_url,
-                "year": item.year,
-                "country": item.country,
-                "pattern": item.pattern,
-                "description": description,
+                "product_url": r.product_url,
+                "image_url": r.image_url,
+                "year": r.year,
+                "country": r.country,
+                "pattern": r.pattern,
+                "description": f"كفر {parsed.brand} {parsed.model} مقاس {parsed.size}.",
                 "seo_title": seo["seo_title"],
                 "meta_description": seo["meta_description"],
                 "keywords": seo["keywords"],
                 "image_alt_text": seo["image_alt_text"],
-                "status": "needs_review" if (not parsed.size or not price) else "ok",
+                "warranty": r.warranty,
             }
         )
 
-    csv_path = exports_root / f"{site_key}_products_salla_like.csv"
+    csv_path = exports_root / f"{site}_salla_like.csv"
     export_salla_like_csv(products, csv_path)
-
-    log.info("done site=%s count=%s csv=%s", site_key, len(products), csv_path)
-    return {
-        "count": len(products),
-        "csv_path": str(csv_path),
-        "items": products,
-    }
-
-
-# =========================
-# 8) أمثلة تشغيل
-# =========================
-
-if __name__ == "__main__":
-    run_universal_import(
-        site_key="tireex",
-        category_url="https://tireex.com/product-category/accelera-tires/",
-        max_pages=10,
-        limit=0,
-    )
-
-    run_universal_import(
-        site_key="lumitires",
-        category_url="https://lumitiress.com/categories/1059345/%D8%A7%D8%B7%D8%A7%D8%B1%D8%A7%D8%AA-%D9%83%D9%88%D9%85%D9%87%D9%88",
-        max_pages=10,
-        limit=0,
-    )
-
-    run_universal_import(
-        site_key="kafaratplus",
-        category_url="https://kafaratplus.com/darbk",
-        max_pages=10,
-        limit=0,
-    )
-
-    run_universal_import(
-        site_key="etar",
-        category_url="https://etar.com/category/car-suv",
-        max_pages=10,
-        limit=0,
-    )
+    log.info("Done. Exported %s products to %s", len(products), csv_path)
