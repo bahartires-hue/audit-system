@@ -731,7 +731,33 @@ def _parse_product_page(product_url: str) -> Dict[str, Any]:
     if not year:
         year = _pick_text(doc, [".year", "[data-year]", ".manufacture-year"])
     warranty = _pick_text(doc, [".warranty", "[class*='warranty']"]) or _find_detail(page_text, ["الضمان", "Warranty"])
-    country = _pick_text(doc, [".country", "[class*='origin']", ".origin"]) or _find_detail(page_text, ["بلد المنشأ", "الصنع", "Origin", "Country"])
+    country = _pick_text(
+        doc,
+        [
+            ".country",
+            "[class*='origin']",
+            ".origin",
+            ".origin-country",
+            ".product-country",
+            ".manufacture-country",
+            "[data-country]",
+            ".woocommerce-product-attributes-item--attribute_pa_country",
+        ],
+    ) or _find_detail(
+        page_text,
+        [
+            "بلد المنشأ",
+            "بلد الصنع",
+            "بلد الإنتاج",
+            "صنع في",
+            "Origin",
+            "Country",
+            "Country of Origin",
+            "Country of Manufacture",
+            "Manufactured in",
+            "Made in",
+        ],
+    )
     pattern = _pick_text(doc, [".pattern", "[class*='pattern']"]) or _find_detail(page_text, ["النقشة", "Pattern", "Tread"])
     return {
         "name": name,

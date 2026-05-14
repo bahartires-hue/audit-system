@@ -150,40 +150,11 @@ def _display_brand_from_key(key: str) -> str:
     return normalize_brand_name(str(key).replace("-", " ").strip())
 
 
-_MANUFACTURER_COUNTRY_BY_BRAND = {
-    "accelera": "إندونيسيا",
-    "bridgestone": "اليابان",
-    "continental": "ألمانيا",
-    "goodyear": "الولايات المتحدة",
-    "hankook": "كوريا الجنوبية",
-    "kumho": "كوريا الجنوبية",
-    "laufenn": "كوريا الجنوبية",
-    "linglong": "الصين",
-    "michelin": "فرنسا",
-    "nexen": "كوريا الجنوبية",
-    "pirelli": "إيطاليا",
-    "sailun": "الصين",
-    "triangle": "الصين",
-    "yokohama": "اليابان",
-}
-
-
-def _infer_manufacturer_country(brand: str = "", raw_name: str = "") -> str:
-    brand_key = _normalize_brand_strict(brand or _infer_brand_from_name(raw_name))
-    return _MANUFACTURER_COUNTRY_BY_BRAND.get(brand_key, "")
-
-
 def _resolve_country_value(item: Dict[str, Any], parsed: Dict[str, Any], raw_name: str) -> tuple[str, str]:
-    """Prefer scraped country; otherwise infer manufacturer country only when year is present."""
+    """Prefer scraped country only; never infer by brand because one brand may have multiple plants."""
     scraped = str(item.get("country", "") or "").strip()
     if scraped:
         return scraped, "scraped"
-    year = str(item.get("year", "") or "").strip()
-    if not year:
-        return "", ""
-    inferred = _infer_manufacturer_country(str(parsed.get("brand", "") or ""), raw_name)
-    if inferred:
-        return inferred, "brand_inferred"
     return "", ""
 
 
