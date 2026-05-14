@@ -232,6 +232,20 @@ def _extract_card_country_year(card_root) -> tuple[str, str]:
     return country, year
 
 
+def _merge_preferring_non_empty(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    نُبقي قيم الكرت إذا كانت صفحة المنتج ترجع حقولاً فارغة.
+    هذا مهم خصوصاً لـ country/year لأن الكرت قد يحمل:
+    «رومانيا / تاريخ 2024» بينما صفحة المنتج لا تحتوي البلد صراحة.
+    """
+    merged = dict(base)
+    for key, value in (override or {}).items():
+        if value in ("", None, [], {}):
+            continue
+        merged[key] = value
+    return merged
+
+
 def _is_product_url(url: str) -> bool:
     p = (urlparse(url).path or "").lower().strip("/")
     if not p:
@@ -992,7 +1006,7 @@ def scrape_tireex(
         if not pu or pu in seen_final:
             continue
         seen_final.add(pu)
-        merged = {**item, **parsed_by_url.get(pu, {})}
+        merged = _merge_preferring_non_empty(item, parsed_by_url.get(pu, {}))
         if merged.get("name") and merged.get("product_url"):
             merged_products.append(merged)
 
@@ -1039,7 +1053,7 @@ def scrape_tireex(
         u = item.get("product_url", "")
         try:
             p = _parse_product_page(u) if u else {}
-            merged = {**item, **p}
+            merged = _merge_preferring_non_empty(item, p)
             if merged.get("name") and merged.get("product_url"):
                 upgraded.append(merged)
             else:
