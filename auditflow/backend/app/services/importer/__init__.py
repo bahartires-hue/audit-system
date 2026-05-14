@@ -150,6 +150,43 @@ def _display_brand_from_key(key: str) -> str:
     return normalize_brand_name(str(key).replace("-", " ").strip())
 
 
+_MANUFACTURER_COUNTRY_BY_BRAND = {
+    "accelera": "إندونيسيا",
+    "bridgestone": "اليابان",
+    "continental": "ألمانيا",
+    "goodyear": "الولايات المتحدة",
+    "hankook": "كوريا الجنوبية",
+    "kumho": "كوريا الجنوبية",
+    "laufenn": "كوريا الجنوبية",
+    "linglong": "الصين",
+    "michelin": "فرنسا",
+    "nexen": "كوريا الجنوبية",
+    "pirelli": "إيطاليا",
+    "sailun": "الصين",
+    "triangle": "الصين",
+    "yokohama": "اليابان",
+}
+
+
+def _infer_manufacturer_country(brand: str = "", raw_name: str = "") -> str:
+    brand_key = _normalize_brand_strict(brand or _infer_brand_from_name(raw_name))
+    return _MANUFACTURER_COUNTRY_BY_BRAND.get(brand_key, "")
+
+
+def _resolve_country_value(item: Dict[str, Any], parsed: Dict[str, Any], raw_name: str) -> tuple[str, str]:
+    """Prefer scraped country; otherwise infer manufacturer country only when year is present."""
+    scraped = str(item.get("country", "") or "").strip()
+    if scraped:
+        return scraped, "scraped"
+    year = str(item.get("year", "") or "").strip()
+    if not year:
+        return "", ""
+    inferred = _infer_manufacturer_country(str(parsed.get("brand", "") or ""), raw_name)
+    if inferred:
+        return inferred, "brand_inferred"
+    return "", ""
+
+
 def _name_signals_brand(item: Dict[str, Any], want_key: str) -> bool:
     """هل اسم المنتج أو الرابط يوحي بالماركة المطلوبة (want_key بعد _normalize_brand_strict)."""
     if not want_key:
@@ -405,6 +442,7 @@ def run_import_pipeline(
         image_status = unit.get("image_status", "")
         cloud_url = unit.get("cloud_url", "")
         cloud_status = unit.get("cloud_status", "")
+        country_value, _country_source = _resolve_country_value(item, parsed, raw_name)
 
         price_status = "ok" if price else "price_missing"
         seo_status = "ok" if parsed.get("size") else "needs_review"
@@ -432,7 +470,7 @@ def run_import_pipeline(
             "cloudinary_status": cloud_status,
             "year": item.get("year", ""),
             "warranty": item.get("warranty", ""),
-            "country": item.get("country", ""),
+            "country": country_value,
             "pattern": item.get("pattern", ""),
             "traction": str(item.get("traction", "") or "").strip(),
             "temperature": str(item.get("temperature", "") or "").strip(),
@@ -453,7 +491,7 @@ def run_import_pipeline(
             **parsed,
             "year": item.get("year", ""),
             "warranty": item.get("warranty", ""),
-            "country": item.get("country", ""),
+            "country": country_value,
             "pattern": item.get("pattern", ""),
         }
         bundle = generate_seo_bundle(
@@ -469,7 +507,7 @@ def run_import_pipeline(
             "size": str(row.get("size", "") or parsed.get("size", "") or "").strip(),
             "load_speed": str(row.get("load_speed", "") or parsed.get("load_speed", "") or "").strip(),
             "pattern": normalize_pattern_display(str(row.get("pattern", "") or item.get("pattern", "") or "")),
-            "country": str(row.get("country", "") or item.get("country", "") or "").strip(),
+            "country": str(row.get("country", "") or "").strip(),
             "year": str(row.get("year", "") or item.get("year", "") or "").strip(),
             "warranty": str(row.get("warranty", "") or item.get("warranty", "") or "").strip(),
             "traction": row.get("traction", "") or "",

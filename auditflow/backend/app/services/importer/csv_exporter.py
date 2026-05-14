@@ -183,8 +183,14 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
         title = title.strip() or f"{brand} {size}".strip()
         row = {col: "" for col in columns}
         promo_bits = []
-        if p.get("year"):
-            promo_bits.append(f"سنة الصنع {p.get('year')}")
+        year = str(p.get("year", "") or "").strip()
+        country = str(p.get("country", "") or "").strip()
+        if year and country:
+            promo_bits.append(f"سنة الصنع {year} - بلد الصنع {country}")
+        elif year:
+            promo_bits.append(f"سنة الصنع {year}")
+        elif country:
+            promo_bits.append(f"بلد الصنع {country}")
         if p.get("warranty"):
             promo_bits.append(f"الضمان {p.get('warranty')}")
         if not image_value:
