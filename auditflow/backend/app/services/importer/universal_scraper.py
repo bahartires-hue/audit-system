@@ -188,6 +188,64 @@ def _deep_extract_text(el) -> str:
     return el.get_text(" ", strip=True) if el else ""
 
 
+def _clean_meta_text(value: str) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip())
+
+
+def _extract_country_year_from_text(text: str) -> tuple[str, str]:
+    """
+    يدعم أنماطًا شائعة مثل:
+    - رومانيا / تاريخ 2024
+    - إسبانيا / تاريخ 2025
+    - بلد المنشأ: اليابان
+    - Made in Romania / 2024
+    """
+    t = _clean_meta_text(text)
+    if not t:
+        return "", ""
+
+    year = ""
+    m_year = re.search(r"\b(20[1-9][0-9])\b", t)
+    if m_year:
+        year = m_year.group(1)
+
+    country = ""
+    m_pair = re.search(
+        r"([^\|,\n\r/]{2,}?)\s*/\s*(?:تاريخ(?:\s*الصنع)?|date|production\s*date)\s*[:：]?\s*(20[1-9][0-9])",
+        t,
+        flags=re.IGNORECASE,
+    )
+    if m_pair:
+        country = _clean_meta_text(m_pair.group(1))
+        year = m_pair.group(2)
+    else:
+        m_country = re.search(
+            r"(?:بلد(?:\s+المنشأ|\s+الصنع|\s+الإنتاج)?|origin|country(?:\s+of\s+origin)?|made in|manufactured in)\s*[:：-]?\s*([^\|,\n\r/]+)",
+            t,
+            flags=re.IGNORECASE,
+        )
+        if m_country:
+            country = _clean_meta_text(m_country.group(1))
+
+    if not country and year:
+        # fallback لسطر بطاقة مثل "رومانيا / تاريخ 2024"
+        pre_year = re.split(r"\b20[1-9][0-9]\b", t, maxsplit=1, flags=re.IGNORECASE)[0]
+        if "/" in pre_year:
+            country = _clean_meta_text(pre_year.split("/", 1)[0])
+
+    country = re.sub(
+        r"(?:تاريخ(?:\s*الصنع)?|سنة\s*الصنع|production\s*date|date|بلد(?:\s+المنشأ|\s+الصنع|\s+الإنتاج)?|origin|country(?:\s+of\s+origin)?|made in|manufactured in)\s*[:：-]?\s*",
+        " ",
+        country,
+        flags=re.IGNORECASE,
+    )
+    country = re.sub(r"[/|,\-]+", " ", country)
+    country = _clean_meta_text(country)
+    if len(country) > 40:
+        country = ""
+    return country, year
+
+
 def _deep_extract_image_url(el, page_url: str) -> str:
     if not el:
         return ""
@@ -309,6 +367,19 @@ def _deep_parse_product_row(site_key: str, url: str, target_brand: str) -> Optio
             if description:
                 break
 
+    meta_text = ""
+    for sel in (
+        ".product-card-year, .product-box-year, .year, .origin, .country, .product_meta, "
+        ".woocommerce-product-attributes, .shop_attributes, .summary"
+    ).split(","):
+        el = soup.select_one(sel.strip())
+        if el:
+            meta_text = _deep_extract_text(el)
+            if meta_text:
+                break
+    page_text = _deep_extract_text(soup.body or soup)
+    country, year = _extract_country_year_from_text(" ".join(x for x in [meta_text, description, page_text] if x))
+
     return {
         "url": url,
         "title": title,
@@ -316,6 +387,8 @@ def _deep_parse_product_row(site_key: str, url: str, target_brand: str) -> Optio
         "price": price,
         "image": image_url,
         "description": description,
+        "year": year,
+        "country": country,
     }
 
 
@@ -345,8 +418,8 @@ def _deep_row_to_universal_product(row: Dict[str, str], target_brand: str) -> Di
         "price": price,
         "product_url": product_url,
         "image_url": image_url,
-        "year": "",
-        "country": "",
+        "year": (row.get("year") or "").strip(),
+        "country": (row.get("country") or "").strip(),
         "pattern": "",
         "description": description,
         "seo_title": seo["seo_title"],
@@ -593,6 +666,18 @@ def scrape_single_page(url: str, cfg: Dict[str, Any]) -> List[RawProduct]:
         product_url = link_el.get("href", "") if link_el else ""
         image_url = urljoin(url, image_url) if image_url else ""
         product_url = urljoin(url, product_url) if product_url else ""
+        meta_text = ""
+        for sel in (
+            ".product-card-year, .product-box-year, .year, .origin, .country, [class*='year'], [class*='origin']"
+        ).split(","):
+            el = card.select_one(sel.strip())
+            if el:
+                meta_text = _deep_extract_text(el)
+                if meta_text:
+                    break
+        if not meta_text:
+            meta_text = _deep_extract_text(card)
+        country, year = _extract_country_year_from_text(meta_text)
 
         if not name:
             continue
@@ -603,6 +688,8 @@ def scrape_single_page(url: str, cfg: Dict[str, Any]) -> List[RawProduct]:
                 price_raw=price_raw,
                 image_url=image_url,
                 product_url=product_url,
+                year=year,
+                country=country,
             )
         )
 
