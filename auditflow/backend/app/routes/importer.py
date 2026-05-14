@@ -301,7 +301,7 @@ def scrape_importer_universal(request: Request, body: UniversalImporterRequest) 
         "items": items,
         "mode": "brand_deep_scan" if is_deep_scan else "universal",
     }
-    save_importer_snapshot(
+    snapshot_id = save_importer_snapshot(
         user_id,
         "universal",
         {
@@ -314,6 +314,8 @@ def scrape_importer_universal(request: Request, body: UniversalImporterRequest) 
         },
         result,
     )
+    if snapshot_id:
+        result["snapshot_id"] = snapshot_id
     return result
 
 

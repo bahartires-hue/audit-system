@@ -487,14 +487,15 @@
           if (!res.ok) throw new Error(await readErrorMessage(res));
           const data = await res.json();
           setScrapeProgress(true, 100, "تم");
-          restoredSessionId = "";
+          restoredSessionId = data.snapshot_id || "";
           render(data.items || []);
           metaInfo.textContent =
             (data.mode === "brand_deep_scan" ? "[Brand Deep Scan] " : "") +
             (data.mode === "brand_deep_scan" ? "تم فحص الماركة: " : "تم السحب من رابط التصنيف: ") +
             (data.count || 0) +
             " منتج — CSV: " +
-            (data.csv_path || "");
+            (data.csv_path || "") +
+            (restoredSessionId ? " — Session: " + restoredSessionId : "");
           showToast(data.mode === "brand_deep_scan" ? "تم Brand Deep Scan بنجاح" : "تم السحب من رابط التصنيف بنجاح", "#10b981");
           refreshSavedSessions();
         } catch (e) {
