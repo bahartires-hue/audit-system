@@ -197,6 +197,41 @@ def _find_detail(page_text: str, labels: List[str]) -> str:
     return ""
 
 
+def _extract_card_country_year(card_root) -> tuple[str, str]:
+    """
+    بطاقات Tireex تعرض أحياناً سطرًا موحدًا مثل:
+    - رومانيا / تاريخ 2024
+    - إسبانيا / تاريخ 2025
+    نحتاج فصل البلد عن السنة بدل حفظ السطر كله كسنة.
+    """
+    meta = _pick_text(
+        card_root,
+        [
+            ".product-card-year .content",
+            ".product-card-year",
+            ".product-card-date",
+            ".product-card-meta",
+        ],
+    )
+    text = _clean(meta)
+    if not text:
+        return "", ""
+
+    year = ""
+    m_year = re.search(r"\b(20[1-9][0-9])\b", text)
+    if m_year:
+        year = m_year.group(1)
+
+    country = text
+    country = re.sub(r"\b(20[1-9][0-9])\b", " ", country)
+    country = re.sub(r"(?:تاريخ(?:\s*الصنع)?|سنة\s*الصنع|production\s*date|date)\s*[:：]?\s*", " ", country, flags=re.IGNORECASE)
+    country = re.sub(r"[/|,\-]+", " ", country)
+    country = _clean(country)
+    if re.fullmatch(r"[\d\s]+", country or ""):
+        country = ""
+    return country, year
+
+
 def _is_product_url(url: str) -> bool:
     p = (urlparse(url).path or "").lower().strip("/")
     if not p:
@@ -640,6 +675,7 @@ def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str,
             if not raw:
                 raw = img.get("data-src") or img.get("data-lazy-src") or img.get("src") or ""
             image_url = urljoin(base_url, raw) if raw else ""
+        card_country, card_year = _extract_card_country_year(card_root)
         out.append(
             {
                 "name": name,
@@ -647,8 +683,8 @@ def _extract_list_products(base_url: str, soup: BeautifulSoup) -> List[Dict[str,
                 "old_price": old_price,
                 "product_url": product_url,
                 "image_url": image_url,
-                "year": _pick_text(card_root, [".product-card-year .content", ".product-card-year"]),
-                "country": "",
+                "year": card_year,
+                "country": card_country,
                 "warranty": "",
                 "pattern": _pick_text(card_root, [".product-card-pattern"]),
                 "description": "",
