@@ -192,6 +192,21 @@ def _clean_meta_text(value: str) -> str:
     return re.sub(r"\s+", " ", str(value or "").strip())
 
 
+CARD_COUNTRY_YEAR_PATTERN = re.compile(r"([أ-يA-Za-z\s]+)\s*/\s*تاريخ\s*(\d{4})")
+
+
+def extract_country_year_from_card(text: str) -> tuple[str, str]:
+    text = _clean_meta_text(text)
+    if not text:
+        return "", ""
+    m = CARD_COUNTRY_YEAR_PATTERN.search(text)
+    if not m:
+        return "", ""
+    country = _clean_meta_text(m.group(1))
+    year = _clean_meta_text(m.group(2))
+    return country, year
+
+
 def _extract_country_year_from_text(text: str) -> tuple[str, str]:
     """
     يدعم أنماطًا شائعة مثل:
@@ -378,7 +393,9 @@ def _deep_parse_product_row(site_key: str, url: str, target_brand: str) -> Optio
             if meta_text:
                 break
     page_text = _deep_extract_text(soup.body or soup)
-    country, year = _extract_country_year_from_text(" ".join(x for x in [meta_text, description, page_text] if x))
+    country, year = extract_country_year_from_card(" ".join(x for x in [meta_text, description, page_text] if x))
+    if not country and not year:
+        country, year = _extract_country_year_from_text(" ".join(x for x in [meta_text, description, page_text] if x))
 
     return {
         "url": url,
@@ -675,9 +692,12 @@ def scrape_single_page(url: str, cfg: Dict[str, Any]) -> List[RawProduct]:
                 meta_text = _deep_extract_text(el)
                 if meta_text:
                     break
+        card_text = _deep_extract_text(card)
         if not meta_text:
-            meta_text = _deep_extract_text(card)
-        country, year = _extract_country_year_from_text(meta_text)
+            meta_text = card_text
+        country, year = extract_country_year_from_card(card_text)
+        if not country and not year:
+            country, year = _extract_country_year_from_text(meta_text)
 
         if not name:
             continue
