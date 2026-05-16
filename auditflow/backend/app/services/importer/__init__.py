@@ -133,6 +133,11 @@ def _infer_brand_from_url(site_url: str) -> str:
         candidate = _normalize_brand_strict(token.replace("-", " "))
         if candidate in {"alpha", "laufenn"}:
             return candidate
+    # صفحة ماركة حديثة: /Sailun أو /continental
+    if len(tokens) == 1:
+        slug = tokens[0]
+        if slug and slug not in skip_next:
+            return _normalize_brand_strict(slug.replace("-", " "))
     # أقسام WooCommerce: /product-category/sailun-tires/ → استنتاج «sailun» من أول جزء في slug
     m_cat = re.match(r"^product-category/([^/]+)/?", path)
     if m_cat:
@@ -266,16 +271,29 @@ def run_import_pipeline(
 
     scope_brand = "" if relaxed_brand_scope else (user_brand if user_brand else selected_brand)
     scoped_items = filter_products(prepared, brand=scope_brand, size=user_size, limit=limit)
-    if not scoped_items and prepared and not (user_brand or user_size):
-        # avoid hard-zero output when strict filter input is mismatched
-        cap_slice = max(1, int(limit)) if int(limit or 0) > 0 else len(prepared)
-        scoped_items = prepared[:cap_slice]
-        log.warning(
-            "importer relaxed filters because scoped=0 raw=%s brand=%s size=%s",
-            len(prepared),
-            user_brand,
-            user_size,
-        )
+    used_relaxed_scope = False
+    if not scoped_items and prepared:
+        if scope_brand:
+            scoped_items = filter_products(prepared, brand="", size=user_size, limit=limit)
+            if scoped_items:
+                used_relaxed_scope = True
+                log.warning(
+                    "importer brand filter dropped all items; retried without brand raw=%s scoped=%s brand=%s",
+                    len(prepared),
+                    len(scoped_items),
+                    scope_brand,
+                )
+        if not scoped_items:
+            cap_slice = max(1, int(limit)) if int(limit or 0) > 0 else len(prepared)
+            scoped_items = prepared[:cap_slice]
+            used_relaxed_scope = True
+            log.warning(
+                "importer relaxed filters because scoped=0 raw=%s brand=%s size=%s limit=%s",
+                len(prepared),
+                scope_brand or user_brand,
+                user_size,
+                limit,
+            )
     log.info(
         "importer filter applied raw=%s scoped=%s brand=%s size=%s limit=%s multi_pages=%s user_brand=%s",
         len(raw_items),
@@ -344,13 +362,14 @@ def run_import_pipeline(
             continue
         # في وضع الكتالوج الكامل نبقي المنتجات ذات المقاس غير القياسي للمراجعة
         # بدل حذفها نهائياً (مثل: 175 R13 C). في الأوضاع المقيّدة نظل أكثر صرامة.
-        if not parsed.get("size") and not full_catalog:
+        if not parsed.get("size") and not full_catalog and not used_relaxed_scope:
             continue
         if not price:
-            if not full_catalog:
+            if not full_catalog and not used_relaxed_scope:
                 continue
             price = "0"
-        if selected_brand and not relaxed_brand_scope:
+        effective_relaxed = relaxed_brand_scope or used_relaxed_scope
+        if selected_brand and not effective_relaxed:
             product_brand = _normalize_brand_strict(parsed.get("brand", "") or _infer_brand_from_name(raw_name))
             if product_brand and product_brand != selected_brand:
                 if _name_signals_brand(item, selected_brand):
@@ -371,7 +390,7 @@ def run_import_pipeline(
                 _normalize_brand_strict(parsed.get("brand", "")),
                 raw_name,
             )
-        elif selected_brand and relaxed_brand_scope:
+        elif selected_brand and effective_relaxed:
             pb = _normalize_brand_strict(parsed.get("brand", "") or _infer_brand_from_name(raw_name))
             if not pb:
                 parsed["brand"] = listing_brand_display or parsed.get("brand", "") or "Tire"
@@ -498,7 +517,7 @@ def run_import_pipeline(
 
         products.append(row)
 
-    if selected_brand:
+    if selected_brand and not used_relaxed_scope:
         for product in products:
             product_brand = _normalize_brand_strict(product.get("brand", ""))
             if selected_brand and product_brand != selected_brand:
@@ -545,7 +564,9 @@ def run_import_pipeline(
         "count": len(products),
         "scraped_count": len(raw_items),
         "after_filter_count": len(scoped_items),
+        "processed_count": len(products),
         "import_limit": int(limit or 0),
+        "filter_relaxed": used_relaxed_scope,
         "csv_path": exports["csv_path"],
         "xlsx_path": exports["xlsx_path"],
         "salla_csv_path": exports["salla_csv_path"],

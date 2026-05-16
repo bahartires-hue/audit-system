@@ -133,7 +133,27 @@ _BRAND_TITLE_ALIASES: Dict[str, tuple[str, ...]] = {
     "hankook": ("hankook", "هانكوك"),
     "michelin": ("michelin", "ميشلان"),
     "goodyear": ("goodyear", "جوديير"),
+    "sailun": ("sailun", "سايلون", "سايلن"),
+    "continental": ("continental", "كونتيننتال", "كونتيننتال"),
 }
+
+_KAFARATPLUS_SKIP_PATHS = frozenset(
+    {
+        "shop",
+        "cart",
+        "checkout",
+        "blog",
+        "contact",
+        "about",
+        "en",
+        "ar",
+        "product",
+        "products",
+        "api",
+    }
+)
+
+_KAFARATPLUS_TIRE_TITLE_RE = re.compile(r"\d{3}\s*/?\s*\d{2,3}\s*Z?R\s*\d{2}", re.IGNORECASE)
 
 
 def _deep_brand_tokens(brand_name: str) -> tuple[str, ...]:
@@ -273,6 +293,10 @@ def _extract_country_year_from_text(text: str) -> tuple[str, str]:
         year = m_year.group(1)
 
     country = ""
+    m_year_only = re.search(r"(?:^|[\s،,])تاريخ\s*(\d{4})\b", t, flags=re.IGNORECASE)
+    if m_year_only and not year:
+        year = m_year_only.group(1)
+
     m_pair = re.search(
         r"([^\|,\n\r/]{2,}?)\s*/\s*(?:تاريخ(?:\s*الصنع)?|date|production\s*date)\s*[:：]?\s*(20[1-9][0-9])",
         t,
@@ -489,6 +513,125 @@ def build_page_url(base_url: str, page: int, page_param: str) -> str:
     return urlunparse(parsed._replace(query=new_query))
 
 
+def _kafaratplus_brand_slug(url: str) -> str:
+    """مثل /Sailun أو /continental من رابط صفحة الماركة."""
+    path = (urlparse(url).path or "").strip("/")
+    if not path or "/" in path:
+        return ""
+    slug = path.split("/")[0].strip().lower()
+    if slug in _KAFARATPLUS_SKIP_PATHS:
+        return ""
+    return slug
+
+
+def _kafaratplus_skip_limit_page_url(base_url: str, page: int) -> Optional[str]:
+    """
+    صفحات الماركة الحديثة: ?skip=16&limit=16
+    الصفحة 1 = الرابط كما هو، الصفحة 2 = skip+limit، ...
+    """
+    parsed = urlparse(base_url)
+    qs = parse_qs(parsed.query)
+    if "limit" not in qs and "skip" not in qs:
+        return None
+    per_page = int((qs.get("limit") or ["16"])[0] or 16)
+    base_skip = int((qs.get("skip") or ["0"])[0] or 0)
+    skip = base_skip + max(0, page - 1) * per_page
+    new_qs = {k: list(v) for k, v in qs.items()}
+    new_qs["skip"] = [str(skip)]
+    new_qs["limit"] = [str(per_page)]
+    return urlunparse(parsed._replace(query=urlencode(new_qs, doseq=True)))
+
+
+def _listing_page_candidates(base_url: str, page: int, page_param: str = "page") -> List[str]:
+    """روابط ترقيم محتملة — كفرات بلس يستخدم skip/limit لصفحات الماركة."""
+    skip_url = _kafaratplus_skip_limit_page_url(base_url, page)
+    if skip_url:
+        return [skip_url]
+
+    if page <= 1:
+        return [base_url]
+    out: List[str] = []
+    seen: Set[str] = set()
+
+    def _add(u: str) -> None:
+        u = (u or "").strip()
+        if u and u not in seen:
+            seen.add(u)
+            out.append(u)
+
+    parsed = urlparse(base_url)
+    path = (parsed.path or "").rstrip("/")
+    _add(build_page_url(base_url, page, page_param))
+    _add(build_page_url(base_url, page, "paged"))
+    base_path = re.sub(r"/page/\d+/?$", "", path, flags=re.IGNORECASE)
+    page_path = f"{base_path}/page/{page}/" if base_path else f"/page/{page}/"
+    _add(urlunparse(parsed._replace(path=page_path)))
+    return out
+
+
+def _is_probable_product_detail(url: str, soup: BeautifulSoup, cfg: Dict[str, Any]) -> bool:
+    path = (urlparse(url).path or "").lower()
+    if "/product/" in path or re.search(r"/products/[^/]+/?$", path):
+        return True
+    has_cards = bool(soup.select(cfg.get("product_selector", "")))
+    has_pdp_title = bool(
+        soup.select_one(
+            "h1.product_title, h1.product-title, .product_title, .summary .product_title"
+        )
+    )
+    return has_pdp_title and not has_cards
+
+
+def _scrape_product_detail_as_one(url: str, cfg: Dict[str, Any]) -> List[RawProduct]:
+    """صفحة منتج واحد (ليس قائمة) — نستخرج منتجاً واحداً بدل البحث عن كروت."""
+    try:
+        resp = requests.get(url, timeout=20, headers=_DEEP_HEADERS)
+    except Exception as e:
+        log.warning("product_detail_failed url=%s err=%s", url, e)
+        return []
+    if resp.status_code != 200:
+        return []
+    soup = BeautifulSoup(resp.text, "html.parser")
+    title = _deep_product_title_from_soup(soup, cfg)
+    if not title:
+        return []
+
+    price_raw = ""
+    for sel in (cfg.get("price_selector") or "p.price, .price").split(","):
+        el = soup.select_one(sel.strip())
+        if el:
+            price_raw = _deep_extract_text(el)
+            if price_raw:
+                break
+
+    img_el = soup.select_one(cfg.get("image_selector", "img") or "img")
+    image_url = _deep_extract_image_url(img_el, url) if img_el else ""
+
+    country, year, warranty = "", "", ""
+    if "kafaratplus.com" in url or cfg.get("base_url", "").endswith("kafaratplus.com"):
+        country, year, warranty = _extract_card_meta_for_kafaratplus(soup.body or soup)
+        if not country and not year:
+            country, year, warranty = _enrich_kafaratplus_from_product_page(url)
+    else:
+        combined = _deep_extract_text(soup.body or soup)
+        country, year = extract_country_year_from_card(combined)
+        if not country and not year:
+            country, year = _extract_country_year_from_text(combined)
+        warranty = extract_warranty_from_text(combined)
+
+    return [
+        RawProduct(
+            name=title,
+            price_raw=price_raw,
+            image_url=image_url,
+            product_url=url,
+            year=year,
+            country=country,
+            warranty=warranty,
+        )
+    ]
+
+
 def normalize_price(raw: str) -> str:
     t = re.sub(r"[^\d,\.]", "", str(raw or "").strip())
     if not t:
@@ -541,7 +684,24 @@ class ParsedTire:
 def parse_tire_name(name: str) -> ParsedTire:
     s = str(name or "").strip()
     parts = s.split()
-    brand = parts[0] if parts else ""
+    brand = ""
+    # أسماء كفرات بلس غالباً تبدأ بالمقاس وتنتهي بالماركة العربية
+    for ar, en in (
+        ("سايلون", "Sailun"),
+        ("سايلن", "Sailun"),
+        ("كونتيننتال", "Continental"),
+        ("اكسيليرا", "Accelera"),
+        ("أكسيليرا", "Accelera"),
+        ("ميشلان", "Michelin"),
+        ("هانكوك", "Hankook"),
+        ("جوديير", "Goodyear"),
+        ("بريدجستون", "Bridgestone"),
+    ):
+        if ar in s:
+            brand = en
+            break
+    if not brand:
+        brand = parts[0] if parts else ""
     model = parts[1] if len(parts) > 1 else ""
 
     size_match = re.search(r"(\d{3})\s*/\s*(\d{2})\s*R\s*(\d{2})", s, flags=re.IGNORECASE)
@@ -758,6 +918,84 @@ def _card_select_one(card, selector_csv: str):
     return None
 
 
+def _extract_price_from_card_text(card_text: str) -> str:
+    """أول سعر منطقي في نص الكرت (يتجاهل أقساط tabby)."""
+    for m in re.finditer(r"\b(\d{2,4}(?:\.\d{1,2})?)\b", card_text or ""):
+        try:
+            v = float(m.group(1))
+        except Exception:
+            continue
+        if 80 <= v <= 15000:
+            return m.group(1)
+    return ""
+
+
+def _find_product_link_in_card(card, page_url: str) -> str:
+    for a in card.select("a[href]"):
+        href = (a.get("href") or "").strip()
+        if not href or href.startswith("#"):
+            continue
+        low = href.lower()
+        if any(x in low for x in ("cart", "checkout", "login", "javascript:")):
+            continue
+        full = urljoin(page_url, href)
+        path = (urlparse(full).path or "").lower()
+        if path in {"", "/"}:
+            continue
+        return full
+    return ""
+
+
+def _scrape_kafaratplus_modern_listing(soup: BeautifulSoup, page_url: str) -> List[RawProduct]:
+    """
+    صفحات مثل /Sailun و /continental — المنتجات في h3 وليس product-box دائماً.
+  """
+    items: List[RawProduct] = []
+    seen_names: Set[str] = set()
+
+    for h3 in soup.find_all("h3"):
+        name = _deep_extract_text(h3)
+        if not name or not _KAFARATPLUS_TIRE_TITLE_RE.search(name):
+            continue
+        if name in seen_names:
+            continue
+
+        card = h3.parent
+        for _ in range(6):
+            if card is None:
+                break
+            text = _deep_extract_text(card)
+            if len(text) > len(name) + 10:
+                break
+            card = card.parent
+        card = card or h3
+
+        card_text = _deep_extract_text(card)
+        country, year, warranty = _extract_card_meta_for_kafaratplus(card)
+        price_raw = _extract_price_from_card_text(card_text)
+        product_url = _find_product_link_in_card(card, page_url)
+        img_el = card.select_one("img")
+        image_url = ""
+        if img_el:
+            image_url = img_el.get("src", "") or img_el.get("data-src", "") or ""
+            image_url = urljoin(page_url, image_url) if image_url else ""
+
+        seen_names.add(name)
+        items.append(
+            RawProduct(
+                name=name,
+                price_raw=price_raw,
+                image_url=image_url,
+                product_url=product_url,
+                year=year,
+                country=country,
+                warranty=warranty,
+            )
+        )
+
+    return items
+
+
 def scrape_single_page(url: str, cfg: Dict[str, Any], *, enrich_product_pages: bool = True) -> List[RawProduct]:
     items: List[RawProduct] = []
 
@@ -772,6 +1010,15 @@ def scrape_single_page(url: str, cfg: Dict[str, Any], *, enrich_product_pages: b
         return items
 
     soup = BeautifulSoup(resp.text, "html.parser")
+
+    if _is_probable_product_detail(url, soup, cfg):
+        return _scrape_product_detail_as_one(url, cfg)
+
+    is_kafaratplus = "kafaratplus.com" in url or cfg.get("base_url", "").endswith("kafaratplus.com")
+    if is_kafaratplus and (_kafaratplus_brand_slug(url) or "skip=" in url.lower()):
+        modern = _scrape_kafaratplus_modern_listing(soup, url)
+        if modern:
+            return modern
 
     for card in soup.select(cfg["product_selector"]):
         title_el = _card_select_one(card, cfg["title_selector"])
@@ -790,8 +1037,6 @@ def scrape_single_page(url: str, cfg: Dict[str, Any], *, enrich_product_pages: b
         year = ""
         warranty = ""
 
-        # مسار خاص لـ KafaratPlus: قراءة الكرت نفسه
-        is_kafaratplus = "kafaratplus.com" in url or cfg.get("base_url", "").endswith("kafaratplus.com")
         if is_kafaratplus:
             country, year, warranty = _extract_card_meta_for_kafaratplus(card)
             if enrich_product_pages and (not country or not year) and product_url:
@@ -836,6 +1081,9 @@ def scrape_single_page(url: str, cfg: Dict[str, Any], *, enrich_product_pages: b
             )
         )
 
+    if is_kafaratplus and not items:
+        items = _scrape_kafaratplus_modern_listing(soup, url)
+
     return items
 
 
@@ -853,16 +1101,28 @@ def scrape_products(
     page_param = cfg.get("pagination_param", "page")
 
     all_items: List[RawProduct] = []
+    seen_urls: Set[str] = set()
 
     for page in range(1, max_pages + 1):
-        page_url = build_page_url(category_url, page, page_param)
-        log.info("scraping site=%s page=%s url=%s", site_key, page, page_url)
+        page_items: List[RawProduct] = []
+        for page_url in _listing_page_candidates(category_url, page, page_param):
+            log.info("scraping site=%s page=%s url=%s", site_key, page, page_url)
+            page_items = scrape_single_page(page_url, cfg)
+            if page_items:
+                break
 
-        page_items = scrape_single_page(page_url, cfg)
         if not page_items:
+            if page == 1:
+                log.warning("listing_empty site=%s url=%s", site_key, category_url)
             break
 
-        all_items.extend(page_items)
+        for it in page_items:
+            key = (it.product_url or it.name or "").strip().lower()
+            if key and key in seen_urls:
+                continue
+            if key:
+                seen_urls.add(key)
+            all_items.append(it)
 
         if limit > 0 and len(all_items) >= limit:
             all_items = all_items[:limit]
@@ -940,13 +1200,19 @@ def run_universal_import(
     products: List[Dict[str, Any]] = []
     seen: Set[str] = set()
     selected_brand = normalize_brand(brand)
+    url_brand = _kafaratplus_brand_slug(category_url) if site_key == "kafaratplus" else ""
 
     for item in raw_items:
         parsed = parse_tire_name(item.name)
         price = normalize_price(item.price_raw)
         product_brand = normalize_brand(parsed.brand)
-        if selected_brand and product_brand != selected_brand:
-            continue
+        if not product_brand or re.match(r"^\d", product_brand):
+            if url_brand:
+                product_brand = normalize_brand(url_brand)
+        if selected_brand:
+            if product_brand != selected_brand and not _deep_title_matches_brand(item.name, brand):
+                if not (url_brand and url_brand == selected_brand):
+                    continue
 
         seo = build_seo_fields(parsed, item.year, item.country, item.pattern)
         product_title = " ".join(

@@ -33,6 +33,9 @@ BRAND_TRANSLATIONS = {
     "لاوفين": "Laufenn",
     "اكسيليرا": "Accelera",
     "أكسيليرا": "Accelera",
+    "سايلون": "Sailun",
+    "سايلن": "Sailun",
+    "كونتيننتال": "Continental",
 }
 
 MODEL_TRANSLATIONS = {
