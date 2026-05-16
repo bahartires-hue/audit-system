@@ -323,7 +323,7 @@
         siteKeyInp.disabled = isClassic;
         sizeInp.disabled = !isClassic;
         pageMode.disabled = !isClassic;
-        urlInp.disabled = isDeepScan;
+        urlInp.disabled = false;
 
         if (isClassic) {
           siteUrlLabel.textContent = "رابط صفحة الماركة أو نتائج البحث";
@@ -332,9 +332,10 @@
           brandInp.placeholder = "اسم الماركة اختياري لتضييق النتائج";
           btn.textContent = "سحب المنتجات";
         } else if (isDeepScan) {
-          siteUrlLabel.textContent = "Deep Scan بالماركة";
-          siteUrlHelp.textContent = "في هذا الوضع لا تحتاج رابطًا؛ فقط اختر الموقع واكتب اسم الماركة، وسيزور النظام صفحات المنتجات مباشرة.";
-          urlInp.placeholder = "غير مطلوب في Deep Scan";
+          siteUrlLabel.textContent = "رابط تصنيف الماركة (اختياري)";
+          siteUrlHelp.textContent =
+            "اكتب اسم الماركة (مطلوب). يمكنك إضافة رابط صفحة الماركة على كفرات بلس لتسريع السحب، مثل صفحة Accelera.";
+          urlInp.placeholder = "اختياري: https://kafaratplus.com/...";
           brandInp.placeholder = "اسم الماركة مطلوب، مثال: Accelera";
           btn.textContent = "بدء Brand Deep Scan";
         } else {
@@ -482,7 +483,14 @@
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token": csrf },
-            body: JSON.stringify({ site_key, category_url, brand, max_pages, limit }),
+            body: JSON.stringify({
+              site_key,
+              category_url,
+              brand,
+              listing_url: isDeepScan ? (urlInp.value || "").trim() : "",
+              max_pages,
+              limit,
+            }),
           });
           if (!res.ok) throw new Error(await readErrorMessage(res));
           const data = await res.json();

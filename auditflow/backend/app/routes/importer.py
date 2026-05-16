@@ -41,6 +41,7 @@ class UniversalImporterRequest(BaseModel):
     site_key: str
     category_url: str
     brand: str = ""
+    listing_url: str = ""
     max_pages: int = Field(default=500, ge=1, le=5000)
     limit: int = Field(default=0, ge=0, le=500_000)
 
@@ -262,6 +263,8 @@ def scrape_importer_universal(request: Request, body: UniversalImporterRequest) 
         brand = (body.brand or "").strip()
         if not brand:
             raise HTTPException(400, "Brand Deep Scan: أدخل اسم الماركة في الحقل brand.")
+        listing_url = (body.listing_url or "").strip()
+        deep_start_urls = [listing_url] if listing_url.startswith(("http://", "https://")) else None
         try:
             out = brand_deep_scan(
                 site_key=site_key,
@@ -270,6 +273,7 @@ def scrape_importer_universal(request: Request, body: UniversalImporterRequest) 
                 limit=int(body.limit or 0),
                 exports_root=exports_root,
                 progress_cb=None,
+                start_urls=deep_start_urls,
             )
         except ValueError as e:
             raise HTTPException(400, str(e))

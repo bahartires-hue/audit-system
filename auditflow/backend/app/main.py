@@ -35,7 +35,7 @@ from .services.storage import save_upload_file
 from brand_scan_app.app import app as brand_scan_subapp
 
 # يظهر في رأس HTTP للتحقق من أن الخادم يقدّم أحدث واجهة بعد النشر
-UI_ASSET_VERSION = "22"
+UI_ASSET_VERSION = "23"
 
 _HTML_NO_CACHE = {
     "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",

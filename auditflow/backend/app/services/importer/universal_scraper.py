@@ -93,13 +93,18 @@ DEEP_SCAN_SITES: Dict[str, Dict[str, Any]] = {
     "kafaratplus": {
         "base_url": "https://kafaratplus.com",
         "start_urls": ["https://kafaratplus.com/shop/"],
-        "product_link_selectors": ["ul.products li.product a[href]"],
+        "product_link_selectors": [
+            "div.product-box a[href]",
+            "div.product-box a[href*='/product/']",
+            "ul.products li.product a[href]",
+            "a.woocommerce-LoopProduct-link[href]",
+        ],
         "use_gtm_embed": False,
-        "product_title_selector": "h1.product_title",
+        "product_title_selector": "h1.product_title, h1.product-title, .product-box-title, h1",
         "brand_selector": None,
-        "price_selector": "p.price",
-        "image_selector": "figure.woocommerce-product-gallery__wrapper img",
-        "description_selector": "div.woocommerce-product-details__short-description",
+        "price_selector": "p.price, .product-box-price, .price",
+        "image_selector": "figure.woocommerce-product-gallery__wrapper img, .product-box img, img",
+        "description_selector": "div.woocommerce-product-details__short-description, .product-box",
     },
     "etar": {
         "base_url": "https://etar.com",
@@ -145,6 +150,29 @@ def _deep_title_matches_brand(title: str, brand_name: str) -> bool:
     return False
 
 
+def _deep_url_matches_brand(url: str, brand_name: str) -> bool:
+    u = (url or "").lower()
+    for tok in _deep_brand_tokens(brand_name):
+        if tok and tok in u:
+            return True
+    return False
+
+
+def _deep_product_title_from_soup(soup: BeautifulSoup, cfg: Dict[str, Any]) -> str:
+    for sel in (cfg.get("product_title_selector") or "h1").split(","):
+        el = soup.select_one(sel.strip())
+        if el:
+            t = _deep_extract_text(el)
+            if t:
+                return t
+    og = soup.select_one("meta[property='og:title'], meta[name='twitter:title']")
+    if og and og.get("content"):
+        return _clean_meta_text(og["content"])
+    if soup.title:
+        return _clean_meta_text(soup.title.get_text(" ", strip=True))
+    return ""
+
+
 def _deep_get_soup(url: str) -> BeautifulSoup:
     r = requests.get(url, headers=_DEEP_HEADERS, timeout=45)
     r.raise_for_status()
@@ -155,10 +183,25 @@ def _deep_normalize_shop_url(base_url: str, href: str) -> str:
     if not href:
         return ""
     full = urljoin(base_url, href.split("?")[0])
-    path = (urlparse(full).path or "").lower()
-    if "/product/" not in path and "/shop/" not in path:
+    path = (urlparse(full).path or "").lower().rstrip("/")
+    if not path or path in {"/", "/shop", "/cart", "/checkout", "/my-account"}:
         return ""
-    return full
+    if "/product/" in path or "/shop/" in path:
+        return full
+    # روابط منتج مباشرة مثل /product-name/ (شائعة في كفرات بلس)
+    segments = [s for s in path.split("/") if s]
+    if len(segments) == 1 and segments[0] not in {
+        "shop",
+        "cart",
+        "checkout",
+        "blog",
+        "contact",
+        "about",
+        "wp-admin",
+        "wp-content",
+    }:
+        return full
+    return ""
 
 
 def _deep_collect_gtm_links(base_url: str, soup: BeautifulSoup, out: Set[str]) -> None:
@@ -363,20 +406,14 @@ def _deep_parse_product_row(site_key: str, url: str, target_brand: str) -> Optio
         log.warning("deep_scan product skip url=%s err=%s", url, e)
         return None
 
-    title = ""
-    for sel in (cfg["product_title_selector"] or "h1").split(","):
-        el = soup.select_one(sel.strip())
-        if el:
-            title = _deep_extract_text(el)
-            if title:
-                break
+    title = _deep_product_title_from_soup(soup, cfg)
 
     brand: Optional[str] = None
     if cfg.get("brand_selector"):
         brand = _deep_extract_text(soup.select_one(cfg["brand_selector"])) or None
 
     if not brand:
-        if _deep_title_matches_brand(title, target_brand):
+        if _deep_title_matches_brand(title, target_brand) or _deep_url_matches_brand(url, target_brand):
             brand = target_brand.strip()
         else:
             return None
@@ -429,6 +466,7 @@ def _deep_parse_product_row(site_key: str, url: str, target_brand: str) -> Optio
 
     return {
         "url": url,
+        "title": title,
         "brand": brand or target_brand,
         "price": price,
         "image": image_url,
@@ -966,6 +1004,80 @@ def run_universal_import(
     }
 
 
+def _kafaratplus_products_from_listing_brand_scan(
+    brand: str,
+    *,
+    max_pages: int,
+    start_urls: Optional[List[str]] = None,
+    limit: int = 0,
+) -> List[Dict[str, Any]]:
+    """مسار بديل: سحب كروت القائمة مباشرة (أنسب لكفرات بلس)."""
+    cfg = SITES_CONFIG["kafaratplus"]
+    bases = [u for u in (start_urls or DEEP_SCAN_SITES["kafaratplus"].get("start_urls") or []) if u]
+    selected = normalize_brand(brand)
+    products: List[Dict[str, Any]] = []
+    seen: Set[str] = set()
+
+    for base in bases:
+        for page in range(1, max(1, int(max_pages or 1)) + 1):
+            page_url = build_page_url(base, page, cfg.get("pagination_param", "page"))
+            page_items = scrape_single_page(page_url, cfg, enrich_product_pages=False)
+            if not page_items:
+                break
+            for item in page_items:
+                parsed = parse_tire_name(item.name)
+                product_brand = normalize_brand(parsed.brand)
+                if not (
+                    product_brand == selected
+                    or _deep_title_matches_brand(item.name, brand)
+                    or _deep_url_matches_brand(item.product_url, brand)
+                ):
+                    continue
+
+                price = normalize_price(item.price_raw)
+                seo = build_seo_fields(parsed, item.year, item.country, item.pattern)
+                product_title = " ".join(
+                    x for x in [parsed.brand, parsed.model, parsed.size, parsed.load_speed] if x
+                ).strip()
+                key = (item.product_url or "").strip().lower() or (item.name or "").strip().lower()
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+
+                products.append(
+                    {
+                        "name": item.name,
+                        "product_title": product_title,
+                        "brand": parsed.brand,
+                        "model": parsed.model,
+                        "size": parsed.size,
+                        "width": parsed.width,
+                        "profile": parsed.profile,
+                        "rim": parsed.rim,
+                        "load_speed": parsed.load_speed,
+                        "price": price,
+                        "product_url": item.product_url,
+                        "image_url": item.image_url,
+                        "year": item.year,
+                        "country": item.country,
+                        "pattern": item.pattern,
+                        "description": (
+                            f"كفر {parsed.brand} {parsed.model} مقاس {parsed.size}. "
+                            f"بلد المنشأ: {item.country or 'غير محدد'}، سنة الصنع: {item.year or 'غير محددة'}."
+                        ),
+                        "seo_title": seo["seo_title"],
+                        "meta_description": seo["meta_description"],
+                        "keywords": seo["keywords"],
+                        "image_alt_text": seo["image_alt_text"],
+                        "warranty": item.warranty,
+                        "status": "needs_review" if (not parsed.size or not price) else "ok",
+                    }
+                )
+                if limit > 0 and len(products) >= limit:
+                    return products
+    return products
+
+
 def brand_deep_scan(
     site_key: str,
     brand: str,
@@ -1019,6 +1131,17 @@ def brand_deep_scan(
             continue
         seen.add(key)
         products.append(p)
+
+    if site_key == "kafaratplus" and not products:
+        log.info("brand_deep_scan kafaratplus listing fallback brand=%s", b)
+        if progress_cb:
+            progress_cb(95, "تفعيل مسار القائمة لكفرات بلس...")
+        products = _kafaratplus_products_from_listing_brand_scan(
+            b,
+            max_pages=max(1, int(max_pages or 1)),
+            start_urls=start_urls,
+            limit=eff_limit,
+        )
 
     exports_root = Path(exports_root)
     exports_root.mkdir(parents=True, exist_ok=True)
