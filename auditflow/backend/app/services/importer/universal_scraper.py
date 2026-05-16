@@ -41,11 +41,11 @@ SITES_CONFIG: Dict[str, Dict[str, Any]] = {
     },
     "kafaratplus": {
         "base_url": "https://kafaratplus.com",
-        "product_selector": "div.product-box",
-        "title_selector": ".product-box-title",
-        "price_selector": ".product-box-price",
+        "product_selector": "div.product-box, ul.products li.product",
+        "title_selector": ".product-box-title, h2.woocommerce-loop-product__title",
+        "price_selector": ".product-box-price, span.price",
         "image_selector": "img",
-        "link_selector": "a",
+        "link_selector": "a.woocommerce-LoopProduct-link, a[href*='/product/']",
         "pagination_param": "page",
     },
     "etar": {
@@ -194,7 +194,10 @@ def _clean_meta_text(value: str) -> str:
 # 2) أنماط استخراج البلد/السنة/الضمان
 # =========================
 
-CARD_COUNTRY_YEAR_PATTERN = re.compile(r"([أ-يA-Za-z\s]+)\s*/\s*تاريخ\s*(\d{4})")
+CARD_COUNTRY_YEAR_PATTERN = re.compile(
+    r"([أ-يA-Za-z\u0600-\u06FF][أ-يA-Za-z\u0600-\u06FF\s\-]{0,38}?)\s*[/\\|,،]\s*(?:تاريخ(?:\s*الصنع)?)?\s*(\d{4})",
+    re.UNICODE,
+)
 
 
 def extract_country_year_from_card(text: str) -> tuple[str, str]:
@@ -426,7 +429,6 @@ def _deep_parse_product_row(site_key: str, url: str, target_brand: str) -> Optio
 
     return {
         "url": url,
-        "title": title,
         "brand": brand or target_brand,
         "price": price,
         "image": image_url,
@@ -593,26 +595,48 @@ def _extract_card_meta_for_kafaratplus(card) -> tuple[str, str, str]:
     - warranty من سطر منفصل مثل: الضمان: خمس سنوات
     بدون خلط بينهما.
     """
-    card_text = _deep_extract_text(card)
-    lines = [l.strip() for l in card_text.splitlines() if l.strip()]
     country = ""
     year = ""
     warranty = ""
 
-    for line in lines:
-        # أولاً: سطر البلد/السنة
-        c, y = extract_country_year_from_card(line)
-        if c and y:
-            country = c
-            year = y
+    for sel in (
+        ".product-box-year",
+        ".product-box-origin",
+        ".product-card-year",
+        ".product-card-origin",
+        "[class*='year']",
+        "[class*='origin']",
+        "small",
+        ".meta",
+    ):
+        el = card.select_one(sel)
+        if not el:
             continue
-        # ثانياً: سطر الضمان
+        chunk = _deep_extract_text(el)
+        c, y = extract_country_year_from_card(chunk)
+        if not c and not y:
+            c, y = _extract_country_year_from_text(chunk)
+        if c and not country:
+            country = c
+        if y and not year:
+            year = y
+
+    card_text = _deep_extract_text(card)
+    lines = [l.strip() for l in re.split(r"[\n\r]+", card_text) if l.strip()]
+
+    for line in lines:
+        c, y = extract_country_year_from_card(line)
+        if not c and not y:
+            c, y = _extract_country_year_from_text(line)
+        if c and not country:
+            country = c
+        if y and not year:
+            year = y
         if not warranty:
             w = extract_warranty_from_text(line)
             if w:
                 warranty = w
 
-    # fallback لو ما لقينا في الأسطر
     if not country and not year:
         country, year = extract_country_year_from_card(card_text)
     if not country and not year:
@@ -623,7 +647,80 @@ def _extract_card_meta_for_kafaratplus(card) -> tuple[str, str, str]:
     return country, year, warranty
 
 
-def scrape_single_page(url: str, cfg: Dict[str, Any]) -> List[RawProduct]:
+def _kafaratplus_listing_meta_cache(
+    max_pages: int,
+    start_urls: Optional[List[str]] = None,
+) -> Dict[str, tuple[str, str, str]]:
+    """يجمع بلد/سنة/ضمان من كروت القائمة (حيث تظهر فعلياً على كفرات بلس)."""
+    cfg = SITES_CONFIG["kafaratplus"]
+    bases = [u for u in (start_urls or [cfg["base_url"] + "/shop/"]) if u]
+    cache: Dict[str, tuple[str, str, str]] = {}
+    for base in bases:
+        for page in range(1, max(1, int(max_pages or 1)) + 1):
+            page_url = build_page_url(base, page, cfg.get("pagination_param", "page"))
+            page_items = scrape_single_page(page_url, cfg, enrich_product_pages=False)
+            if not page_items:
+                break
+            for it in page_items:
+                key = (it.product_url or "").strip().rstrip("/").lower()
+                if key and (it.country or it.year or it.warranty):
+                    cache[key] = (it.country, it.year, it.warranty)
+    log.info("kafaratplus_listing_meta_cache size=%s", len(cache))
+    return cache
+
+
+def _apply_listing_meta(row: Dict[str, str], listing_meta: Dict[str, tuple[str, str, str]]) -> None:
+    key = (row.get("url") or "").strip().rstrip("/").lower()
+    if not key or key not in listing_meta:
+        return
+    c, y, w = listing_meta[key]
+    if c and not (row.get("country") or "").strip():
+        row["country"] = c
+    if y and not (row.get("year") or "").strip():
+        row["year"] = y
+    if w and not (row.get("warranty") or "").strip():
+        row["warranty"] = w
+
+
+def _enrich_kafaratplus_from_product_page(product_url: str) -> tuple[str, str, str]:
+    """إذا الكرت لا يحتوي البلد/السنة، نحاول من صفحة المنتج."""
+    if not product_url:
+        return "", "", ""
+    try:
+        soup = _deep_get_soup(product_url)
+    except Exception as e:
+        log.warning("kafaratplus_enrich_failed url=%s err=%s", product_url, e)
+        return "", "", ""
+
+    meta_text = ""
+    for sel in (
+        ".product-box-year, .product-box-origin, .product-card-year, .year, .origin, "
+        ".country, .product_meta, .woocommerce-product-attributes, .shop_attributes, .summary"
+    ).split(","):
+        el = soup.select_one(sel.strip())
+        if el:
+            meta_text = _deep_extract_text(el)
+            if meta_text:
+                break
+
+    page_text = _deep_extract_text(soup.body or soup)
+    combined = " ".join(x for x in [meta_text, page_text] if x)
+    country, year = extract_country_year_from_card(combined)
+    if not country and not year:
+        country, year = _extract_country_year_from_text(combined)
+    warranty = extract_warranty_from_text(combined)
+    return country, year, warranty
+
+
+def _card_select_one(card, selector_csv: str):
+    for sel in str(selector_csv or "").split(","):
+        el = card.select_one(sel.strip())
+        if el:
+            return el
+    return None
+
+
+def scrape_single_page(url: str, cfg: Dict[str, Any], *, enrich_product_pages: bool = True) -> List[RawProduct]:
     items: List[RawProduct] = []
 
     try:
@@ -639,10 +736,10 @@ def scrape_single_page(url: str, cfg: Dict[str, Any]) -> List[RawProduct]:
     soup = BeautifulSoup(resp.text, "html.parser")
 
     for card in soup.select(cfg["product_selector"]):
-        title_el = card.select_one(cfg["title_selector"])
-        price_el = card.select_one(cfg["price_selector"])
-        img_el = card.select_one(cfg["image_selector"])
-        link_el = card.select_one(cfg["link_selector"])
+        title_el = _card_select_one(card, cfg["title_selector"])
+        price_el = _card_select_one(card, cfg["price_selector"])
+        img_el = card.select_one(cfg["image_selector"]) or card.select_one("img")
+        link_el = _card_select_one(card, cfg.get("link_selector", "a")) or card.select_one("a")
 
         name = title_el.get_text(strip=True) if title_el else ""
         price_raw = price_el.get_text(strip=True) if price_el else ""
@@ -656,8 +753,17 @@ def scrape_single_page(url: str, cfg: Dict[str, Any]) -> List[RawProduct]:
         warranty = ""
 
         # مسار خاص لـ KafaratPlus: قراءة الكرت نفسه
-        if "kafaratplus.com" in url or cfg.get("base_url", "").endswith("kafaratplus.com"):
+        is_kafaratplus = "kafaratplus.com" in url or cfg.get("base_url", "").endswith("kafaratplus.com")
+        if is_kafaratplus:
             country, year, warranty = _extract_card_meta_for_kafaratplus(card)
+            if enrich_product_pages and (not country or not year) and product_url:
+                ec, ey, ew = _enrich_kafaratplus_from_product_page(product_url)
+                if not country and ec:
+                    country = ec
+                if not year and ey:
+                    year = ey
+                if not warranty and ew:
+                    warranty = ew
         else:
             # مواقع أخرى: نحاول من عناصر meta داخل الكرت
             meta_text = ""
@@ -768,6 +874,7 @@ def _deep_row_to_universal_product(row: Dict[str, str], target_brand: str) -> Di
         "meta_description": seo["meta_description"],
         "keywords": seo["keywords"],
         "image_alt_text": seo["image_alt_text"],
+        "warranty": (row.get("warranty") or "").strip(),
         "status": "needs_review" if (not parsed.size or not price) else "ok",
     }
 
@@ -883,6 +990,13 @@ def brand_deep_scan(
     links = _deep_collect_product_links(site_key, max_pages=max(1, int(max_pages or 1)), start_urls=start_urls)
     log.info("brand_deep_scan site=%s brand=%s links=%s", site_key, b, len(links))
 
+    listing_meta: Dict[str, tuple[str, str, str]] = {}
+    if site_key == "kafaratplus":
+        listing_meta = _kafaratplus_listing_meta_cache(
+            max_pages=max(1, int(max_pages or 1)),
+            start_urls=start_urls or DEEP_SCAN_SITES[site_key].get("start_urls"),
+        )
+
     raw_rows: List[Dict[str, str]] = []
     total = len(links)
     for i, link in enumerate(links, start=1):
@@ -890,6 +1004,8 @@ def brand_deep_scan(
             progress_cb(max(1, min(99, int(i / max(total, 1) * 90))), f"Brand Deep Scan {i}/{total}")
         row = _deep_parse_product_row(site_key, link, b)
         if row:
+            if listing_meta:
+                _apply_listing_meta(row, listing_meta)
             raw_rows.append(row)
         if eff_limit > 0 and len(raw_rows) >= eff_limit:
             break
