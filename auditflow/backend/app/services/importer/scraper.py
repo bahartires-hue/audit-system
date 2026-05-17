@@ -157,6 +157,40 @@ def scrape_products(
     domain = (urlparse(site_url).netloc or "").lower()
     kind = classify_url(site_url)
     log.info("importer domain=%s kind=%s multi_pages=%s limit=%s url=%s", domain, kind, multi_pages, limit, site_url)
+
+    if "kafaratplus.com" in domain:
+        try:
+            from .universal_scraper import scrape_products as uni_list_scrape
+
+            eff_limit = int(limit or 0)
+            raw = uni_list_scrape(
+                "kafaratplus",
+                site_url,
+                max_pages=max(1, int(max_pages or 1)),
+                limit=eff_limit if eff_limit > 0 else 0,
+            )
+            out: List[Dict[str, Any]] = []
+            for r in raw:
+                out.append(
+                    {
+                        "name": r.name,
+                        "price": r.price_raw,
+                        "old_price": "",
+                        "product_url": r.product_url,
+                        "image_url": r.image_url,
+                        "year": r.year,
+                        "country": r.country,
+                        "warranty": r.warranty,
+                        "pattern": r.pattern,
+                        "description": "",
+                    }
+                )
+            if out:
+                log.info("kafaratplus universal listing scrape count=%s", len(out))
+                return out
+        except Exception as e:
+            log.warning("kafaratplus universal scrape failed; fallback generic err=%s", e)
+
     if "tireex.com" in domain or "tireex" in domain:
         primary = scrape_tireex(
             site_url, multi_pages=multi_pages, max_pages=max_pages, limit=limit, progress_cb=progress_cb

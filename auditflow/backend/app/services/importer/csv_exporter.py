@@ -132,6 +132,34 @@ def _to_public_image_value(p: Dict[str, Any]) -> str:
     return ""
 
 
+_SIZE_FROM_NAME_RE = re.compile(r"(\d{3})\s*/\s*(\d{2,3})\s*Z?R\s*(\d{2})", re.IGNORECASE)
+
+
+def _guess_size_from_product(p: Dict[str, Any]) -> str:
+    size = str(p.get("size", "") or "").strip()
+    if size:
+        return size
+    blob = f"{p.get('name', '')} {p.get('product_title', '')}"
+    m = _SIZE_FROM_NAME_RE.search(blob)
+    if m:
+        return f"{m.group(1)}/{m.group(2)}R{m.group(3)}"
+    return ""
+
+
+def _resolve_salla_price(p: Dict[str, Any]) -> tuple[str, bool]:
+    """يعيد (سعر للتصدير, هل يحتاج مراجعة يدوية)."""
+    raw = str(p.get("price", "") or "").strip()
+    if not raw:
+        return "", True
+    try:
+        num = float(raw.replace(",", ""))
+    except Exception:
+        return "", True
+    if num <= 0:
+        return "", True
+    return raw, False
+
+
 def _resolve_template_path(base_dir: Path) -> Path | None:
     candidates = [
         Path(__file__).resolve().parent / "templates" / "Salla Products Template (3).xlsx",
@@ -166,21 +194,11 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
 
     for p in products:
         image_value = _to_public_image_value(p)
-        if not str(p.get("brand", "")).strip():
-            continue
-        if not str(p.get("size", "")).strip():
-            continue
-        try:
-            price_num = float(str(p.get("price", "")).replace(",", ""))
-        except Exception:
-            continue
-        if price_num <= 0:
-            continue
         brand = str(p.get("brand", "")).strip()
-        size = str(p.get("size", "")).strip()
-        price = str(p.get("price", "")).strip()
+        size = _guess_size_from_product(p)
+        price, needs_price = _resolve_salla_price(p)
         title = _strip_html_simple(p.get("product_title", "")) or _strip_html_simple(p.get("name", ""))
-        title = title.strip() or f"{brand} {size}".strip()
+        title = title.strip() or f"{brand} {size}".strip() or str(p.get("name", "") or "").strip()
         row = {col: "" for col in columns}
         promo_bits = []
         year = str(p.get("year", "") or "").strip()
@@ -193,8 +211,16 @@ def export_to_salla_template(products: List[Dict[str, Any]], template_path: Path
             promo_bits.append(f"بلد الصنع {country}")
         if p.get("warranty"):
             promo_bits.append(f"الضمان {p.get('warranty')}")
+        if not brand:
+            promo_bits.append("needs_brand")
+        if not size:
+            promo_bits.append("needs_size")
+        if needs_price:
+            promo_bits.append("needs_price")
         if not image_value:
             promo_bits.append("needs_image")
+        if promo_bits:
+            promo_bits.insert(0, "يحتاج_مراجعة")
         promo = " - ".join(promo_bits)
         _set_resolved(row, columns, ("النوع ", "النوع"), "منتج")
         _set_resolved(row, columns, ("أسم المنتج", "اسم المنتج"), title)
