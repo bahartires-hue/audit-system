@@ -82,6 +82,99 @@ def _validate_site_url_match(site_key: str, category_url: str) -> None:
     )
 
 
+def _execute_universal_importer(
+    body: UniversalImporterRequest,
+    user_id: str,
+    *,
+    progress_cb=None,
+) -> Dict[str, Any]:
+    category_url = (body.category_url or "").strip()
+    site_key = (body.site_key or "").strip().lower()
+    if not site_key:
+        raise HTTPException(400, "site_key مطلوب.")
+
+    exports_root = _uploads_root().parent / "exports"
+    is_deep_scan = category_url.lower() == "deep-scan"
+
+    if is_deep_scan:
+        brand = (body.brand or "").strip()
+        if not brand:
+            raise HTTPException(400, "Brand Deep Scan: أدخل اسم الماركة في الحقل brand.")
+        listing_url = (body.listing_url or "").strip()
+        deep_start_urls = [listing_url] if listing_url.startswith(("http://", "https://")) else None
+        try:
+            out = brand_deep_scan(
+                site_key=site_key,
+                brand=brand,
+                max_pages=int(body.max_pages or 200),
+                limit=int(body.limit or 0),
+                exports_root=exports_root,
+                progress_cb=progress_cb,
+                start_urls=deep_start_urls,
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except Exception:
+            raise HTTPException(502, "فشل Brand Deep Scan. تأكد من site_key والماركة.")
+    else:
+        if not category_url.startswith("http://") and not category_url.startswith("https://"):
+            raise HTTPException(400, "أدخل رابطًا صحيحًا يبدأ بـ http:// أو https://")
+        _validate_site_url_match(site_key, category_url)
+        try:
+            out = run_universal_import(
+                site_key=site_key,
+                category_url=category_url,
+                max_pages=int(body.max_pages or 10),
+                limit=int(body.limit or 0),
+                brand=(body.brand or "").strip(),
+                exports_root=exports_root,
+                progress_cb=progress_cb,
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except Exception:
+            raise HTTPException(502, "فشل تشغيل السحب العام. تأكد من site_key والرابط.")
+
+    items = out.get("items", [])
+    try:
+        if progress_cb:
+            progress_cb(90, "معالجة الصور...")
+        enrich_universal_items_images(
+            items,
+            _uploads_root(),
+            site_key=site_key,
+            download_images=bool(body.download_images),
+        )
+    except Exception:
+        log.exception("universal image enrich failed site_key=%s", site_key)
+    _attach_importer_previews(items)
+    result = {
+        "ok": True,
+        "count": out.get("count", 0),
+        "raw_scraped_count": out.get("raw_scraped_count", 0),
+        "hint": out.get("hint", ""),
+        "csv_path": out.get("csv_path", ""),
+        "items": items,
+        "mode": "brand_deep_scan" if is_deep_scan else "universal",
+    }
+    snapshot_id = save_importer_snapshot(
+        user_id,
+        "universal",
+        {
+            "site_key": site_key,
+            "category_url": category_url,
+            "brand": (body.brand or "").strip(),
+            "max_pages": int(body.max_pages or 10),
+            "limit": int(body.limit or 0),
+            "mode": result["mode"],
+        },
+        result,
+    )
+    if snapshot_id:
+        result["snapshot_id"] = snapshot_id
+    return result
+
+
 def _attach_importer_previews(items: List[Any]) -> None:
     for x in items:
         cloud = (x.get("image_cloudinary") or "").strip()
@@ -280,8 +373,8 @@ def scrape_importer(request: Request, body: ImporterRequest) -> Dict[str, Any]:
     return result
 
 
-@router.post("/universal/scrape")
-def scrape_importer_universal(request: Request, body: UniversalImporterRequest) -> Dict[str, Any]:
+@router.post("/universal/scrape/start")
+def scrape_importer_universal_start(request: Request, body: UniversalImporterRequest) -> Dict[str, Any]:
     require_csrf(request)
     db = SessionLocal()
     try:
@@ -291,85 +384,43 @@ def scrape_importer_universal(request: Request, body: UniversalImporterRequest) 
         db.close()
 
     category_url = (body.category_url or "").strip()
-    site_key = (body.site_key or "").strip().lower()
-    if not site_key:
-        raise HTTPException(400, "site_key مطلوب.")
-
-    exports_root = _uploads_root().parent / "exports"
-    is_deep_scan = category_url.lower() == "deep-scan"
-
-    if is_deep_scan:
-        brand = (body.brand or "").strip()
-        if not brand:
-            raise HTTPException(400, "Brand Deep Scan: أدخل اسم الماركة في الحقل brand.")
-        listing_url = (body.listing_url or "").strip()
-        deep_start_urls = [listing_url] if listing_url.startswith(("http://", "https://")) else None
-        try:
-            out = brand_deep_scan(
-                site_key=site_key,
-                brand=brand,
-                max_pages=int(body.max_pages or 200),
-                limit=int(body.limit or 0),
-                exports_root=exports_root,
-                progress_cb=None,
-                start_urls=deep_start_urls,
-            )
-        except ValueError as e:
-            raise HTTPException(400, str(e))
-        except Exception:
-            raise HTTPException(502, "فشل Brand Deep Scan. تأكد من site_key والماركة.")
-    else:
+    if category_url.lower() != "deep-scan":
         if not category_url.startswith("http://") and not category_url.startswith("https://"):
             raise HTTPException(400, "أدخل رابطًا صحيحًا يبدأ بـ http:// أو https://")
-        _validate_site_url_match(site_key, category_url)
-        try:
-            out = run_universal_import(
-                site_key=site_key,
-                category_url=category_url,
-                max_pages=int(body.max_pages or 10),
-                limit=int(body.limit or 0),
-                brand=(body.brand or "").strip(),
-                exports_root=exports_root,
-            )
-        except ValueError as e:
-            raise HTTPException(400, str(e))
-        except Exception:
-            raise HTTPException(502, "فشل تشغيل السحب العام. تأكد من site_key والرابط.")
+        _validate_site_url_match((body.site_key or "").strip().lower(), category_url)
+    elif not (body.brand or "").strip():
+        raise HTTPException(400, "Brand Deep Scan: أدخل اسم الماركة.")
 
-    items = out.get("items", [])
+    job_id = create_job()
+
+    def run() -> None:
+        def cb(pct: int, msg: str) -> None:
+            update_job(job_id, pct, msg)
+
+        try:
+            result = _execute_universal_importer(body, user_id, progress_cb=cb)
+            complete_job(job_id, result)
+        except HTTPException as e:
+            detail = e.detail if isinstance(e.detail, str) else str(e.detail)
+            fail_job(job_id, detail)
+        except Exception:
+            log.exception("universal scrape job failed job_id=%s", job_id)
+            fail_job(job_id, "فشل السحب العام. تأكد من الرابط أو حاول لاحقًا.")
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"ok": True, "job_id": job_id}
+
+
+@router.post("/universal/scrape")
+def scrape_importer_universal(request: Request, body: UniversalImporterRequest) -> Dict[str, Any]:
+    require_csrf(request)
+    db = SessionLocal()
     try:
-        enrich_universal_items_images(
-            items,
-            _uploads_root(),
-            site_key=site_key,
-            download_images=bool(body.download_images),
-        )
-    except Exception:
-        log.exception("universal image enrich failed site_key=%s", site_key)
-    _attach_importer_previews(items)
-    result = {
-        "ok": True,
-        "count": out.get("count", 0),
-        "csv_path": out.get("csv_path", ""),
-        "items": items,
-        "mode": "brand_deep_scan" if is_deep_scan else "universal",
-    }
-    snapshot_id = save_importer_snapshot(
-        user_id,
-        "universal",
-        {
-            "site_key": site_key,
-            "category_url": category_url,
-            "brand": (body.brand or "").strip(),
-            "max_pages": int(body.max_pages or 10),
-            "limit": int(body.limit or 0),
-            "mode": result["mode"],
-        },
-        result,
-    )
-    if snapshot_id:
-        result["snapshot_id"] = snapshot_id
-    return result
+        user = require_user(db, request)
+        user_id = user.id
+    finally:
+        db.close()
+    return _execute_universal_importer(body, user_id)
 
 
 @router.get("/sessions")

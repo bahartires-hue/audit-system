@@ -352,6 +352,66 @@
         return n;
       }
 
+      function pollImporterJob(jobId) {
+        const pollMs = 400;
+        let settled = false;
+        let pollTimer = null;
+        return new Promise(function (resolve, reject) {
+          const stop = function () {
+            if (pollTimer) clearInterval(pollTimer);
+            pollTimer = null;
+          };
+          const tick = async function () {
+            if (settled) return;
+            try {
+              const st = await fetch("/importer/scrape/job/" + encodeURIComponent(jobId), {
+                credentials: "include",
+                headers: { Accept: "application/json" },
+              });
+              if (st.status === 404) {
+                settled = true;
+                stop();
+                reject(
+                  new Error(
+                    "انقطعت مهمة السحب (غالباً السيرفر نام أو نشر جديد). أعد المحاولة بعد Deploy على lghe."
+                  )
+                );
+                return;
+              }
+              if (!st.ok) {
+                settled = true;
+                stop();
+                reject(new Error(await readErrorMessage(st)));
+                return;
+              }
+              const j = await st.json();
+              const prog = Number(j.progress) || 1;
+              setScrapeProgress(true, prog, j.message || "جاري السحب...");
+              if (j.status === "error") {
+                settled = true;
+                stop();
+                reject(new Error(j.error || j.message || "فشل السحب"));
+                return;
+              }
+              if (j.done && j.status === "done") {
+                settled = true;
+                stop();
+                resolve(j.result || {});
+                return;
+              }
+            } catch (err) {
+              if (!settled) {
+                settled = true;
+                stop();
+                reject(err);
+              }
+            }
+          };
+          pollTimer = setInterval(tick, pollMs);
+          tick();
+        });
+      }
+
       function syncImportModeUI() {
         const mode = importModeInp.value;
         const isClassic = mode === "classic";
@@ -374,7 +434,7 @@
         if (siteKeyHint) {
         if (siteKey === "almurad") {
           siteKeyHint.textContent =
-            "المراد (Salla): رابط فئة الجنوط مثل /categories/1125208/جنوط أو /products — limit=0 و max_pages≥10. فعّل «تحميل Cloudinary» لرفع الصور.";
+            "المراد: الصق رابط الفئة — اترك خانة الماركة فارغة للجنوط. limit=0 و max_pages≥15. استخدم audit-system-2-lghe وليس wm76.";
           siteKeyHint.classList.remove("hidden");
         } else if (siteKey === "brwx") {
           siteKeyHint.textContent =
@@ -424,7 +484,6 @@
         }
         setLoading(btn, true, "جارٍ السحب...");
         setScrapeProgress(true, 1, "بدء السحب...");
-        let pollTimer = null;
         try {
           syncCsrfFromCookie();
           const csrf = localStorage.getItem("csrf_token") || "";
@@ -438,53 +497,7 @@
           const startData = await startRes.json();
           const jobId = startData.job_id;
           if (!jobId) throw new Error("لم يُرجع الخادم معرف المهمة");
-
-          const pollMs = 200;
-          let settled = false;
-          const data = await new Promise(function (resolve, reject) {
-            const stop = function () {
-              if (pollTimer) clearInterval(pollTimer);
-              pollTimer = null;
-            };
-            const tick = async function () {
-              if (settled) return;
-              try {
-                const st = await fetch("/importer/scrape/job/" + encodeURIComponent(jobId), {
-                  credentials: "include",
-                  headers: { Accept: "application/json" },
-                });
-                if (!st.ok) {
-                  settled = true;
-                  stop();
-                  reject(new Error(await readErrorMessage(st)));
-                  return;
-                }
-                const j = await st.json();
-                const prog = Number(j.progress) || 1;
-                setScrapeProgress(true, prog, j.message || "");
-                if (j.status === "error") {
-                  settled = true;
-                  stop();
-                  reject(new Error(j.error || j.message || "فشل السحب"));
-                  return;
-                }
-                if (j.done && j.status === "done") {
-                  settled = true;
-                  stop();
-                  resolve(j.result || {});
-                  return;
-                }
-              } catch (err) {
-                if (!settled) {
-                  settled = true;
-                  stop();
-                  reject(err);
-                }
-              }
-            };
-            pollTimer = setInterval(tick, pollMs);
-            tick();
-          });
+          const data = await pollImporterJob(jobId);
           setScrapeProgress(true, 100, "تم");
           restoredSessionId = "";
           render(data.items || []);
@@ -506,10 +519,6 @@
           showToast("تم سحب المنتجات بنجاح", "#10b981");
           refreshSavedSessions();
         } catch (e) {
-          if (pollTimer) {
-            clearInterval(pollTimer);
-            pollTimer = null;
-          }
           showToast(e.message || "فشل سحب المنتجات", "#ef4444");
         } finally {
           setLoading(btn, false, "سحب المنتجات");
@@ -538,38 +547,75 @@
           showToast("Brand Deep Scan: اكتب اسم الماركة في خانة الماركة (مثل Accelera)", "#ef4444");
           return;
         }
+        if (site_key === "almurad" && brand && !isDeepScan) {
+          showToast("للجنوط: اترك خانة الماركة فارغة وإلا قد لا يظهر أي منتج", "#f59e0b");
+        }
         setLoading(btn, true, isDeepScan ? "جارٍ Deep Scan..." : "جارٍ السحب...");
-        setScrapeProgress(true, 10, isDeepScan ? "بدء Brand Deep Scan..." : "بدء السحب من رابط التصنيف...");
+        setScrapeProgress(
+          true,
+          2,
+          isDeepScan
+            ? "بدء Brand Deep Scan..."
+            : "بدء السحب — قد يستغرق عدة دقائق لعشرات المنتجات، انتظر تحديث النسبة..."
+        );
         try {
           syncCsrfFromCookie();
           const csrf = localStorage.getItem("csrf_token") || "";
-          const res = await fetch("/importer/universal/scrape", {
+          const body = {
+            site_key,
+            category_url,
+            brand,
+            listing_url: isDeepScan ? (urlInp.value || "").trim() : "",
+            max_pages,
+            limit,
+            download_images: !!(downloadImagesInp && downloadImagesInp.checked),
+          };
+          let startRes = await fetch("/importer/universal/scrape/start", {
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token": csrf },
-            body: JSON.stringify({
-              site_key,
-              category_url,
-              brand,
-              listing_url: isDeepScan ? (urlInp.value || "").trim() : "",
-              max_pages,
-              limit,
-              download_images: !!(downloadImagesInp && downloadImagesInp.checked),
-            }),
+            body: JSON.stringify(body),
           });
-          if (!res.ok) throw new Error(await readErrorMessage(res));
-          const data = await res.json();
+          let data;
+          if (startRes.status === 404) {
+            setScrapeProgress(true, 5, "سيرفر قديم — سحب مباشر (انتظر حتى ينتهي)...");
+            const syncRes = await fetch("/importer/universal/scrape", {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token": csrf },
+              body: JSON.stringify(body),
+            });
+            if (!syncRes.ok) throw new Error(await readErrorMessage(syncRes));
+            data = await syncRes.json();
+          } else {
+            if (!startRes.ok) throw new Error(await readErrorMessage(startRes));
+            const startData = await startRes.json();
+            const jobId = startData.job_id;
+            if (!jobId) throw new Error("لم يُرجع الخادم معرف المهمة");
+            data = await pollImporterJob(jobId);
+          }
           setScrapeProgress(true, 100, "تم");
           restoredSessionId = data.snapshot_id || "";
           render(data.items || []);
+          const rawN = data.raw_scraped_count != null ? data.raw_scraped_count : "?";
           metaInfo.textContent =
             (data.mode === "brand_deep_scan" ? "[Brand Deep Scan] " : "") +
-            (data.mode === "brand_deep_scan" ? "تم فحص الماركة: " : "تم السحب من رابط التصنيف: ") +
+            (data.mode === "brand_deep_scan" ? "تم فحص الماركة: " : "تم السحب: ") +
             (data.count || 0) +
-            " منتج — CSV: " +
+            " في الجدول — من الموقع: " +
+            rawN +
+            (data.hint ? " — " + data.hint : "") +
+            " — CSV: " +
             (data.csv_path || "") +
             (restoredSessionId ? " — Session: " + restoredSessionId : "");
-          showToast(data.mode === "brand_deep_scan" ? "تم Brand Deep Scan بنجاح" : "تم السحب من رابط التصنيف بنجاح", "#10b981");
+          if ((data.count || 0) === 0) {
+            showToast(data.hint || "لم يُسحب أي منتج — افرغ خانة الماركة أو تحقق من الرابط", "#ef4444");
+          } else {
+            showToast(
+              data.mode === "brand_deep_scan" ? "تم Brand Deep Scan بنجاح" : "تم السحب بنجاح",
+              "#10b981"
+            );
+          }
           refreshSavedSessions();
         } catch (e) {
           showToast(e.message || "فشل السحب", "#ef4444");

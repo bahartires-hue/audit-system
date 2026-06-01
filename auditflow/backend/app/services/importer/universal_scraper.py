@@ -244,10 +244,24 @@ def _deep_product_title_from_soup(soup: BeautifulSoup, cfg: Dict[str, Any]) -> s
     return ""
 
 
+def _request_headers_for_url(url: str) -> Dict[str, str]:
+    headers = dict(_DEEP_HEADERS)
+    if "almuradstore.com" in (url or "").lower():
+        headers["Referer"] = "https://almuradstore.com/"
+        headers["Origin"] = "https://almuradstore.com"
+    return headers
+
+
 def _deep_get_soup(url: str) -> BeautifulSoup:
-    r = _http_session().get(url, timeout=22)
+    r = _http_session().get(url, timeout=28, headers=_request_headers_for_url(url))
     r.raise_for_status()
-    return BeautifulSoup(r.text, "lxml")
+    text = r.text or ""
+    if len(text) < 500:
+        raise ValueError(f"استجابة قصيرة جداً من الموقع ({len(text)} حرف) — قد يكون حظراً من السيرفر.")
+    try:
+        return BeautifulSoup(text, "lxml")
+    except Exception:
+        return BeautifulSoup(text, "html.parser")
 
 
 def _deep_normalize_shop_url(base_url: str, href: str) -> str:
@@ -654,7 +668,12 @@ def _should_enrich_detail_pages(site_key: str) -> bool:
     return bool(cfg.get("enrich_detail_pages"))
 
 
-def enrich_raw_products_from_detail_pages(items: List[RawProduct], site_key: str) -> None:
+def enrich_raw_products_from_detail_pages(
+    items: List[RawProduct],
+    site_key: str,
+    *,
+    progress_cb: Optional[Callable[[int, str], None]] = None,
+) -> None:
     """زيارة صفحة كل منتج لجلب الاسم والسعر والوصف (طلب واحد لكل منتج، متوازي عند الكثرة)."""
     if not items or not _should_enrich_detail_pages(site_key):
         return
@@ -664,11 +683,16 @@ def enrich_raw_products_from_detail_pages(items: List[RawProduct], site_key: str
     if not todo:
         return
 
+    total = len(todo)
+    done = 0
+    _universal_report(progress_cb, 38, f"جلب تفاصيل المنتجات (0/{total})...")
+
     if len(todo) == 1:
         try:
             _enrich_one_raw_product(todo[0], site_key, cfg, is_salla)
         except Exception as e:
             log.warning("pdp_enrich_skip err=%s", e)
+        _universal_report(progress_cb, 86, f"اكتملت تفاصيل {total} منتج")
         return
 
     with ThreadPoolExecutor(max_workers=_PDP_ENRICH_WORKERS) as pool:
@@ -680,6 +704,14 @@ def enrich_raw_products_from_detail_pages(items: List[RawProduct], site_key: str
                 fut.result()
             except Exception as e:
                 log.warning("pdp_enrich_skip err=%s", e)
+            done += 1
+            if progress_cb and total:
+                _universal_report(
+                    progress_cb,
+                    38 + int(done / total * 48),
+                    f"تفاصيل المنتج {done}/{total}",
+                )
+    _universal_report(progress_cb, 86, f"اكتملت تفاصيل {total} منتج")
 
 
 def enrich_universal_items_images(
@@ -1424,6 +1456,57 @@ def _almurad_parse_total_products(soup: BeautifulSoup) -> int:
     return 0
 
 
+def _scrape_almurad_from_page_scripts(html: str, page_url: str) -> List[RawProduct]:
+    """استخراج روابط المنتجات من JSON مضمّن (عند فشل الروابط الظاهرة في HTML)."""
+    items: List[RawProduct] = []
+    seen: Set[str] = set()
+    if not html:
+        return items
+
+    for block in re.findall(
+        r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        html,
+        flags=re.DOTALL | re.IGNORECASE,
+    ):
+        try:
+            data = json.loads(block)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        for node in _json_ld_product_nodes(data):
+            url = str(node.get("url") or "").strip()
+            if not url:
+                continue
+            full = urljoin(page_url, url.split("?")[0])
+            if not _almurad_is_product_url(full):
+                continue
+            key = full.rstrip("/").lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            offers = node.get("offers")
+            price = ""
+            if isinstance(offers, dict):
+                price = str(offers.get("price") or "")
+            items.append(
+                RawProduct(
+                    name=str(node.get("name") or "").strip(),
+                    price_raw=price,
+                    image_url=str(node.get("image") or ""),
+                    product_url=full.rstrip("/"),
+                )
+            )
+
+    for full in _almurad_product_urls_in_html(html, page_url):
+        key = full.rstrip("/").lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append(
+            RawProduct(name="", price_raw="", image_url="", product_url=full.rstrip("/"))
+        )
+    return items
+
+
 def _almurad_product_urls_in_html(html: str, page_url: str) -> Set[str]:
     found: Set[str] = set()
     for raw in _ALMURAD_PRODUCT_URL_IN_HTML_RE.findall(html or ""):
@@ -1446,6 +1529,7 @@ def _scrape_almurad_catalog(
     *,
     max_pages: int = 10,
     limit: int = 0,
+    progress_cb: Optional[Callable[[int, str], None]] = None,
 ) -> List[RawProduct]:
     """سحب كل منتجات فئة/قائمة المراد (مثل /categories/1125208/جنوط) مع ترقيم ?page=."""
     base = _almurad_listing_base_url(category_url)
@@ -1456,6 +1540,12 @@ def _scrape_almurad_catalog(
     pages_cap = max(1, int(max_pages or 1))
 
     for page in range(1, pages_cap + 1):
+        if progress_cb:
+            _universal_report(
+                progress_cb,
+                5 + int((page - 1) / max(pages_cap, 1) * 30),
+                f"قائمة المراد — صفحة {page}/{pages_cap}",
+            )
         page_url = build_page_url(base, page, "page") if page > 1 else base
         log.info("almurad_catalog page=%s url=%s", page, page_url)
         try:
@@ -1470,6 +1560,8 @@ def _scrape_almurad_catalog(
             total_expected = _almurad_parse_total_products(soup)
 
         page_items = _scrape_almurad_listing(soup, page_url)
+        if not page_items:
+            page_items = _scrape_almurad_from_page_scripts(str(soup), page_url)
         if not page_items:
             if page == 1:
                 log.warning("almurad_catalog_empty url=%s", page_url)
@@ -1497,6 +1589,12 @@ def _scrape_almurad_catalog(
             all_items = all_items[:limit]
             break
 
+    _universal_report(
+        progress_cb,
+        36,
+        f"تم جمع {len(all_items)} منتج من القائمة"
+        + (f" (متوقع {total_expected})" if total_expected else ""),
+    )
     log.info(
         "almurad_catalog_done url=%s count=%s expected=%s pages_used=%s",
         base,
@@ -1742,6 +1840,7 @@ def scrape_products(
     *,
     max_pages: int = 10,
     limit: int = 0,
+    progress_cb: Optional[Callable[[int, str], None]] = None,
 ) -> List[RawProduct]:
     if site_key not in SITES_CONFIG:
         raise ValueError(f"Unknown site_key={site_key}")
@@ -1764,6 +1863,7 @@ def scrape_products(
             category_url,
             max_pages=max_pages,
             limit=eff_limit,
+            progress_cb=progress_cb,
         )
 
     page_param = cfg.get("pagination_param", "page")
@@ -1845,6 +1945,17 @@ def _deep_row_to_universal_product(row: Dict[str, str], target_brand: str) -> Di
     }
 
 
+def _universal_report(
+    progress_cb: Optional[Callable[[int, str], None]], pct: int, message: str
+) -> None:
+    if not progress_cb:
+        return
+    try:
+        progress_cb(max(1, min(99, int(pct))), message)
+    except Exception:
+        pass
+
+
 def _universal_effective_limit(limit: int) -> int:
     try:
         v = int(limit or 0)
@@ -1861,12 +1972,21 @@ def run_universal_import(
     limit: int = 0,
     brand: str = "",
     exports_root: Path = Path("exports"),
+    progress_cb: Optional[Callable[[int, str], None]] = None,
 ) -> Dict[str, Any]:
     eff_limit = _universal_effective_limit(limit)
-    raw_items = scrape_products(site_key, category_url, max_pages=max_pages, limit=eff_limit)
+    _universal_report(progress_cb, 3, "جاري جلب قائمة المنتجات...")
+    raw_items = scrape_products(
+        site_key,
+        category_url,
+        max_pages=max_pages,
+        limit=eff_limit,
+        progress_cb=progress_cb,
+    )
     if raw_items and not _is_pdp_url(category_url, site_key):
-        enrich_raw_products_from_detail_pages(raw_items, site_key)
+        enrich_raw_products_from_detail_pages(raw_items, site_key, progress_cb=progress_cb)
 
+    _universal_report(progress_cb, 88, f"تجهيز {len(raw_items)} منتج للتصدير...")
     products: List[Dict[str, Any]] = []
     rim_site = site_key in ("almurad", "brwx")
     seen: Set[str] = set()
@@ -1881,7 +2001,13 @@ def run_universal_import(
             if url_brand:
                 product_brand = normalize_brand(url_brand)
         if selected_brand:
-            if product_brand != selected_brand and not _deep_title_matches_brand(item.name, brand):
+            if rim_site:
+                if not (
+                    _deep_title_matches_brand(item.name, brand)
+                    or _deep_url_matches_brand(item.product_url, brand)
+                ):
+                    continue
+            elif product_brand != selected_brand and not _deep_title_matches_brand(item.name, brand):
                 if not (url_brand and url_brand == selected_brand):
                     continue
 
@@ -1945,16 +2071,32 @@ def run_universal_import(
             }
         )
 
+    _universal_report(progress_cb, 94, "تصدير CSV...")
     exports_root = Path(exports_root)
     exports_root.mkdir(parents=True, exist_ok=True)
     csv_path = exports_root / f"{site_key}_products_salla_like.csv"
     export_salla_like_csv(products, csv_path)
+    _universal_report(progress_cb, 99, f"اكتمل — {len(products)} منتج")
 
-    log.info("done site=%s count=%s csv=%s", site_key, len(products), csv_path)
+    log.info(
+        "done site=%s raw=%s out=%s csv=%s",
+        site_key,
+        len(raw_items),
+        len(products),
+        csv_path,
+    )
+    hint = ""
+    if len(raw_items) > 0 and len(products) == 0 and selected_brand:
+        hint = "تم جلب منتجات من الموقع لكن فلتر الماركة استبعد الكل — اترك خانة الماركة فارغة للجنوط."
+    elif len(raw_items) == 0:
+        hint = "لم يُعثر على منتجات في الرابط — تأكد من الرابط أو جرّب من سيرفر lghe بعد النشر."
+
     return {
         "count": len(products),
+        "raw_scraped_count": len(raw_items),
         "csv_path": str(csv_path),
         "items": products,
+        "hint": hint,
     }
 
 
