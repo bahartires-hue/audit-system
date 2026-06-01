@@ -57,6 +57,17 @@ SITES_CONFIG: Dict[str, Dict[str, Any]] = {
         "link_selector": "a",
         "pagination_param": "paged",
     },
+    # متجر Salla — روابط المنتج: /products/{slug}
+    "almurad": {
+        "base_url": "https://almuradstore.com",
+        "platform": "almurad_salla",
+        "product_selector": "a[href*='/products/']",
+        "title_selector": "h2, h3",
+        "price_selector": ".price",
+        "image_selector": "img",
+        "link_selector": "a[href*='/products/']",
+        "pagination_param": "page",
+    },
 }
 
 # إعدادات Brand Deep Scan
@@ -116,6 +127,22 @@ DEEP_SCAN_SITES: Dict[str, Dict[str, Any]] = {
         "price_selector": "p.price",
         "image_selector": "figure.woocommerce-product-gallery__wrapper img",
         "description_selector": "div.woocommerce-product-details__short-description",
+    },
+    "almurad": {
+        "base_url": "https://almuradstore.com",
+        "start_urls": [
+            "https://almuradstore.com/products",
+            "https://almuradstore.com/",
+        ],
+        "product_link_selectors": [
+            "a[href*='/products/']",
+        ],
+        "use_gtm_embed": False,
+        "product_title_selector": "h1, h2, .product-title, meta[property='og:title']",
+        "brand_selector": None,
+        "price_selector": ".price, [class*='price'], [class*='Price']",
+        "image_selector": "img[src], img[data-src]",
+        "description_selector": "[class*='description'], .product-description, article",
     },
 }
 
@@ -204,8 +231,10 @@ def _deep_normalize_shop_url(base_url: str, href: str) -> str:
         return ""
     full = urljoin(base_url, href.split("?")[0])
     path = (urlparse(full).path or "").lower().rstrip("/")
-    if not path or path in {"/", "/shop", "/cart", "/checkout", "/my-account"}:
+    if not path or path in {"/", "/shop", "/cart", "/checkout", "/my-account", "/products"}:
         return ""
+    if re.search(r"/products/[^/]+/?$", path):
+        return full
     if "/product/" in path or "/shop/" in path:
         return full
     # روابط منتج مباشرة مثل /product-name/ (شائعة في كفرات بلس)
@@ -362,9 +391,12 @@ def _deep_extract_image_url(el, page_url: str) -> str:
             return urljoin(page_url, v)
     srcset = el.get("srcset") or ""
     if srcset:
-        part = srcset.split(",")[0].strip().split()
-        if part:
-            return urljoin(page_url, part[0])
+        chunks = [c.strip() for c in srcset.split(",") if c.strip()]
+        if chunks:
+            # آخر عنصر في srcset عادة الأكبر دقة
+            part = chunks[-1].split()
+            if part:
+                return urljoin(page_url, part[0])
     src = (el.get("src") or "").strip()
     return urljoin(page_url, src) if src else ""
 
@@ -409,7 +441,8 @@ def _deep_collect_product_links(
         for a in soup.select(
             "a.next.page-numbers, a[rel='next'], .woocommerce-pagination a.next, "
             ".wd-pagination a.next, .wd-pagination a.next.page-numbers, "
-            "a.page-numbers, a.pagination-next"
+            "a.page-numbers, a.pagination-next, "
+            "a[href*='page='], nav a[href*='?page=']"
         ):
             href = a.get("href")
             if not href:
@@ -946,6 +979,76 @@ def _find_product_link_in_card(card, page_url: str) -> str:
     return ""
 
 
+_ALMURAD_PRODUCT_PATH_RE = re.compile(r"^/products/[^/]+/?$", re.IGNORECASE)
+
+
+def _almurad_is_product_url(full: str) -> bool:
+    path = (urlparse(full).path or "").rstrip("/")
+    return bool(_ALMURAD_PRODUCT_PATH_RE.match(path))
+
+
+def _is_almurad_site(url: str, cfg: Dict[str, Any]) -> bool:
+    base = (cfg.get("base_url") or "").lower()
+    return cfg.get("platform") == "almurad_salla" or "almuradstore.com" in (url or "").lower() or "almuradstore.com" in base
+
+
+def _scrape_almurad_listing(soup: BeautifulSoup, page_url: str) -> List[RawProduct]:
+    """قائمة منتجات Salla (المراد): العناوين غالباً h2/h3 وروابط /products/{slug}."""
+    items: List[RawProduct] = []
+    seen_urls: Set[str] = set()
+
+    for a in soup.select("a[href]"):
+        href = (a.get("href") or "").strip()
+        if not href or href.startswith("#"):
+            continue
+        full = urljoin(page_url, href.split("?")[0])
+        if not _almurad_is_product_url(full):
+            continue
+        if full in seen_urls:
+            continue
+
+        card = a
+        for _ in range(10):
+            parent = card.parent
+            if parent is None:
+                break
+            card = parent
+            txt = _deep_extract_text(card)
+            if len(txt) > 30 and ("ر.س" in txt or "ريال" in txt or "SAR" in txt.upper()):
+                break
+
+        name = ""
+        for heading in card.select("h2, h3, h4"):
+            t = _deep_extract_text(heading)
+            if t and len(t) > 3:
+                name = t
+                break
+        if not name:
+            name = _deep_extract_text(a)
+        if not name or len(name) < 3:
+            continue
+
+        card_text = _deep_extract_text(card)
+        price_raw = _extract_price_from_card_text(card_text)
+        img_el = card.select_one("img")
+        image_url = _deep_extract_image_url(img_el, page_url) if img_el else ""
+
+        seen_urls.add(full)
+        items.append(
+            RawProduct(
+                name=name,
+                price_raw=price_raw,
+                image_url=image_url,
+                product_url=full,
+                year="",
+                country="",
+                warranty="",
+            )
+        )
+
+    return items
+
+
 def _scrape_kafaratplus_modern_listing(soup: BeautifulSoup, page_url: str) -> List[RawProduct]:
     """
     صفحات مثل /Sailun و /continental — المنتجات في h3 وليس product-box دائماً.
@@ -975,10 +1078,7 @@ def _scrape_kafaratplus_modern_listing(soup: BeautifulSoup, page_url: str) -> Li
         price_raw = _extract_price_from_card_text(card_text)
         product_url = _find_product_link_in_card(card, page_url)
         img_el = card.select_one("img")
-        image_url = ""
-        if img_el:
-            image_url = img_el.get("src", "") or img_el.get("data-src", "") or ""
-            image_url = urljoin(page_url, image_url) if image_url else ""
+        image_url = _deep_extract_image_url(img_el, page_url) if img_el else ""
 
         seen_names.add(name)
         items.append(
@@ -1013,6 +1113,11 @@ def scrape_single_page(url: str, cfg: Dict[str, Any], *, enrich_product_pages: b
 
     if _is_probable_product_detail(url, soup, cfg):
         return _scrape_product_detail_as_one(url, cfg)
+
+    if _is_almurad_site(url, cfg):
+        almurad_items = _scrape_almurad_listing(soup, url)
+        if almurad_items:
+            return almurad_items
 
     is_kafaratplus = "kafaratplus.com" in url or cfg.get("base_url", "").endswith("kafaratplus.com")
     if is_kafaratplus and (_kafaratplus_brand_slug(url) or "skip=" in url.lower()):
