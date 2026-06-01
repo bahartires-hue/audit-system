@@ -127,8 +127,19 @@ def build_public_image_url(filename: str) -> str:
 
 def _to_public_image_value(p: Dict[str, Any]) -> str:
     cloud = str(p.get("image_cloudinary") or "").strip()
-    if cloud.startswith("https://res.cloudinary.com/"):
+    img_status = str(p.get("image_status") or "").strip().lower()
+    cloud_status = str(p.get("cloudinary_status") or "").strip().lower()
+    ok_status = img_status in {"downloaded", "exists", "ok"}
+    if (
+        cloud.startswith("https://res.cloudinary.com/")
+        and cloud_status == "uploaded"
+        and ok_status
+        and not cloud.lower().endswith(".webp")
+    ):
         return cloud
+    src = str(p.get("source_image_url") or p.get("image_url") or "").strip()
+    if src.startswith("http"):
+        return src
     return ""
 
 

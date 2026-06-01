@@ -43,6 +43,8 @@ def upload_to_cloudinary(asset_path_or_url: str, public_id: str) -> Tuple[str, s
             public_id=pid,
             folder="products",
             resource_type="image",
+            format="jpg",
+            quality="auto:good",
             overwrite=True,
             unique_filename=False,
             invalidate=True,

@@ -40,8 +40,10 @@ def _fetch_images_for_unit(unit: Dict[str, Any]) -> Dict[str, Any]:
         cloud_url, cloud_status = upload_to_cloudinary(local_image, seo["image_slug"])
     elif (item.get("image_url") or "").startswith("http"):
         cloud_url, cloud_status = upload_to_cloudinary(item.get("image_url", ""), seo["image_slug"])
-    if not cloud_url:
-        image_status = "needs_review"
+    if cloud_status != "uploaded" or not cloud_url:
+        cloud_url = ""
+        if image_status not in {"downloaded", "exists"}:
+            image_status = "needs_review"
     return {
         **unit,
         "local_image": local_image,

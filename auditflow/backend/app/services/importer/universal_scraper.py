@@ -4,7 +4,7 @@ import csv
 import logging
 import os
 import re
-import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set
@@ -167,6 +167,18 @@ _DEEP_HEADERS = {
     "Accept-Language": "ar,en-US;q=0.9,en;q=0.8",
 }
 
+_HTTP_SESSION: Optional[requests.Session] = None
+_PDP_ENRICH_WORKERS = max(1, min(6, int(os.getenv("AUDITFLOW_PDP_WORKERS", "4") or "4")))
+
+
+def _http_session() -> requests.Session:
+    global _HTTP_SESSION
+    if _HTTP_SESSION is None:
+        _HTTP_SESSION = requests.Session()
+        _HTTP_SESSION.headers.update(_DEEP_HEADERS)
+    return _HTTP_SESSION
+
+
 _BRAND_TITLE_ALIASES: Dict[str, tuple[str, ...]] = {
     "accelera": ("accelera", "اكسيليرا", "أكسيليرا", "إطارات اكسيليرا"),
     "hankook": ("hankook", "هانكوك"),
@@ -233,7 +245,7 @@ def _deep_product_title_from_soup(soup: BeautifulSoup, cfg: Dict[str, Any]) -> s
 
 
 def _deep_get_soup(url: str) -> BeautifulSoup:
-    r = requests.get(url, headers=_DEEP_HEADERS, timeout=45)
+    r = _http_session().get(url, timeout=22)
     r.raise_for_status()
     return BeautifulSoup(r.text, "lxml")
 
@@ -408,15 +420,7 @@ def _is_weak_image_url(url: str) -> bool:
     return False
 
 
-def _fetch_og_image_url(page_url: str) -> str:
-    """جلب صورة المنتج من og:image عند غياب صورة واضحة في القائمة (شائع في Salla)."""
-    if not page_url.startswith(("http://", "https://")):
-        return ""
-    try:
-        soup = _deep_get_soup(page_url)
-    except Exception as e:
-        log.warning("og_image_fetch_failed url=%s err=%s", page_url, e)
-        return ""
+def _og_image_from_soup(soup: BeautifulSoup, page_url: str) -> str:
     for sel in ("meta[property='og:image']", "meta[name='twitter:image']", "meta[property='og:image:secure_url']"):
         og = soup.select_one(sel)
         if og and og.get("content"):
@@ -428,6 +432,18 @@ def _fetch_og_image_url(page_url: str) -> str:
         if cand and not _is_weak_image_url(cand):
             return cand
     return ""
+
+
+def _fetch_og_image_url(page_url: str) -> str:
+    """جلب صورة المنتج من og:image — طلب HTTP إضافي (تجنّبه إن أمكن)."""
+    if not page_url.startswith(("http://", "https://")):
+        return ""
+    try:
+        soup = _deep_get_soup(page_url)
+    except Exception as e:
+        log.warning("og_image_fetch_failed url=%s err=%s", page_url, e)
+        return ""
+    return _og_image_from_soup(soup, page_url)
 
 
 def resolve_product_image_url(image_url: str, product_url: str = "") -> str:
@@ -500,6 +516,26 @@ def _extract_price_sar_from_text(text: str) -> str:
     return ""
 
 
+def _parse_salla_product_from_soup(soup: BeautifulSoup, product_url: str) -> Dict[str, str]:
+    ld = _parse_json_ld_product(soup)
+    title = ld.get("title") or _deep_product_title_from_soup(
+        soup, {"product_title_selector": "h1, .product-title, [class*='product-title']"}
+    )
+    price = ld.get("price") or _extract_price_sar_from_text(_deep_extract_text(soup))
+    description = _extract_salla_description(soup)
+    image = (ld.get("image") or "").strip()
+    if image and not image.startswith(("http://", "https://")):
+        image = urljoin(product_url, image)
+    if not image or _is_weak_image_url(image):
+        image = _og_image_from_soup(soup, product_url)
+    return {
+        "title": title,
+        "price": price,
+        "description": description,
+        "image": image,
+    }
+
+
 def _extract_salla_description(soup: BeautifulSoup) -> str:
     ld = _parse_json_ld_product(soup)
     if ld.get("description") and len(ld["description"]) > 30:
@@ -530,19 +566,71 @@ def _enrich_salla_product_page(product_url: str) -> Dict[str, str]:
     except Exception as e:
         log.warning("salla_pdp_failed url=%s err=%s", product_url, e)
         return {}
-    ld = _parse_json_ld_product(soup)
-    title = ld.get("title") or _deep_product_title_from_soup(
-        soup, {"product_title_selector": "h1, .product-title, [class*='product-title']"}
+    return _parse_salla_product_from_soup(soup, product_url)
+
+
+def _raw_product_needs_pdp_enrich(it: RawProduct) -> bool:
+    desc_ok = len((it.description or "").strip()) >= 40
+    price_ok = bool(normalize_price(it.price_raw))
+    name_ok = len((it.name or "").strip()) >= 3
+    return not (desc_ok and price_ok and name_ok)
+
+
+def _is_pdp_url(url: str, site_key: str) -> bool:
+    path = (urlparse(url).path or "").lower()
+    if site_key == "almurad" or "almuradstore.com" in (url or "").lower():
+        return bool(re.search(r"/products/[^/]+/?$", path))
+    if site_key == "brwx" or "brwx.com" in (url or "").lower():
+        return bool(re.search(r"/product/[^/]+/?$", path))
+    return bool(re.search(r"/(?:product|products)/[^/]+/?$", path))
+
+
+def _raw_product_from_salla_detail(url: str) -> Optional[RawProduct]:
+    detail = _enrich_salla_product_page(url)
+    if not detail.get("title"):
+        return None
+    return RawProduct(
+        name=detail["title"],
+        price_raw=detail.get("price") or "",
+        image_url=detail.get("image") or "",
+        product_url=url,
+        description=detail.get("description") or "",
     )
-    price = ld.get("price") or _extract_price_sar_from_text(_deep_extract_text(soup))
-    description = _extract_salla_description(soup)
-    image = (ld.get("image") or "").strip() or _fetch_og_image_url(product_url)
-    return {
-        "title": title,
-        "price": price,
-        "description": description,
-        "image": image,
-    }
+
+
+def _apply_pdp_detail_to_raw(it: RawProduct, detail: Dict[str, str], product_url: str) -> None:
+    if detail.get("title"):
+        it.name = detail["title"]
+    if detail.get("price"):
+        it.price_raw = detail["price"]
+    if detail.get("description"):
+        it.description = detail["description"]
+    img = (detail.get("image") or "").strip()
+    if img:
+        it.image_url = urljoin(product_url, img) if not img.startswith(("http://", "https://")) else img
+    elif not it.image_url:
+        it.image_url = img
+
+
+def _enrich_one_raw_product(it: RawProduct, site_key: str, cfg: Dict[str, Any], is_salla: bool) -> None:
+    url = (it.product_url or "").strip()
+    if not url.startswith(("http://", "https://")) or not _raw_product_needs_pdp_enrich(it):
+        return
+    if is_salla:
+        detail = _enrich_salla_product_page(url)
+    else:
+        rows = _scrape_product_detail_as_one(url, cfg)
+        detail = (
+            {
+                "title": rows[0].name,
+                "price": rows[0].price_raw,
+                "description": rows[0].description,
+                "image": rows[0].image_url,
+            }
+            if rows
+            else {}
+        )
+    _apply_pdp_detail_to_raw(it, detail, url)
 
 
 def _extract_woo_description(soup: BeautifulSoup) -> str:
@@ -567,48 +655,31 @@ def _should_enrich_detail_pages(site_key: str) -> bool:
 
 
 def enrich_raw_products_from_detail_pages(items: List[RawProduct], site_key: str) -> None:
-    """زيارة صفحة كل منتج لجلب الاسم والسعر والوصف الكامل (المراد / WooCommerce)."""
+    """زيارة صفحة كل منتج لجلب الاسم والسعر والوصف (طلب واحد لكل منتج، متوازي عند الكثرة)."""
     if not items or not _should_enrich_detail_pages(site_key):
         return
     cfg = SITES_CONFIG.get(site_key) or {}
     is_salla = cfg.get("platform") == "almurad_salla" or site_key == "almurad"
+    todo = [it for it in items if _raw_product_needs_pdp_enrich(it)]
+    if not todo:
+        return
 
-    for i, it in enumerate(items, start=1):
-        url = (it.product_url or "").strip()
-        if not url.startswith(("http://", "https://")):
-            continue
+    if len(todo) == 1:
         try:
-            if is_salla:
-                detail = _enrich_salla_product_page(url)
-            else:
-                rows = _scrape_product_detail_as_one(url, cfg)
-                if rows:
-                    row = rows[0]
-                    detail = {
-                        "title": row.name,
-                        "price": row.price_raw,
-                        "description": row.description,
-                        "image": row.image_url,
-                    }
-                else:
-                    detail = {}
+            _enrich_one_raw_product(todo[0], site_key, cfg, is_salla)
         except Exception as e:
-            log.warning("pdp_enrich_skip url=%s err=%s", url, e)
-            continue
+            log.warning("pdp_enrich_skip err=%s", e)
+        return
 
-        if detail.get("title"):
-            it.name = detail["title"]
-        if detail.get("price"):
-            it.price_raw = detail["price"]
-        if detail.get("description"):
-            it.description = detail["description"]
-        if detail.get("image"):
-            it.image_url = resolve_product_image_url(detail["image"], url)
-        elif not it.image_url:
-            it.image_url = resolve_product_image_url("", url)
-
-        if i % 10 == 0:
-            time.sleep(0.12)
+    with ThreadPoolExecutor(max_workers=_PDP_ENRICH_WORKERS) as pool:
+        futures = {
+            pool.submit(_enrich_one_raw_product, it, site_key, cfg, is_salla): it for it in todo
+        }
+        for fut in as_completed(futures):
+            try:
+                fut.result()
+            except Exception as e:
+                log.warning("pdp_enrich_skip err=%s", e)
 
 
 def enrich_universal_items_images(
@@ -616,8 +687,9 @@ def enrich_universal_items_images(
     uploads_dir: Path,
     *,
     site_key: str = "",
+    download_images: bool = True,
 ) -> None:
-    """تحميل صور السحب العام / Deep Scan محلياً + رفع Cloudinary (نفس مسار الكفرات)."""
+    """تحميل صور + Cloudinary — عطّل download_images للسحب السريع (رابط CDN فقط)."""
     if not items:
         return
     from .cloudinary_uploader import upload_to_cloudinary
@@ -631,8 +703,18 @@ def enrich_universal_items_images(
 
     for item in items:
         product_url = (item.get("product_url") or item.get("url") or "").strip()
-        src_url = resolve_product_image_url((item.get("image_url") or item.get("image") or "").strip(), product_url)
+        raw_img = (item.get("image_url") or item.get("image") or "").strip()
+        if raw_img.startswith(("http://", "https://")) and not _is_weak_image_url(raw_img):
+            src_url = raw_img
+        else:
+            src_url = resolve_product_image_url(raw_img, product_url) if download_images else raw_img
         item["source_image_url"] = src_url
+
+        if not download_images:
+            item["image_url"] = src_url
+            item["image_status"] = "remote_only"
+            item["cloudinary_status"] = "skipped_fast_scrape"
+            continue
 
         parsed = parse_tire_name(item.get("name") or item.get("product_title") or "")
         prod = {
@@ -900,6 +982,8 @@ def _listing_page_candidates(base_url: str, page: int, page_param: str = "page")
 
 def _is_probable_product_detail(url: str, soup: BeautifulSoup, cfg: Dict[str, Any]) -> bool:
     path = (urlparse(url).path or "").lower()
+    if "/categories/" in path or path.rstrip("/") in {"/products", "/shop"}:
+        return False
     if "/product/" in path or re.search(r"/products/[^/]+/?$", path):
         return True
     has_cards = bool(soup.select(cfg.get("product_selector", "")))
@@ -913,8 +997,12 @@ def _is_probable_product_detail(url: str, soup: BeautifulSoup, cfg: Dict[str, An
 
 def _scrape_product_detail_as_one(url: str, cfg: Dict[str, Any]) -> List[RawProduct]:
     """صفحة منتج واحد (ليس قائمة) — نستخرج منتجاً واحداً بدل البحث عن كروت."""
+    if cfg.get("platform") == "almurad_salla":
+        row = _raw_product_from_salla_detail(url)
+        return [row] if row else []
+
     try:
-        resp = requests.get(url, timeout=20, headers=_DEEP_HEADERS)
+        resp = _http_session().get(url, timeout=22)
     except Exception as e:
         log.warning("product_detail_failed url=%s err=%s", url, e)
         return []
@@ -1283,11 +1371,140 @@ def _find_product_link_in_card(card, page_url: str) -> str:
 
 
 _ALMURAD_PRODUCT_PATH_RE = re.compile(r"^/products/[^/]+/?$", re.IGNORECASE)
+_ALMURAD_CATEGORY_PATH_RE = re.compile(r"^/categories/\d+", re.IGNORECASE)
+_ALMURAD_PRODUCT_URL_IN_HTML_RE = re.compile(
+    r"https?://(?:www\.)?almuradstore\.com/products/[^\s\"'<>]+",
+    re.IGNORECASE,
+)
+_ALMURAD_TOTAL_PRODUCTS_RE = re.compile(
+    r"إجمالي\s*(\d+)\s*منتج",
+    re.IGNORECASE,
+)
+_ALMURAD_NOISE_NAMES = frozenset(
+    {
+        "إضافة للسلة",
+        "اضافة للسلة",
+        "أضف للسلة",
+        "أضف إلى السلة",
+        "المزيد",
+        "تصفية",
+        "الأحدث",
+    }
+)
 
 
 def _almurad_is_product_url(full: str) -> bool:
     path = (urlparse(full).path or "").rstrip("/")
     return bool(_ALMURAD_PRODUCT_PATH_RE.match(path))
+
+
+def _almurad_is_category_url(url: str) -> bool:
+    path = (urlparse(url).path or "").rstrip("/")
+    return bool(_ALMURAD_CATEGORY_PATH_RE.match(path))
+
+
+def _almurad_listing_base_url(url: str) -> str:
+    """رابط القائمة بدون ?page= لتكرار الترقيم بشكل صحيح."""
+    parsed = urlparse((url or "").strip())
+    qs = parse_qs(parsed.query)
+    for key in ("page", "paged"):
+        qs.pop(key, None)
+    q = urlencode(qs, doeq=True)
+    return urlunparse(parsed._replace(query=q))
+
+
+def _almurad_parse_total_products(soup: BeautifulSoup) -> int:
+    text = _deep_extract_text(soup.body or soup)
+    m = _ALMURAD_TOTAL_PRODUCTS_RE.search(text)
+    if m:
+        try:
+            return max(0, int(m.group(1)))
+        except ValueError:
+            pass
+    return 0
+
+
+def _almurad_product_urls_in_html(html: str, page_url: str) -> Set[str]:
+    found: Set[str] = set()
+    for raw in _ALMURAD_PRODUCT_URL_IN_HTML_RE.findall(html or ""):
+        full = urljoin(page_url, raw.split("?")[0].rstrip("/") + "/")
+        if _almurad_is_product_url(full):
+            found.add(full.rstrip("/"))
+    return found
+
+
+def _almurad_effective_max_pages(total_products: int, per_page: int, max_pages: int) -> int:
+    cap = max(1, int(max_pages or 1))
+    if total_products <= 0 or per_page <= 0:
+        return cap
+    needed = (total_products + per_page - 1) // per_page
+    return min(max(cap, needed), 250)
+
+
+def _scrape_almurad_catalog(
+    category_url: str,
+    *,
+    max_pages: int = 10,
+    limit: int = 0,
+) -> List[RawProduct]:
+    """سحب كل منتجات فئة/قائمة المراد (مثل /categories/1125208/جنوط) مع ترقيم ?page=."""
+    base = _almurad_listing_base_url(category_url)
+    all_items: List[RawProduct] = []
+    seen_urls: Set[str] = set()
+    total_expected = 0
+    per_page = 0
+    pages_cap = max(1, int(max_pages or 1))
+
+    for page in range(1, pages_cap + 1):
+        page_url = build_page_url(base, page, "page") if page > 1 else base
+        log.info("almurad_catalog page=%s url=%s", page, page_url)
+        try:
+            soup = _deep_get_soup(page_url)
+        except Exception as e:
+            log.warning("almurad_catalog_page_failed url=%s err=%s", page_url, e)
+            if page == 1:
+                break
+            continue
+
+        if page == 1:
+            total_expected = _almurad_parse_total_products(soup)
+
+        page_items = _scrape_almurad_listing(soup, page_url)
+        if not page_items:
+            if page == 1:
+                log.warning("almurad_catalog_empty url=%s", page_url)
+            break
+
+        if per_page == 0:
+            per_page = max(1, len(page_items))
+        if page == 1 and total_expected > 0:
+            pages_cap = _almurad_effective_max_pages(total_expected, per_page, pages_cap)
+
+        new_on_page = 0
+        for it in page_items:
+            key = (it.product_url or "").strip().rstrip("/").lower()
+            if not key or key in seen_urls:
+                continue
+            seen_urls.add(key)
+            all_items.append(it)
+            new_on_page += 1
+
+        if new_on_page == 0:
+            break
+        if total_expected and len(all_items) >= total_expected:
+            break
+        if limit > 0 and len(all_items) >= limit:
+            all_items = all_items[:limit]
+            break
+
+    log.info(
+        "almurad_catalog_done url=%s count=%s expected=%s pages_used=%s",
+        base,
+        len(all_items),
+        total_expected,
+        pages_cap,
+    )
+    return all_items
 
 
 def _is_almurad_site(url: str, cfg: Dict[str, Any]) -> bool:
@@ -1299,6 +1516,18 @@ def _scrape_almurad_listing(soup: BeautifulSoup, page_url: str) -> List[RawProdu
     """قائمة منتجات Salla (المراد): العناوين غالباً h2/h3 وروابط /products/{slug}."""
     items: List[RawProduct] = []
     seen_urls: Set[str] = set()
+    by_url: Dict[str, RawProduct] = {}
+
+    html = str(soup) if soup else ""
+    for extra_url in _almurad_product_urls_in_html(html, page_url):
+        if extra_url not in seen_urls:
+            seen_urls.add(extra_url)
+            by_url[extra_url] = RawProduct(
+                name="",
+                price_raw="",
+                image_url="",
+                product_url=extra_url,
+            )
 
     for a in soup.select("a[href]"):
         href = (a.get("href") or "").strip()
@@ -1328,7 +1557,7 @@ def _scrape_almurad_listing(soup: BeautifulSoup, page_url: str) -> List[RawProdu
                 break
         if not name:
             name = _deep_extract_text(a)
-        if not name or len(name) < 3:
+        if not name or len(name) < 3 or name.strip() in _ALMURAD_NOISE_NAMES:
             continue
 
         card_text = _deep_extract_text(card)
@@ -1338,21 +1567,21 @@ def _scrape_almurad_listing(soup: BeautifulSoup, page_url: str) -> List[RawProdu
             image_url = _deep_extract_image_url(img_el, page_url)
             if image_url:
                 break
-        image_url = resolve_product_image_url(image_url, full)
+        # لا نفتح صفحة المنتج هنا — التفاصيل تُجلب لاحقاً دفعة واحدة (أسرع).
 
-        seen_urls.add(full)
-        items.append(
-            RawProduct(
-                name=name,
-                price_raw=price_raw,
-                image_url=image_url,
-                product_url=full,
-                year="",
-                country="",
-                warranty="",
-            )
+        key = full.rstrip("/")
+        seen_urls.add(key)
+        by_url[key] = RawProduct(
+            name=name,
+            price_raw=price_raw,
+            image_url=image_url,
+            product_url=key,
+            year="",
+            country="",
+            warranty="",
         )
 
+    items.extend(by_url.values())
     return items
 
 
@@ -1407,7 +1636,7 @@ def scrape_single_page(url: str, cfg: Dict[str, Any], *, enrich_product_pages: b
     items: List[RawProduct] = []
 
     try:
-        resp = requests.get(url, timeout=30, headers=_DEEP_HEADERS)
+        resp = _http_session().get(url, timeout=22)
     except Exception as e:
         log.warning("request_failed url=%s err=%s", url, e)
         return items
@@ -1417,6 +1646,9 @@ def scrape_single_page(url: str, cfg: Dict[str, Any], *, enrich_product_pages: b
         return items
 
     soup = BeautifulSoup(resp.text, "html.parser")
+
+    if _is_almurad_site(url, cfg) and _almurad_is_category_url(url):
+        return _scrape_almurad_listing(soup, url)
 
     if _is_probable_product_detail(url, soup, cfg):
         return _scrape_product_detail_as_one(url, cfg)
@@ -1514,7 +1746,26 @@ def scrape_products(
     if site_key not in SITES_CONFIG:
         raise ValueError(f"Unknown site_key={site_key}")
 
+    category_url = (category_url or "").strip()
+    if _is_pdp_url(category_url, site_key):
+        cfg = SITES_CONFIG[site_key]
+        if cfg.get("platform") == "almurad_salla":
+            one = _raw_product_from_salla_detail(category_url)
+            return [one] if one else []
+        pdp = _scrape_product_detail_as_one(category_url, cfg)
+        if pdp:
+            out = pdp[:1] if limit == 1 else pdp
+            return out[:limit] if limit > 0 else out
+
     cfg = SITES_CONFIG[site_key]
+    if cfg.get("platform") == "almurad_salla":
+        eff_limit = limit if limit > 0 else 0
+        return _scrape_almurad_catalog(
+            category_url,
+            max_pages=max_pages,
+            limit=eff_limit,
+        )
+
     page_param = cfg.get("pagination_param", "page")
 
     all_items: List[RawProduct] = []
@@ -1613,7 +1864,7 @@ def run_universal_import(
 ) -> Dict[str, Any]:
     eff_limit = _universal_effective_limit(limit)
     raw_items = scrape_products(site_key, category_url, max_pages=max_pages, limit=eff_limit)
-    if raw_items:
+    if raw_items and not _is_pdp_url(category_url, site_key):
         enrich_raw_products_from_detail_pages(raw_items, site_key)
 
     products: List[Dict[str, Any]] = []
@@ -1675,7 +1926,12 @@ def run_universal_import(
                 "load_speed": parsed.load_speed,
                 "price": price,
                 "product_url": item.product_url,
-                "image_url": resolve_product_image_url(item.image_url, item.product_url),
+                "image_url": (
+                    item.image_url
+                    if (item.image_url or "").startswith(("http://", "https://"))
+                    and not _is_weak_image_url(item.image_url)
+                    else resolve_product_image_url(item.image_url, item.product_url)
+                ),
                 "year": item.year,
                 "country": item.country,
                 "pattern": item.pattern,

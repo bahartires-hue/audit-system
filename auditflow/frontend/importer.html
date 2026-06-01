@@ -145,6 +145,13 @@
                 <option value="single">صفحة واحدة فقط</option>
                 <option value="multi" selected>عدة صفحات</option>
               </select>
+              <label
+                id="downloadImagesWrap"
+                class="hidden md:col-span-2 flex items-center gap-2 text-sm cursor-pointer"
+              >
+                <input id="downloadImagesInp" type="checkbox" class="rounded" />
+                <span>تحميل الصور ورفع Cloudinary أثناء السحب (أبطأ — اتركه غير مفعّل للسرعة)</span>
+              </label>
             </div>
             <div id="scrapeProgressWrap" class="hidden mt-4">
               <div class="flex justify-between items-center text-xs font-extrabold mb-1.5 gap-2">
@@ -246,6 +253,8 @@
       const limitInp = document.getElementById("limitInp");
       const maxPagesInp = document.getElementById("maxPagesInp");
       const pageMode = document.getElementById("pageMode");
+      const downloadImagesWrap = document.getElementById("downloadImagesWrap");
+      const downloadImagesInp = document.getElementById("downloadImagesInp");
       const scrapeProgressWrap = document.getElementById("scrapeProgressWrap");
       const scrapeProgressMsg = document.getElementById("scrapeProgressMsg");
       const scrapeProgressPct = document.getElementById("scrapeProgressPct");
@@ -351,6 +360,9 @@
         sizeInp.disabled = !isClassic;
         pageMode.disabled = !isClassic;
         urlInp.disabled = false;
+        if (downloadImagesWrap) {
+          downloadImagesWrap.classList.toggle("hidden", isClassic);
+        }
 
         const siteKey = (siteKeyInp.value || "").trim();
         const needsUniversal = siteKey && siteKey !== "tireex";
@@ -362,7 +374,7 @@
         if (siteKeyHint) {
         if (siteKey === "almurad") {
           siteKeyHint.textContent =
-            "متجر المراد (Salla): الصق رابط من almuradstore.com فقط — مثل https://almuradstore.com/products";
+            "المراد (Salla): رابط فئة الجنوط مثل /categories/1125208/جنوط أو /products — limit=0 و max_pages≥10. فعّل «تحميل Cloudinary» لرفع الصور.";
           siteKeyHint.classList.remove("hidden");
         } else if (siteKey === "brwx") {
           siteKeyHint.textContent =
@@ -542,6 +554,7 @@
               listing_url: isDeepScan ? (urlInp.value || "").trim() : "",
               max_pages,
               limit,
+              download_images: !!(downloadImagesInp && downloadImagesInp.checked),
             }),
           });
           if (!res.ok) throw new Error(await readErrorMessage(res));

@@ -51,6 +51,8 @@ class UniversalImporterRequest(BaseModel):
     listing_url: str = ""
     max_pages: int = Field(default=500, ge=1, le=5000)
     limit: int = Field(default=0, ge=0, le=500_000)
+    # False = سريع: رابط صورة من الموقع فقط. True = تحميل + Cloudinary (بطيء).
+    download_images: bool = False
 
 
 def _uploads_root() -> Path:
@@ -336,7 +338,12 @@ def scrape_importer_universal(request: Request, body: UniversalImporterRequest) 
 
     items = out.get("items", [])
     try:
-        enrich_universal_items_images(items, _uploads_root(), site_key=site_key)
+        enrich_universal_items_images(
+            items,
+            _uploads_root(),
+            site_key=site_key,
+            download_images=bool(body.download_images),
+        )
     except Exception:
         log.exception("universal image enrich failed site_key=%s", site_key)
     _attach_importer_previews(items)
