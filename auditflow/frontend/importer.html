@@ -267,9 +267,13 @@
       }
 
       function previewCellHtml(x) {
-        const status = String(x.image_status || "").trim();
+        const status = String(x.image_status || x.cloudinary_status || "").trim();
         let src = String(x.image_preview || "").trim();
+        const cloud = String(x.image_cloudinary || "").trim();
         const remote = String(x.source_image_url || x.image_url || "").trim();
+        if (!src && cloud.startsWith("https://res.cloudinary.com/")) {
+          src = cloud;
+        }
         if (!src && remote.startsWith("http")) {
           src = remote;
         }

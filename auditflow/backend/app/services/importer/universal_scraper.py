@@ -444,9 +444,10 @@ def enrich_universal_items_images(
     *,
     site_key: str = "",
 ) -> None:
-    """تحميل صور السحب العام / Deep Scan محلياً لعرضها في /importer."""
+    """تحميل صور السحب العام / Deep Scan محلياً + رفع Cloudinary (نفس مسار الكفرات)."""
     if not items:
         return
+    from .cloudinary_uploader import upload_to_cloudinary
     from .image_downloader import download_image, sanitize_filename
     from .parser import parse_tire_name
     from .seo_optimizer import build_seo_fields
@@ -478,10 +479,26 @@ def enrich_universal_items_images(
         local_path, image_status = download_image(src_url, image_dir, slug)
         item["image_local"] = local_path
         item["image_status"] = image_status
-        if image_status in {"downloaded", "exists"} and local_path:
+
+        cloud_url = ""
+        cloud_status = ""
+        if local_path:
+            cloud_url, cloud_status = upload_to_cloudinary(local_path, slug)
+        elif src_url.startswith(("http://", "https://")):
+            cloud_url, cloud_status = upload_to_cloudinary(src_url, slug)
+
+        item["image_cloudinary"] = cloud_url
+        item["cloudinary_status"] = cloud_status
+
+        if cloud_status == "uploaded" and cloud_url.startswith("https://res.cloudinary.com/"):
+            item["image_url"] = cloud_url
+            item["image_status"] = "ok"
+        elif image_status in {"downloaded", "exists"} and local_path:
             item["image_url"] = local_path
         else:
             item["image_url"] = src_url
+            if cloud_status != "uploaded" and image_status not in {"downloaded", "exists"}:
+                item["image_status"] = image_status or "needs_review"
 
 
 def _deep_extract_image_url(el, page_url: str) -> str:
@@ -1650,6 +1667,8 @@ def brand_deep_scan(
 # =========================
 
 def export_salla_like_csv(products: List[Dict[str, Any]], csv_path: Path) -> None:
+    from .csv_exporter import _to_public_image_value
+
     fieldnames = [
         "أسم المنتج",
         "صورة المنتج",
@@ -1687,7 +1706,7 @@ def export_salla_like_csv(products: List[Dict[str, Any]], csv_path: Path) -> Non
             writer.writerow(
                 {
                     "أسم المنتج": p.get("product_title") or p.get("name") or "",
-                    "صورة المنتج": p.get("image_url", ""),
+                    "صورة المنتج": _to_public_image_value(p),
                     "سعر المنتج": p.get("price", ""),
                     "الوصف": p.get("description", ""),
                     "الماركة": p.get("brand", ""),

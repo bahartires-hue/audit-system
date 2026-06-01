@@ -82,6 +82,10 @@ def _validate_site_url_match(site_key: str, category_url: str) -> None:
 
 def _attach_importer_previews(items: List[Any]) -> None:
     for x in items:
+        cloud = (x.get("image_cloudinary") or "").strip()
+        if cloud.startswith("https://res.cloudinary.com/") and (x.get("cloudinary_status") or "") == "uploaded":
+            x["image_preview"] = cloud
+            continue
         p = (x.get("image_local") or "").strip()
         if not p and (x.get("image_url") or "").strip():
             iu = (x.get("image_url") or "").strip()
