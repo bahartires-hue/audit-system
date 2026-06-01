@@ -68,6 +68,15 @@ SITES_CONFIG: Dict[str, Dict[str, Any]] = {
         "link_selector": "a[href*='/products/']",
         "pagination_param": "page",
     },
+    "brwx": {
+        "base_url": "https://brwx.com",
+        "product_selector": "ul.products li.product",
+        "title_selector": "h2.woocommerce-loop-product__title, .woocommerce-loop-product__title",
+        "price_selector": "span.price, .price",
+        "image_selector": "img",
+        "link_selector": "a.woocommerce-LoopProduct-link, a[href*='/product/']",
+        "pagination_param": "paged",
+    },
 }
 
 # إعدادات Brand Deep Scan
@@ -1238,6 +1247,11 @@ def scrape_single_page(url: str, cfg: Dict[str, Any], *, enrich_product_pages: b
         product_url = link_el.get("href", "") if link_el else ""
         image_url = urljoin(url, image_url) if image_url else ""
         product_url = urljoin(url, product_url) if product_url else ""
+        if img_el and not _is_weak_image_url(image_url):
+            better = _deep_extract_image_url(img_el, url)
+            if better:
+                image_url = better
+        image_url = resolve_product_image_url(image_url, product_url)
 
         country = ""
         year = ""

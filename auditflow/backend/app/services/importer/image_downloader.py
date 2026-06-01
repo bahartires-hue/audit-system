@@ -90,14 +90,10 @@ def download_image(image_url: str, target_dir: Path, seo_slug: str) -> tuple[str
     referer = f"{urlparse(image_url).scheme}://{urlparse(image_url).netloc}/"
     if "tireex" in host or "tireex" in image_url.lower():
         referer = "https://tireex.com/"
-    elif "almuradstore" in host:
+    elif "almuradstore" in host or "salla" in host or "cdn.assets.salla" in host or "cdn.salla" in host:
         referer = "https://almuradstore.com/"
-    elif "salla" in host or "cdn.assets.salla" in host:
-        referer = "https://almuradstore.com/"
-    elif "almuradstore" in host:
-        referer = "https://almuradstore.com/"
-    elif "salla" in host or "cdn.salla" in host:
-        referer = "https://almuradstore.com/"
+    elif "brwx.com" in host:
+        referer = "https://brwx.com/"
     headers = {
         "User-Agent": _CHROME_UA,
         "Accept": "image/jpeg,image/png,image/apng,image/*,*/*;q=0.8",

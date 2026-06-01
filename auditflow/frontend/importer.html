@@ -109,6 +109,7 @@
                 <option value="kafaratplus">kafaratplus — كفرات بلس</option>
                 <option value="etar">etar — Etar</option>
                 <option value="almurad">almurad — المراد (جنوط)</option>
+                <option value="brwx">brwx — برومكس</option>
               </select>
               <p id="siteKeyHint" class="text-xs text-indigo-600 dark:text-indigo-400 md:col-span-2 hidden"></p>
               <input
@@ -265,10 +266,32 @@
         });
       }
 
+      function previewCellHtml(x) {
+        const status = String(x.image_status || "").trim();
+        let src = String(x.image_preview || "").trim();
+        const remote = String(x.source_image_url || x.image_url || "").trim();
+        if (!src && remote.startsWith("http")) {
+          src = remote;
+        }
+        if (!src) {
+          return '<td class="p-2 text-xs text-slate-500">' + esc(status || "—") + "</td>";
+        }
+        const failLabel = esc(status || "فشل تحميل الصورة");
+        return (
+          '<td class="p-2">' +
+          '<img class="preview-img" src="' +
+          esc(src) +
+          '" alt="" loading="lazy" referrerpolicy="no-referrer" ' +
+          'onerror="this.onerror=null;this.outerHTML=\'<span class=\\\'text-xs text-amber-600\\\'>' +
+          failLabel +
+          "</span>';\" />" +
+          "</td>"
+        );
+      }
+
       function render(items) {
         rows.innerHTML = "";
         items.forEach(function (x) {
-          const previewSrc = x.image_preview || x.image || "";
           const originalName = x.name || x.title || "";
           const seoName = x.product_title || x.title || x.name || "";
           const model = x.model || x.description || "";
@@ -277,9 +300,7 @@
           const tr = document.createElement("tr");
           tr.className = "border-b border-slate-100 dark:border-slate-800";
           tr.innerHTML =
-            '<td class="p-2">' +
-            (previewSrc ? '<img class="preview-img" src="' + esc(previewSrc) + '" alt="" />' : "") +
-            "</td>" +
+            previewCellHtml(x) +
             '<td class="p-2">' +
             esc(originalName) +
             "</td>" +
@@ -335,11 +356,15 @@
         }
 
         if (siteKeyHint) {
-          if (siteKey === "almurad") {
-            siteKeyHint.textContent =
-              "متجر المراد (Salla): اختر «السحب العام» ثم الصق رابط مثل https://almuradstore.com/products";
-            siteKeyHint.classList.remove("hidden");
-          } else if (needsUniversal && !isClassic) {
+        if (siteKey === "almurad") {
+          siteKeyHint.textContent =
+            "متجر المراد (Salla): الصق رابط من almuradstore.com فقط — مثل https://almuradstore.com/products";
+          siteKeyHint.classList.remove("hidden");
+        } else if (siteKey === "brwx") {
+          siteKeyHint.textContent =
+            "برومكس (WooCommerce): الصق رابط من brwx.com — مثل https://brwx.com/product-category/almurad-tires";
+          siteKeyHint.classList.remove("hidden");
+        } else if (needsUniversal && !isClassic) {
             siteKeyHint.textContent = "السحب من: " + siteKey;
             siteKeyHint.classList.remove("hidden");
           } else {
