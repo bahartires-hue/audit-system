@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import threading
 from pathlib import Path
@@ -22,9 +23,10 @@ from ..services.importer.snapshot_store import (
     list_importer_snapshots,
     save_importer_snapshot,
 )
-from ..services.importer.universal_scraper import brand_deep_scan, run_universal_import
+from ..services.importer.universal_scraper import brand_deep_scan, enrich_universal_items_images, run_universal_import
 
 router = APIRouter(prefix="/importer", tags=["importer"])
+log = logging.getLogger("importer.routes")
 
 
 class ImporterRequest(BaseModel):
@@ -55,11 +57,16 @@ def _uploads_root() -> Path:
 def _attach_importer_previews(items: List[Any]) -> None:
     for x in items:
         p = (x.get("image_local") or "").strip()
+        if not p and (x.get("image_url") or "").strip():
+            iu = (x.get("image_url") or "").strip()
+            if not iu.startswith("http") and Path(iu).is_file():
+                p = iu
         if p:
             fname = Path(p).name
             x["image_preview"] = f"/importer/image?name={quote(fname)}"
         else:
-            x["image_preview"] = ""
+            src = (x.get("source_image_url") or x.get("image_url") or "").strip()
+            x["image_preview"] = src if src.startswith("http") else ""
 
 
 def _snapshot_exports_dir(user_id: str, snapshot_id: str) -> Path:
@@ -297,6 +304,10 @@ def scrape_importer_universal(request: Request, body: UniversalImporterRequest) 
             raise HTTPException(502, "فشل تشغيل السحب العام. تأكد من site_key والرابط.")
 
     items = out.get("items", [])
+    try:
+        enrich_universal_items_images(items, _uploads_root(), site_key=site_key)
+    except Exception:
+        log.exception("universal image enrich failed site_key=%s", site_key)
     _attach_importer_previews(items)
     result = {
         "ok": True,
@@ -419,10 +430,18 @@ def importer_session_salla_xlsx(request: Request, snapshot_id: str) -> FileRespo
 @router.get("/image")
 def importer_image(name: str = Query(...)) -> FileResponse:
     safe = Path(name).name
-    path = _uploads_root() / "products" / safe
-    if not path.exists() or not path.is_file():
-        raise HTTPException(404, "الصورة غير موجودة")
-    return FileResponse(str(path))
+    uploads = _uploads_root()
+    candidates = [
+        uploads / "products" / safe,
+        uploads / "importer_images" / safe,
+    ]
+    for sub in uploads.glob("importer_images/*"):
+        if sub.is_dir():
+            candidates.append(sub / safe)
+    for path in candidates:
+        if path.exists() and path.is_file():
+            return FileResponse(str(path))
+    raise HTTPException(404, "الصورة غير موجودة")
 
 
 @router.get("/csv")

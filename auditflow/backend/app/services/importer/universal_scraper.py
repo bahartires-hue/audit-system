@@ -382,12 +382,105 @@ def extract_warranty_from_text(text: str) -> str:
     return ""
 
 
+def _is_weak_image_url(url: str) -> bool:
+    u = (url or "").strip()
+    if not u:
+        return True
+    low = u.lower()
+    if u.startswith("data:"):
+        return True
+    if any(x in low for x in ("placeholder", "lazy", "1x1", "blank", "loading", "spinner", "icon", ".svg", "logo")):
+        return True
+    if low.endswith(".gif") and "loading" in low:
+        return True
+    return False
+
+
+def _fetch_og_image_url(page_url: str) -> str:
+    """جلب صورة المنتج من og:image عند غياب صورة واضحة في القائمة (شائع في Salla)."""
+    if not page_url.startswith(("http://", "https://")):
+        return ""
+    try:
+        soup = _deep_get_soup(page_url)
+    except Exception as e:
+        log.warning("og_image_fetch_failed url=%s err=%s", page_url, e)
+        return ""
+    for sel in ("meta[property='og:image']", "meta[name='twitter:image']", "meta[property='og:image:secure_url']"):
+        og = soup.select_one(sel)
+        if og and og.get("content"):
+            cand = urljoin(page_url, og["content"].strip())
+            if not _is_weak_image_url(cand):
+                return cand
+    for img in soup.select("img[src], img[data-src]"):
+        cand = _deep_extract_image_url(img, page_url)
+        if cand and not _is_weak_image_url(cand):
+            return cand
+    return ""
+
+
+def resolve_product_image_url(image_url: str, product_url: str = "") -> str:
+    u = (image_url or "").strip()
+    if u and not _is_weak_image_url(u):
+        return u
+    if product_url:
+        og = _fetch_og_image_url(product_url)
+        if og:
+            return og
+    return u
+
+
+def enrich_universal_items_images(
+    items: List[Dict[str, Any]],
+    uploads_dir: Path,
+    *,
+    site_key: str = "",
+) -> None:
+    """تحميل صور السحب العام / Deep Scan محلياً لعرضها في /importer."""
+    if not items:
+        return
+    from .image_downloader import download_image, sanitize_filename
+    from .parser import parse_tire_name
+    from .seo_optimizer import build_seo_fields
+
+    # نفس مجلد Tireex: uploads/products — يُعرض عبر GET /importer/image
+    image_dir = Path(uploads_dir) / "products"
+    image_dir.mkdir(parents=True, exist_ok=True)
+
+    for item in items:
+        product_url = (item.get("product_url") or item.get("url") or "").strip()
+        src_url = resolve_product_image_url((item.get("image_url") or item.get("image") or "").strip(), product_url)
+        item["source_image_url"] = src_url
+
+        parsed = parse_tire_name(item.get("name") or item.get("product_title") or "")
+        prod = {
+            "brand": item.get("brand") or parsed.get("brand") or "",
+            "model": item.get("model") or parsed.get("model") or "",
+            "size": item.get("size") or parsed.get("size") or "",
+            "load_speed": item.get("load_speed") or parsed.get("load_speed") or "",
+        }
+        seo = build_seo_fields(prod)
+        slug = (seo.get("image_slug") or "").strip()
+        if not slug or slug == "tire-product":
+            slug = sanitize_filename((item.get("name") or item.get("product_title") or "product")[:120])
+        url_slug = (urlparse(product_url).path or "").rstrip("/").split("/")[-1]
+        if url_slug:
+            slug = sanitize_filename(f"{site_key}-{url_slug}"[:140]) if site_key else sanitize_filename(url_slug[:140])
+
+        local_path, image_status = download_image(src_url, image_dir, slug)
+        item["image_local"] = local_path
+        item["image_status"] = image_status
+        if image_status in {"downloaded", "exists"} and local_path:
+            item["image_url"] = local_path
+        else:
+            item["image_url"] = src_url
+
+
 def _deep_extract_image_url(el, page_url: str) -> str:
     if not el:
         return ""
-    for attr in ("data-large_image", "data-src", "data-lazy-src"):
+    for attr in ("data-large_image", "data-src", "data-lazy-src", "data-original", "data-image"):
         v = (el.get(attr) or "").strip()
-        if v:
+        if v and not _is_weak_image_url(v):
             return urljoin(page_url, v)
     srcset = el.get("srcset") or ""
     if srcset:
@@ -396,9 +489,13 @@ def _deep_extract_image_url(el, page_url: str) -> str:
             # آخر عنصر في srcset عادة الأكبر دقة
             part = chunks[-1].split()
             if part:
-                return urljoin(page_url, part[0])
+                candidate = urljoin(page_url, part[0])
+                if not _is_weak_image_url(candidate):
+                    return candidate
     src = (el.get("src") or "").strip()
-    return urljoin(page_url, src) if src else ""
+    if src and not _is_weak_image_url(src):
+        return urljoin(page_url, src)
+    return ""
 
 
 def _deep_collect_product_links(
@@ -1030,8 +1127,12 @@ def _scrape_almurad_listing(soup: BeautifulSoup, page_url: str) -> List[RawProdu
 
         card_text = _deep_extract_text(card)
         price_raw = _extract_price_from_card_text(card_text)
-        img_el = card.select_one("img")
-        image_url = _deep_extract_image_url(img_el, page_url) if img_el else ""
+        image_url = ""
+        for img_el in card.select("img"):
+            image_url = _deep_extract_image_url(img_el, page_url)
+            if image_url:
+                break
+        image_url = resolve_product_image_url(image_url, full)
 
         seen_urls.add(full)
         items.append(
@@ -1348,7 +1449,7 @@ def run_universal_import(
                 "load_speed": parsed.load_speed,
                 "price": price,
                 "product_url": item.product_url,
-                "image_url": item.image_url,
+                "image_url": resolve_product_image_url(item.image_url, item.product_url),
                 "year": item.year,
                 "country": item.country,
                 "pattern": item.pattern,

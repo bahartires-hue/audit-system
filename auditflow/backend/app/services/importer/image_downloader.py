@@ -10,6 +10,8 @@ import logging
 
 log = logging.getLogger("importer.images")
 _BANNED_TOKENS = {"tireex", "competitor", "img", "image", "photo", "cdn", "site"}
+# أقل من هذا غالباً أيقونة/placeholder وليس صورة كفر
+_MIN_TIRE_IMAGE_BYTES = 6000
 _CHROME_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -20,7 +22,8 @@ def _guess_ext(url: str) -> str:
     p = urlparse(url).path.lower()
     for ext in (".jpg", ".jpeg", ".png", ".webp"):
         if p.endswith(ext):
-            return ".jpg" if ext == ".jpeg" else ext
+            # نخزّن محلياً كـ jpg لتفادي رفع webp فارغ/صغير إلى Cloudinary
+            return ".jpg"
     return ".jpg"
 
 
@@ -39,7 +42,7 @@ def _watermark_suspected(image_url: str, file_name: str) -> bool:
 
 
 def _is_valid_image_bytes(blob: bytes) -> bool:
-    if not blob or len(blob) < 256:
+    if not blob or len(blob) < _MIN_TIRE_IMAGE_BYTES:
         return False
     head = blob[:32]
     if head.startswith(b"\xff\xd8\xff"):  # jpg
@@ -75,15 +78,29 @@ def download_image(image_url: str, target_dir: Path, seo_slug: str) -> tuple[str
     if not image_url:
         return "", "no_image_url"
     if fpath.exists():
-        status = "needs_review" if _watermark_suspected(image_url, fname) else "exists"
-        return str(fpath), status
+        if not _is_valid_image_file(fpath):
+            try:
+                fpath.unlink(missing_ok=True)
+            except Exception:
+                pass
+        else:
+            status = "needs_review" if _watermark_suspected(image_url, fname) else "exists"
+            return str(fpath), status
     host = (urlparse(image_url).netloc or "").lower()
     referer = f"{urlparse(image_url).scheme}://{urlparse(image_url).netloc}/"
     if "tireex" in host or "tireex" in image_url.lower():
         referer = "https://tireex.com/"
+    elif "almuradstore" in host:
+        referer = "https://almuradstore.com/"
+    elif "salla" in host or "cdn.assets.salla" in host:
+        referer = "https://almuradstore.com/"
+    elif "almuradstore" in host:
+        referer = "https://almuradstore.com/"
+    elif "salla" in host or "cdn.salla" in host:
+        referer = "https://almuradstore.com/"
     headers = {
         "User-Agent": _CHROME_UA,
-        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        "Accept": "image/jpeg,image/png,image/apng,image/*,*/*;q=0.8",
         "Accept-Language": "ar,en-US;q=0.9,en;q=0.8",
         "Referer": referer,
     }
