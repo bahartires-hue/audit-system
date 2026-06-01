@@ -23,7 +23,12 @@ from ..services.importer.snapshot_store import (
     list_importer_snapshots,
     save_importer_snapshot,
 )
-from ..services.importer.universal_scraper import brand_deep_scan, enrich_universal_items_images, run_universal_import
+from ..services.importer.universal_scraper import (
+    SITES_CONFIG,
+    brand_deep_scan,
+    enrich_universal_items_images,
+    run_universal_import,
+)
 
 router = APIRouter(prefix="/importer", tags=["importer"])
 log = logging.getLogger("importer.routes")
@@ -52,6 +57,27 @@ def _uploads_root() -> Path:
     data_root = (os.getenv("AUDITFLOW_DATA_ROOT") or "").strip()
     app_root = Path(__file__).resolve().parents[3]  # auditflow/
     return (Path(data_root) / "uploads") if data_root else (app_root / "uploads")
+
+
+def _validate_site_url_match(site_key: str, category_url: str) -> None:
+    """يتأكد أن رابط التصنيف يخص نفس المتجر المختار."""
+    if category_url.lower() == "deep-scan":
+        return
+    cfg = SITES_CONFIG.get(site_key) or {}
+    base = (cfg.get("base_url") or "").strip().lower()
+    if not base:
+        return
+    host = (urlparse(category_url).netloc or "").lower().replace("www.", "")
+    base_host = (urlparse(base).netloc or base).lower().replace("www.", "")
+    if not host or not base_host:
+        return
+    if host == base_host or host.endswith("." + base_host) or base_host in host:
+        return
+    raise HTTPException(
+        400,
+        f"رابط التصنيف من موقع ({host}) لا يطابق المتجر المختار ({site_key} → {base_host}). "
+        f"اختر الموقع الصحيح من القائمة أو الصق رابطًا من نفس المتجر.",
+    )
 
 
 def _attach_importer_previews(items: List[Any]) -> None:
@@ -289,6 +315,7 @@ def scrape_importer_universal(request: Request, body: UniversalImporterRequest) 
     else:
         if not category_url.startswith("http://") and not category_url.startswith("https://"):
             raise HTTPException(400, "أدخل رابطًا صحيحًا يبدأ بـ http:// أو https://")
+        _validate_site_url_match(site_key, category_url)
         try:
             out = run_universal_import(
                 site_key=site_key,

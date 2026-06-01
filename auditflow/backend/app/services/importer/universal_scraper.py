@@ -1201,7 +1201,7 @@ def scrape_single_page(url: str, cfg: Dict[str, Any], *, enrich_product_pages: b
     items: List[RawProduct] = []
 
     try:
-        resp = requests.get(url, timeout=20)
+        resp = requests.get(url, timeout=30, headers=_DEEP_HEADERS)
     except Exception as e:
         log.warning("request_failed url=%s err=%s", url, e)
         return items
