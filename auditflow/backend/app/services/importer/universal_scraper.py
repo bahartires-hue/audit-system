@@ -4,6 +4,7 @@ import csv
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set
@@ -61,6 +62,7 @@ SITES_CONFIG: Dict[str, Dict[str, Any]] = {
     "almurad": {
         "base_url": "https://almuradstore.com",
         "platform": "almurad_salla",
+        "enrich_detail_pages": True,
         "product_selector": "a[href*='/products/']",
         "title_selector": "h2, h3",
         "price_selector": ".price",
@@ -70,6 +72,7 @@ SITES_CONFIG: Dict[str, Dict[str, Any]] = {
     },
     "brwx": {
         "base_url": "https://brwx.com",
+        "enrich_detail_pages": True,
         "product_selector": "ul.products li.product",
         "title_selector": "h2.woocommerce-loop-product__title, .woocommerce-loop-product__title",
         "price_selector": "span.price, .price",
@@ -438,6 +441,176 @@ def resolve_product_image_url(image_url: str, product_url: str = "") -> str:
     return u
 
 
+def _json_ld_product_nodes(data: Any) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    if isinstance(data, dict):
+        if str(data.get("@type") or "").lower() == "product":
+            out.append(data)
+        graph = data.get("@graph")
+        if isinstance(graph, list):
+            for node in graph:
+                out.extend(_json_ld_product_nodes(node))
+    elif isinstance(data, list):
+        for node in data:
+            out.extend(_json_ld_product_nodes(node))
+    return out
+
+
+def _parse_json_ld_product(soup: BeautifulSoup) -> Dict[str, Any]:
+    for script in soup.select("script[type='application/ld+json']"):
+        raw = (script.string or script.get_text() or "").strip()
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        for node in _json_ld_product_nodes(data):
+            offers = node.get("offers")
+            price = ""
+            if isinstance(offers, dict):
+                price = str(offers.get("price") or offers.get("lowPrice") or "")
+            elif isinstance(offers, list) and offers:
+                price = str((offers[0] or {}).get("price") or "")
+            image = node.get("image")
+            if isinstance(image, list):
+                image = image[0] if image else ""
+            if isinstance(image, dict):
+                image = image.get("url") or ""
+            return {
+                "title": str(node.get("name") or "").strip(),
+                "description": str(node.get("description") or "").strip(),
+                "price": price,
+                "image": str(image or "").strip(),
+            }
+    return {}
+
+
+def _extract_price_sar_from_text(text: str) -> str:
+    blob = _clean_meta_text(text)
+    if not blob:
+        return ""
+    m = re.search(
+        r"([\d]{1,3}(?:[,\s]\d{3})*(?:\.\d{1,2})?)\s*(?:ر\.?\s*س|ريال|SAR|ر\.س)",
+        blob,
+        flags=re.IGNORECASE,
+    )
+    if m:
+        return m.group(1).replace(" ", "").replace(",", "")
+    return ""
+
+
+def _extract_salla_description(soup: BeautifulSoup) -> str:
+    ld = _parse_json_ld_product(soup)
+    if ld.get("description") and len(ld["description"]) > 30:
+        return ld["description"]
+    for sel in (
+        "[class*='product-description']",
+        "[class*='ProductDescription']",
+        ".salla-tab-content",
+        ".tab-content",
+        "article.product",
+        "main [class*='description']",
+    ):
+        el = soup.select_one(sel)
+        if not el:
+            continue
+        text = _deep_extract_text(el)
+        if len(text) > 40:
+            return text
+    meta = soup.select_one("meta[name='description']")
+    if meta and meta.get("content"):
+        return _clean_meta_text(meta["content"])
+    return ""
+
+
+def _enrich_salla_product_page(product_url: str) -> Dict[str, str]:
+    try:
+        soup = _deep_get_soup(product_url)
+    except Exception as e:
+        log.warning("salla_pdp_failed url=%s err=%s", product_url, e)
+        return {}
+    ld = _parse_json_ld_product(soup)
+    title = ld.get("title") or _deep_product_title_from_soup(
+        soup, {"product_title_selector": "h1, .product-title, [class*='product-title']"}
+    )
+    price = ld.get("price") or _extract_price_sar_from_text(_deep_extract_text(soup))
+    description = _extract_salla_description(soup)
+    image = (ld.get("image") or "").strip() or _fetch_og_image_url(product_url)
+    return {
+        "title": title,
+        "price": price,
+        "description": description,
+        "image": image,
+    }
+
+
+def _extract_woo_description(soup: BeautifulSoup) -> str:
+    for sel in (
+        "div.woocommerce-Tabs-panel--description",
+        ".woocommerce-product-details__short-description",
+        "#tab-description",
+        ".product-description",
+        ".summary",
+    ):
+        el = soup.select_one(sel)
+        if el:
+            text = _deep_extract_text(el)
+            if len(text) > 30:
+                return text
+    return ""
+
+
+def _should_enrich_detail_pages(site_key: str) -> bool:
+    cfg = SITES_CONFIG.get(site_key) or {}
+    return bool(cfg.get("enrich_detail_pages"))
+
+
+def enrich_raw_products_from_detail_pages(items: List[RawProduct], site_key: str) -> None:
+    """زيارة صفحة كل منتج لجلب الاسم والسعر والوصف الكامل (المراد / WooCommerce)."""
+    if not items or not _should_enrich_detail_pages(site_key):
+        return
+    cfg = SITES_CONFIG.get(site_key) or {}
+    is_salla = cfg.get("platform") == "almurad_salla" or site_key == "almurad"
+
+    for i, it in enumerate(items, start=1):
+        url = (it.product_url or "").strip()
+        if not url.startswith(("http://", "https://")):
+            continue
+        try:
+            if is_salla:
+                detail = _enrich_salla_product_page(url)
+            else:
+                rows = _scrape_product_detail_as_one(url, cfg)
+                if rows:
+                    row = rows[0]
+                    detail = {
+                        "title": row.name,
+                        "price": row.price_raw,
+                        "description": row.description,
+                        "image": row.image_url,
+                    }
+                else:
+                    detail = {}
+        except Exception as e:
+            log.warning("pdp_enrich_skip url=%s err=%s", url, e)
+            continue
+
+        if detail.get("title"):
+            it.name = detail["title"]
+        if detail.get("price"):
+            it.price_raw = detail["price"]
+        if detail.get("description"):
+            it.description = detail["description"]
+        if detail.get("image"):
+            it.image_url = resolve_product_image_url(detail["image"], url)
+        elif not it.image_url:
+            it.image_url = resolve_product_image_url("", url)
+
+        if i % 10 == 0:
+            time.sleep(0.12)
+
+
 def enrich_universal_items_images(
     items: List[Dict[str, Any]],
     uploads_dir: Path,
@@ -775,6 +948,11 @@ def _scrape_product_detail_as_one(url: str, cfg: Dict[str, Any]) -> List[RawProd
             country, year = _extract_country_year_from_text(combined)
         warranty = extract_warranty_from_text(combined)
 
+    description = _extract_woo_description(soup)
+    if not description:
+        ld = _parse_json_ld_product(soup)
+        description = (ld.get("description") or "").strip()
+
     return [
         RawProduct(
             name=title,
@@ -784,6 +962,7 @@ def _scrape_product_detail_as_one(url: str, cfg: Dict[str, Any]) -> List[RawProd
             year=year,
             country=country,
             warranty=warranty,
+            description=description,
         )
     ]
 
@@ -940,6 +1119,7 @@ class RawProduct:
     warranty: str = ""
     country: str = ""
     pattern: str = ""
+    description: str = ""
 
 
 def _extract_card_meta_for_kafaratplus(card) -> tuple[str, str, str]:
@@ -1433,8 +1613,11 @@ def run_universal_import(
 ) -> Dict[str, Any]:
     eff_limit = _universal_effective_limit(limit)
     raw_items = scrape_products(site_key, category_url, max_pages=max_pages, limit=eff_limit)
+    if raw_items:
+        enrich_raw_products_from_detail_pages(raw_items, site_key)
 
     products: List[Dict[str, Any]] = []
+    rim_site = site_key in ("almurad", "brwx")
     seen: Set[str] = set()
     selected_brand = normalize_brand(brand)
     url_brand = _kafaratplus_brand_slug(category_url) if site_key == "kafaratplus" else ""
@@ -1455,17 +1638,29 @@ def run_universal_import(
         product_title = " ".join(
             x for x in [parsed.brand, parsed.model, parsed.size, parsed.load_speed] if x
         ).strip()
+        if not product_title:
+            product_title = (item.name or "").strip()
 
         key = (item.product_url or "").strip().lower() or (item.name or "").strip().lower()
         if not key or key in seen:
             continue
         seen.add(key)
 
-        description = (
-            f"كفر {parsed.brand} {parsed.model} مقاس {parsed.size} يوفر ثباتاً ممتازاً "
-            f"وأداءً عملياً للاستخدام اليومي. بلد المنشأ: {item.country or 'غير محدد'}، "
-            f"سنة الصنع: {item.year or 'غير محددة'}، نقشة: {item.pattern or 'غير محددة'}."
-        )
+        description = (item.description or "").strip()
+        if not description:
+            if parsed.size:
+                description = (
+                    f"كفر {parsed.brand} {parsed.model} مقاس {parsed.size} يوفر ثباتاً ممتازاً "
+                    f"وأداءً عملياً للاستخدام اليومي. بلد المنشأ: {item.country or 'غير محدد'}، "
+                    f"سنة الصنع: {item.year or 'غير محددة'}، نقشة: {item.pattern or 'غير محددة'}."
+                )
+            else:
+                description = (item.name or "").strip()
+
+        if rim_site:
+            review_status = "needs_review" if not price else "ok"
+        else:
+            review_status = "needs_review" if (not parsed.size or not price) else "ok"
 
         products.append(
             {
@@ -1490,7 +1685,7 @@ def run_universal_import(
                 "keywords": seo["keywords"],
                 "image_alt_text": seo["image_alt_text"],
                 "warranty": item.warranty,
-                "status": "needs_review" if (not parsed.size or not price) else "ok",
+                "status": review_status,
             }
         )
 
