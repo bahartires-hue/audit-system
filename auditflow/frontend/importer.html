@@ -13,10 +13,10 @@
       })();
     </script>
     <title>مستورد المنتجات | التطابق الأمثل</title>
-    <link rel="icon" href="/static/favicon.svg?v=20" type="image/svg+xml" />
+    <link rel="icon" href="/static/favicon.svg?v=24" type="image/svg+xml" />
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/static/tailwind.css?v=20" />
-    <link rel="stylesheet" href="/static/dark.css?v=20" />
+    <link rel="stylesheet" href="/static/tailwind.css?v=24" />
+    <link rel="stylesheet" href="/static/dark.css?v=24" />
     <style>
       body {
         font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
@@ -103,13 +103,14 @@
                 class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 md:col-span-2"
                 placeholder="أدخل رابط صفحة الماركة أو نتائج البحث"
               />
-              <select id="siteKeyInp" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2">
-                <option value="tireex">tireex</option>
-                <option value="lumitires">lumitires</option>
-                <option value="kafaratplus">kafaratplus</option>
-                <option value="etar">etar</option>
-                <option value="almurad">almurad (المراد)</option>
+              <select id="siteKeyInp" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2" title="اختر المتجر — المراد: almurad">
+                <option value="tireex">tireex — TireEX</option>
+                <option value="lumitires">lumitires — LumiTires</option>
+                <option value="kafaratplus">kafaratplus — كفرات بلس</option>
+                <option value="etar">etar — Etar</option>
+                <option value="almurad">almurad — المراد (جنوط)</option>
               </select>
+              <p id="siteKeyHint" class="text-xs text-indigo-600 dark:text-indigo-400 md:col-span-2 hidden"></p>
               <input
                 id="brandInp"
                 class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2"
@@ -223,7 +224,7 @@
       </main>
     </div>
 
-    <script src="/static/app.js?v=23"></script>
+    <script src="/static/app.js?v=24"></script>
     <script>
       initAuthUI();
       const rows = document.getElementById("previewRows");
@@ -238,6 +239,7 @@
       const siteUrlLabel = document.getElementById("siteUrlLabel");
       const siteUrlHelp = document.getElementById("siteUrlHelp");
       const siteKeyInp = document.getElementById("siteKeyInp");
+      const siteKeyHint = document.getElementById("siteKeyHint");
       const brandInp = document.getElementById("brandInp");
       const sizeInp = document.getElementById("sizeInp");
       const limitInp = document.getElementById("limitInp");
@@ -321,10 +323,30 @@
         const isClassic = mode === "classic";
         const isDeepScan = mode === "brand-deep-scan";
 
-        siteKeyInp.disabled = isClassic;
         sizeInp.disabled = !isClassic;
         pageMode.disabled = !isClassic;
         urlInp.disabled = false;
+
+        const siteKey = (siteKeyInp.value || "").trim();
+        const needsUniversal = siteKey && siteKey !== "tireex";
+        if (needsUniversal && isClassic) {
+          importModeInp.value = "universal-category";
+          return syncImportModeUI();
+        }
+
+        if (siteKeyHint) {
+          if (siteKey === "almurad") {
+            siteKeyHint.textContent =
+              "متجر المراد (Salla): اختر «السحب العام» ثم الصق رابط مثل https://almuradstore.com/products";
+            siteKeyHint.classList.remove("hidden");
+          } else if (needsUniversal && !isClassic) {
+            siteKeyHint.textContent = "السحب من: " + siteKey;
+            siteKeyHint.classList.remove("hidden");
+          } else {
+            siteKeyHint.classList.add("hidden");
+            siteKeyHint.textContent = "";
+          }
+        }
 
         if (isClassic) {
           siteUrlLabel.textContent = "رابط صفحة الماركة أو نتائج البحث";
@@ -531,6 +553,7 @@
       });
 
       importModeInp.addEventListener("change", syncImportModeUI);
+      siteKeyInp.addEventListener("change", syncImportModeUI);
       syncImportModeUI();
 
       csvBtn.addEventListener("click", function () {
