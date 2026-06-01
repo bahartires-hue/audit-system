@@ -132,8 +132,10 @@ def _execute_universal_importer(
             )
         except ValueError as e:
             raise HTTPException(400, str(e))
-        except Exception:
-            raise HTTPException(502, "فشل تشغيل السحب العام. تأكد من site_key والرابط.")
+        except Exception as e:
+            log.exception("run_universal_import failed site_key=%s url=%s", site_key, category_url)
+            msg = str(e).strip() or e.__class__.__name__
+            raise HTTPException(502, f"فشل السحب العام: {msg[:240]}")
 
     items = out.get("items", [])
     try:
@@ -403,9 +405,10 @@ def scrape_importer_universal_start(request: Request, body: UniversalImporterReq
         except HTTPException as e:
             detail = e.detail if isinstance(e.detail, str) else str(e.detail)
             fail_job(job_id, detail)
-        except Exception:
+        except Exception as e:
             log.exception("universal scrape job failed job_id=%s", job_id)
-            fail_job(job_id, "فشل السحب العام. تأكد من الرابط أو حاول لاحقًا.")
+            msg = str(e).strip() or e.__class__.__name__
+            fail_job(job_id, f"فشل السحب العام: {msg[:240]}")
 
     threading.Thread(target=run, daemon=True).start()
     return {"ok": True, "job_id": job_id}

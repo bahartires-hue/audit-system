@@ -253,15 +253,18 @@ def _request_headers_for_url(url: str) -> Dict[str, str]:
 
 
 def _deep_get_soup(url: str) -> BeautifulSoup:
-    r = _http_session().get(url, timeout=28, headers=_request_headers_for_url(url))
-    r.raise_for_status()
+    try:
+        r = _http_session().get(url, timeout=28, headers=_request_headers_for_url(url))
+        r.raise_for_status()
+    except requests.RequestException as e:
+        raise ValueError(f"تعذّر فتح الرابط: {url} — {e}") from e
     text = r.text or ""
-    if len(text) < 500:
-        raise ValueError(f"استجابة قصيرة جداً من الموقع ({len(text)} حرف) — قد يكون حظراً من السيرفر.")
+    if len(text) < 300:
+        log.warning("short_html_response url=%s len=%s", url, len(text))
     try:
         return BeautifulSoup(text, "lxml")
     except Exception:
-        return BeautifulSoup(text, "html.parser")
+        return BeautifulSoup(text or "<html></html>", "html.parser")
 
 
 def _deep_normalize_shop_url(base_url: str, href: str) -> str:
@@ -1517,11 +1520,11 @@ def _almurad_product_urls_in_html(html: str, page_url: str) -> Set[str]:
 
 
 def _almurad_effective_max_pages(total_products: int, per_page: int, max_pages: int) -> int:
-    cap = max(1, int(max_pages or 1))
+    cap = max(1, min(int(max_pages or 1), 40))
     if total_products <= 0 or per_page <= 0:
         return cap
     needed = (total_products + per_page - 1) // per_page
-    return min(max(cap, needed), 250)
+    return min(cap, max(1, needed + 1))
 
 
 def _scrape_almurad_catalog(
@@ -1537,7 +1540,7 @@ def _scrape_almurad_catalog(
     seen_urls: Set[str] = set()
     total_expected = 0
     per_page = 0
-    pages_cap = max(1, int(max_pages or 1))
+    pages_cap = max(1, min(int(max_pages or 1), 40))
 
     for page in range(1, pages_cap + 1):
         if progress_cb:
@@ -1975,14 +1978,18 @@ def run_universal_import(
     progress_cb: Optional[Callable[[int, str], None]] = None,
 ) -> Dict[str, Any]:
     eff_limit = _universal_effective_limit(limit)
+    pages = max(1, min(int(max_pages or 10), 40))
     _universal_report(progress_cb, 3, "جاري جلب قائمة المنتجات...")
-    raw_items = scrape_products(
-        site_key,
-        category_url,
-        max_pages=max_pages,
-        limit=eff_limit,
-        progress_cb=progress_cb,
-    )
+    try:
+        raw_items = scrape_products(
+            site_key,
+            category_url,
+            max_pages=pages,
+            limit=eff_limit,
+            progress_cb=progress_cb,
+        )
+    except requests.RequestException as e:
+        raise ValueError(f"فشل الاتصال بمتجر {site_key}: {e}") from e
     if raw_items and not _is_pdp_url(category_url, site_key):
         enrich_raw_products_from_detail_pages(raw_items, site_key, progress_cb=progress_cb)
 
@@ -2011,12 +2018,22 @@ def run_universal_import(
                 if not (url_brand and url_brand == selected_brand):
                     continue
 
-        seo = build_seo_fields(parsed, item.year, item.country, item.pattern)
-        product_title = " ".join(
-            x for x in [parsed.brand, parsed.model, parsed.size, parsed.load_speed] if x
-        ).strip()
-        if not product_title:
+        if rim_site:
+            desc_src = (item.description or item.name or "").strip()
+            seo = {
+                "seo_title": (item.name or "")[:160],
+                "meta_description": desc_src[:240],
+                "keywords": (item.name or "")[:200],
+                "image_alt_text": (item.name or "منتج")[:120],
+            }
             product_title = (item.name or "").strip()
+        else:
+            seo = build_seo_fields(parsed, item.year, item.country, item.pattern)
+            product_title = " ".join(
+                x for x in [parsed.brand, parsed.model, parsed.size, parsed.load_speed] if x
+            ).strip()
+            if not product_title:
+                product_title = (item.name or "").strip()
 
         key = (item.product_url or "").strip().lower() or (item.name or "").strip().lower()
         if not key or key in seen:
@@ -2073,9 +2090,19 @@ def run_universal_import(
 
     _universal_report(progress_cb, 94, "تصدير CSV...")
     exports_root = Path(exports_root)
-    exports_root.mkdir(parents=True, exist_ok=True)
+    try:
+        exports_root.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        import tempfile
+
+        exports_root = Path(tempfile.gettempdir()) / "auditflow_exports"
+        exports_root.mkdir(parents=True, exist_ok=True)
     csv_path = exports_root / f"{site_key}_products_salla_like.csv"
-    export_salla_like_csv(products, csv_path)
+    try:
+        export_salla_like_csv(products, csv_path)
+    except Exception as e:
+        log.warning("export_salla_like_csv failed: %s", e)
+        csv_path = Path("")
     _universal_report(progress_cb, 99, f"اكتمل — {len(products)} منتج")
 
     log.info(

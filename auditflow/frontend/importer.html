@@ -137,8 +137,8 @@
                 type="number"
                 min="1"
                 max="5000"
-                value="500"
-                title="أقصى عدد صفحات ترقيم للسحب (زِد القيمة للكتالوجات الكبيرة)"
+                value="20"
+                title="أقصى صفحات القائمة (المراد ~6 صفحات لـ 113 منتج — 20 كافية)"
                 class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2"
               />
               <select id="pageMode" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2">
@@ -576,24 +576,15 @@
             headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token": csrf },
             body: JSON.stringify(body),
           });
-          let data;
           if (startRes.status === 404) {
-            setScrapeProgress(true, 5, "سيرفر قديم — سحب مباشر (انتظر حتى ينتهي)...");
-            const syncRes = await fetch("/importer/universal/scrape", {
-              method: "POST",
-              credentials: "include",
-              headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-Token": csrf },
-              body: JSON.stringify(body),
-            });
-            if (!syncRes.ok) throw new Error(await readErrorMessage(syncRes));
-            data = await syncRes.json();
-          } else {
-            if (!startRes.ok) throw new Error(await readErrorMessage(startRes));
-            const startData = await startRes.json();
-            const jobId = startData.job_id;
-            if (!jobId) throw new Error("لم يُرجع الخادم معرف المهمة");
-            data = await pollImporterJob(jobId);
+            showToast("السيرفر قديم — انشر آخر تحديث على lghe (يحتاج /universal/scrape/start)", "#ef4444");
+            throw new Error("واجهة السحب غير محدّثة على هذا السيرفر (404). استخدم audit-system-2-lghe بعد Deploy.");
           }
+          if (!startRes.ok) throw new Error(await readErrorMessage(startRes));
+          const startData = await startRes.json();
+          const jobId = startData.job_id;
+          if (!jobId) throw new Error("لم يُرجع الخادم معرف المهمة");
+          const data = await pollImporterJob(jobId);
           setScrapeProgress(true, 100, "تم");
           restoredSessionId = data.snapshot_id || "";
           render(data.items || []);
