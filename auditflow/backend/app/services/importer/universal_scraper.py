@@ -1444,7 +1444,7 @@ def _almurad_listing_base_url(url: str) -> str:
     qs = parse_qs(parsed.query)
     for key in ("page", "paged"):
         qs.pop(key, None)
-    q = urlencode(qs, doeq=True)
+    q = urlencode(qs, doseq=True)
     return urlunparse(parsed._replace(query=q))
 
 
