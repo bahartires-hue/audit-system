@@ -758,7 +758,7 @@ async def admin_notify_expiring(request: Request):
                     subject="تنبيه قرب انتهاء الاشتراك | OptimalMatch",
                     body=(
                         f"مرحباً {u.username},\n\n"
-                        f"اشتراكك ({u.plan_name}) سينتهي قريباً في {u.subscription_expires_at}.\n"
+                        f"اشتراكك ({u.plan_name}) سينتهي قريبًا في {u.subscription_expires_at}.\n"
                         "يرجى التواصل مع الإدارة للتجديد.\n"
                     ),
                 )
@@ -887,6 +887,9 @@ def auth_subscription_status(request: Request):
         db.close()
 
 
+_DUMMY_PASSWORD_HASH = hash_password(secrets.token_urlsafe(32))
+
+
 @router.post("/auth/login")
 @limiter.limit("25/minute")
 async def auth_login(request: Request):
@@ -899,8 +902,24 @@ async def auth_login(request: Request):
         require_csrf(request)
         _ensure_first_user_admin(db)
         user = db.query(User).filter(func.lower(User.username) == username.lower()).first()
-        if not user:
+
+        # نتحقق من كلمة المرور أولاً، قبل أي فحص لحالة الحساب (نشط/منتهي/مقفول).
+        # هذا يمنع استغلال الرد كـ "oracle" لمعرفة وجود اسم مستخدم أو حالته بدون
+        # معرفة كلمة المرور الصحيحة. لو المستخدم غير موجود، نقارن بهاش وهمي بنفس
+        # التكلفة الحسابية حتى لا يكشف زمن الاستجابة عن وجود الحساب من عدمه.
+        password_ok = verify_password(password, user.password_hash if user else _DUMMY_PASSWORD_HASH)
+
+        if not user or not password_ok:
+            if user:
+                user.failed_attempts = int(user.failed_attempts or 0) + 1
+                if user.failed_attempts >= 5:
+                    user.locked_until = dt.datetime.utcnow() + dt.timedelta(minutes=LOCK_MINUTES)
+                    user.failed_attempts = 0
+                db.commit()
             raise HTTPException(401, "بيانات الدخول غير صحيحة")
+
+        # كلمة المرور صحيحة — الآن فقط نكشف حالة الحساب (هذا مقبول لأن الطالب
+        # أثبت معرفته بكلمة المرور الصحيحة).
         if int(user.is_active or 0) != 1:
             if str(user.plan_name or "").startswith("pending_"):
                 raise HTTPException(403, "تم إنشاء الحساب وبانتظار اعتماد الاشتراك من المدير")
@@ -908,14 +927,7 @@ async def auth_login(request: Request):
         if user.subscription_expires_at and user.subscription_expires_at < dt.datetime.utcnow():
             raise HTTPException(403, subscription_expired_text())
         if user.locked_until and user.locked_until > dt.datetime.utcnow():
-            raise HTTPException(429, "الحساب مقفل مؤقتاً. حاول لاحقاً")
-        if not verify_password(password, user.password_hash):
-            user.failed_attempts = int(user.failed_attempts or 0) + 1
-            if user.failed_attempts >= 5:
-                user.locked_until = dt.datetime.utcnow() + dt.timedelta(minutes=LOCK_MINUTES)
-                user.failed_attempts = 0
-            db.commit()
-            raise HTTPException(401, "بيانات الدخول غير صحيحة")
+            raise HTTPException(429, "الحساب مقفول مؤقتًا. حاول لاحقًا")
 
         if "$" not in user.password_hash:
             user.password_hash = hash_password(password)
