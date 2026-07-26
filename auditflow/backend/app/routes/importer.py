@@ -520,7 +520,12 @@ def importer_session_salla_xlsx(request: Request, snapshot_id: str) -> FileRespo
 
 
 @router.get("/image")
-def importer_image(name: str = Query(...)) -> FileResponse:
+def importer_image(request: Request, name: str = Query(...)) -> FileResponse:
+    db = SessionLocal()
+    try:
+        require_user(db, request)
+    finally:
+        db.close()
     safe = Path(name).name
     uploads = _uploads_root()
     candidates = [
@@ -545,7 +550,7 @@ def importer_csv(request: Request) -> FileResponse:
         db.close()
     csv_path = _uploads_root().parent / "exports" / "tire_products.csv"
     if not csv_path.exists() or not csv_path.is_file():
-        raise HTTPException(404, "ملف CSV غير موجود. نفّذ السحب أولًا.")
+        raise HTTPException(404, "ملف CSV غير موجود. نفّذ السحب أولاً.")
     return FileResponse(str(csv_path), media_type="text/csv", filename="tire_products.csv")
 
 
@@ -558,7 +563,7 @@ def importer_xlsx(request: Request) -> FileResponse:
         db.close()
     xlsx_path = _uploads_root().parent / "exports" / "tire_products.xlsx"
     if not xlsx_path.exists() or not xlsx_path.is_file():
-        raise HTTPException(404, "ملف Excel غير موجود. نفّذ السحب أولًا.")
+        raise HTTPException(404, "ملف Excel غير موجود. نفّذ السحب أولاً.")
     return FileResponse(
         str(xlsx_path),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -575,7 +580,7 @@ def importer_salla_xlsx(request: Request) -> FileResponse:
         db.close()
     xlsx_path = _uploads_root().parent / "exports" / "salla_products_ready.xlsx"
     if not xlsx_path.exists() or not xlsx_path.is_file():
-        raise HTTPException(404, "ملف Salla Excel غير موجود. نفّذ السحب أولًا.")
+        raise HTTPException(404, "ملف Salla Excel غير موجود. نفّذ السحب أولاً.")
     return FileResponse(
         str(xlsx_path),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -605,4 +610,3 @@ def importer_uploads_debug(request: Request) -> Dict[str, Any]:
         "first_5_images": first5,
         "first_5_public_urls": [f"{base}/uploads/products/{name}" if base else f"/uploads/products/{name}" for name in first5],
     }
-
