@@ -81,12 +81,12 @@
 </main></div></div>
 <script src="/static/app.js?v=14"></script>
 <script>
-(async function(){await initAuthUI();function esc(s){return String(s==null?"":s);} function money(n){return Number(n||0).toFixed(2);}
+(async function(){await initAuthUI();function esc(s){return String(s==null?"":s).replace(/[&<>"']/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]; });} function money(n){return Number(n||0).toFixed(2);}
 let items=[], sales=[], purchases=[];
 let lastProfitTotals = { profit: 0 };
 let lastTaxReport = null;
 let lastExpenseRows = [];
-function downloadCsv(filename, headers, rows){const escCsv=(v)=>`"${String(v==null?"":v).replace(/"/g,'""')}"`;const lines=[headers.map(escCsv).join(",")].concat(rows.map((r)=>r.map(escCsv).join(",")));const blob=new Blob(["\uFEFF"+lines.join("\n")],{type:"text/csv;charset=utf-8;"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500);}
+function downloadCsv(filename, headers, rows){const escCsv=(v)=>`"${String(v==null?"":v).replace(/"/g,'""')}"`;const lines=[headers.map(escCsv).join(",")].concat(rows.map((r)=>r.map(escCsv).join(",")));const blob=new Blob(["﻿"+lines.join("\n")],{type:"text/csv;charset=utf-8;"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500);}
 function printElementHtml(title, html){const w=window.open("","_blank");if(!w)return;w.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{font-family:Arial;padding:16px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:6px;text-align:right}</style></head><body><h2>${esc(title)}</h2>${html}</body></html>`);w.document.close();w.focus();w.print();}
 async function loadItems(){const d=await apiGet("/api/trade/items");items=d.items||[];document.getElementById("itemId").innerHTML=items.map(x=>`<option value="${esc(x.id)}">${esc(x.code)} - ${esc(x.name)}</option>`).join("");document.getElementById("returnItem").innerHTML=items.map(x=>`<option value="${esc(x.id)}">${esc(x.code)} - ${esc(x.name)}</option>`).join("");}
 async function loadParties(){const c=await apiGet("/api/cashierko/customers");const s=await apiGet("/api/cashierko/suppliers");document.getElementById("customerSel").innerHTML=(c.items||[]).map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("");document.getElementById("supplierSel").innerHTML=(s.items||[]).map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("");}
