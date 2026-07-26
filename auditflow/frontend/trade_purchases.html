@@ -51,7 +51,7 @@
 <script>
 (async function(){
 await initAuthUI();
-function esc(s){return String(s==null?"":s);}
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]; });}
 function money(n){return Number(n||0).toFixed(2);}
 let items=[], suppliers=[], branches=[], lines=[];
 let appSettings={tax_rate:0};
@@ -121,7 +121,7 @@ document.getElementById("clearBtn").addEventListener("click",()=>{lines=[];rende
 ["tax","discount","paid"].forEach((id)=>document.getElementById(id).addEventListener("input",computeTotals));
 document.getElementById("saveBtn").addEventListener("click",async()=>{
   try{
-    if(!lines.length){showToast("أضف بنود الفاتورة أولًا","#ef4444");return;}
+    if(!lines.length){showToast("أضف بنود الفاتورة أولاً","#ef4444");return;}
     const supId=document.getElementById("supplierSel").value||"";
     const sup=suppliers.find(x=>x.id===supId);
     const t=computeTotals();

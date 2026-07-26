@@ -118,7 +118,7 @@
         let cart = [];
         let appSettings = { shop_name: "SmartPOS", currency: "SAR", print_size: "A4", thermal_header: "شكراً لزيارتكم" };
         let topItemIds = [];
-        function esc(s) { return String(s == null ? "" : s); }
+        function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]; }); }
         function money(v) { return Number(v || 0).toFixed(2); }
         async function loadSettings() {
           try {
