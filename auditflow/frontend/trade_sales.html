@@ -139,7 +139,7 @@
     (async function () {
       await initAuthUI();
 
-      function esc(s) { return String(s == null ? "" : s); }
+      function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]; }); }
       function money(n) { return Number(n || 0).toFixed(2); }
       function paymentLabel(v) { if (v === "cash") return "نقد"; if (v === "network") return "شبكة"; if (v === "transfer") return "تحويل"; if (v === "credit") return "آجل"; if (v === "mixed") return "مختلط"; return v || ""; }
 
@@ -495,7 +495,7 @@
       }
 
       async function removeSale(id) {
-        if (!id) { showToast("معرّف الفاتورة غير صالح", "#ef4444"); return; }
+        if (!id) { showToast("معرف الفاتورة غير صالح", "#ef4444"); return; }
         if (!confirm("تأكيد حذف الفاتورة؟ سيتم إرجاع الكمية للمخزون.")) return;
         try {
           await apiDelete(`/api/trade/sales/${encodeURIComponent(id)}`);
@@ -509,7 +509,7 @@
 
       document.getElementById("addLineBtn").addEventListener("click", () => {
         const item = pickItemFromSearch() || items.find((x) => x.id === (document.getElementById("item").value || ""));
-        if (!item) { showToast("اختر صنفًا أولًا", "#ef4444"); return; }
+        if (!item) { showToast("اختر صنفًا أولاً", "#ef4444"); return; }
         const qty = Number(document.getElementById("qty").value || 0);
         const price = Number(document.getElementById("price").value || 0);
         const taxRate = vatRate();
