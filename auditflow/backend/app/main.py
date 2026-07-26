@@ -48,7 +48,16 @@ app = FastAPI(title="OptimalMatch API | التطابق الأمثل")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-origins = ["*"]
+_cors_env = (os.getenv("AUDITFLOW_CORS_ORIGINS") or "").strip()
+origins = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else []
+if not origins:
+    # لا يوجد نطاقات cross-origin افتراضياً — الواجهة تُقدَّم من نفس الخادم (same-origin).
+    # لو احتجت وصول من نطاق خارجي (تطبيق موبايل/جهة ثالثة)، حدده صراحة عبر
+    # متغير البيئة AUDITFLOW_CORS_ORIGINS (مفصول بفواصل). لا تستخدم "*" مع allow_credentials=True
+    # لأن هذا يسمح لأي موقع بعمل طلبات محمّلة بكوكيز الجلسة.
+    logging.getLogger("uvicorn.error").warning(
+        "AUDITFLOW_CORS_ORIGINS غير معرّف — CORS معطّل لكل النطاقات الخارجية (سياسة آمنة افتراضية)."
+    )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -57,6 +66,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(SlowAPIMiddleware)
+
+
+@app.middleware("http")
+async def brand_scan_auth_guard(request: Request, call_next):
+    """يحمي /brand-scan بالكامل خلف تسجيل الدخول — هذا التطبيق الفرعي المستقل
+    ما عنده أي آلية مصادقة خاصة به، وبدون هذا الفحص يبقى مفتوح لأي زائر
+    (بما فيها ثغرة SSRF عبر category_url)."""
+    if request.url.path == "/brand-scan" or request.url.path.startswith("/brand-scan/"):
+        db = _SessionLocal()
+        try:
+            require_user(db, request)
+        except HTTPException as e:
+            reason = quote(str(getattr(e, "detail", "") or "يرجى تسجيل الدخول أولاً"))
+            if _wants_html(request):
+                return RedirectResponse(url=f"/login?reason={reason}", status_code=302)
+            return JSONResponse({"detail": getattr(e, "detail", "Unauthorized")}, status_code=e.status_code or 401)
+        finally:
+            db.close()
+    return await call_next(request)
 
 
 @app.middleware("http")
