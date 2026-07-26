@@ -22,7 +22,7 @@
 </div>
 <script src="/static/app.js?v=14"></script>
 <script>
-(async function(){await initAuthUI();function esc(s){return String(s==null?"":s);}
+(async function(){await initAuthUI();function esc(s){return String(s==null?"":s).replace(/[&<>"']/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]; });}
 let items=[],branches=[];
 async function loadRef(){const b=await apiGet("/api/cashierko/branches");branches=b.items||[];const i=await apiGet("/api/trade/items");items=i.items||[];const opts=branches.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("");document.getElementById("fromBranch").innerHTML=opts;document.getElementById("toBranch").innerHTML=opts;renderItems();}
 function renderItems(){const fb=document.getElementById("fromBranch").value||"";const tb=document.getElementById("toBranch").value||"";document.getElementById("fromItem").innerHTML=items.filter(x=>(x.branch_id||"")===fb).map(x=>`<option value="${esc(x.id)}">${esc(x.code)} - ${esc(x.name)} (متاح ${esc(x.quantity)})</option>`).join("");document.getElementById("toItem").innerHTML=items.filter(x=>(x.branch_id||"")===tb).map(x=>`<option value="${esc(x.id)}">${esc(x.code)} - ${esc(x.name)}</option>`).join("");}
