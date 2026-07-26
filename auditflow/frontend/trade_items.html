@@ -46,7 +46,7 @@
     <script>
       (async function () {
         await initAuthUI();
-        function esc(s){return String(s==null?"":s);}
+        function esc(s){return String(s==null?"":s).replace(/[&<>"']/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]; });}
         async function loadUnits(){
           const d = await apiGet("/api/cashierko/units");
           const rows = d.items || [];

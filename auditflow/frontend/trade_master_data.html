@@ -109,7 +109,7 @@
     <script>
       (async function () {
         await initAuthUI();
-        function esc(s){return String(s==null?"":s);}
+        function esc(s){return String(s==null?"":s).replace(/[&<>"']/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]; });}
         function money(n){return Number(n||0).toFixed(2);}
         function card(title, value) {
           return `<div class="rounded-xl border p-4 bg-white dark:bg-slate-950"><div class="text-xs opacity-70">${title}</div><div class="text-2xl font-extrabold">${value}</div></div>`;
