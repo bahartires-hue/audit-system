@@ -35,8 +35,11 @@ def subscription_expired_text() -> str:
 
 
 def cookie_secure() -> bool:
-    """على HTTPS في الإنتاج: ضع AUDITFLOW_COOKIE_SECURE=1"""
-    return os.environ.get("AUDITFLOW_COOKIE_SECURE", "").lower() in ("1", "true", "yes")
+    """آمن (Secure) افتراضياً. للتطوير المحلي على http بدون HTTPS فقط،
+    عطّله صراحة بـ AUDITFLOW_COOKIE_SECURE=0 — هذا يمنع نشر التطبيق بالخطأ
+    بدون علم Secure على الكوكيز (كان يحدث سابقاً مع بعض منصات النشر التي
+    لا تُعرّف هذا المتغير)."""
+    return os.environ.get("AUDITFLOW_COOKIE_SECURE", "1").lower() not in ("0", "false", "no")
 
 
 def session_max_age_seconds() -> int:

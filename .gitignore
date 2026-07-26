@@ -11,10 +11,16 @@ node_modules/
 tools/tailwindcss.exe
 
 # Secrets and local data
+.env
+.env.*
+!.env.example
 *.sqlite
 *.db
 db.sqlite
 auditflow/uploads/
+dist/
+auditflow/backend/brand_scan_app/exports/
+brand_scan_app/exports/
 
 # Generated reports (do not commit)
 report_*.xlsx
