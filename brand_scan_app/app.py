@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import csv
+import ipaddress
+import socket
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -22,7 +24,7 @@ EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="مستورد الإطارات - Brand Deep Scan")
 
-# لو حاب تضيف static لاحقًا
+# لو حاب تضيف static لاحقاً
 static_dir = BASE_DIR / "static"
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
@@ -83,6 +85,42 @@ SITE_CONFIG: Dict[str, Dict[str, Any]] = {
 # =========================
 # دوال مساعدة
 # =========================
+
+def _is_public_host(hostname: str) -> bool:
+    """يرفض أي اسم مضيف يُحلّ إلى عنوان IP داخلي/خاص/محلي (حماية من SSRF)."""
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except Exception:
+        return False
+    if not infos:
+        return False
+    for info in infos:
+        ip = info[4][0]
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            continue
+        if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved or addr.is_multicast or addr.is_unspecified:
+            return False
+    return True
+
+
+def validate_url_matches_site(url: str, base_url: str) -> bool:
+    """يتأكد إن الرابط يتبع نفس نطاق الموقع المُعرّف في SITE_CONFIG وما يشير لشبكة داخلية (حماية SSRF)."""
+    try:
+        u = urlparse(url)
+        b = urlparse(base_url)
+    except Exception:
+        return False
+    if u.scheme not in ("http", "https"):
+        return False
+    if not u.netloc or u.netloc.lower() != b.netloc.lower():
+        return False
+    hostname = u.hostname or ""
+    if not hostname or not _is_public_host(hostname):
+        return False
+    return True
+
 
 def get_soup(url: str, timeout: int = 15) -> BeautifulSoup:
     headers = {
@@ -386,6 +424,12 @@ async def api_import(request: Request):
 
     if mode == "category" and not category_url:
         return JSONResponse({"ok": False, "error": "رابط التصنيف مطلوب في وضع Category"}, status_code=400)
+
+    if mode == "category" and not validate_url_matches_site(category_url, SITE_CONFIG[site_key]["base_url"]):
+        return JSONResponse(
+            {"ok": False, "error": "رابط التصنيف غير مسموح به لهذا الموقع (يجب أن يكون من نفس نطاق الموقع المحدد)"},
+            status_code=400,
+        )
 
     try:
         out = run_universal_import(
