@@ -141,10 +141,12 @@ def infer_document_kind_from_narrative(text: Optional[str]) -> Optional[str]:
         return None
     hay_raw = _expand_text_for_doc_kind(str(text))
     hay = _arabic_letters_for_match(hay_raw)
-    if "هروتاف" in hay and "تاعيبم" in hay:
-        return "فاتورة مبيعات"
-    if "هروتاف" in hay and "تايرتشم" in hay:
-        return "فاتورة مشتريات"
+    has_return = _arabic_letters_for_match("مردود") in hay
+    if not has_return:
+        if "هروتاف" in hay and "تاعيبم" in hay:
+            return "فاتورة مبيعات"
+        if "هروتاف" in hay and "تايرتشم" in hay:
+            return "فاتورة مشتريات"
     for needle, label in _DOC_KIND_SPECS:
         n = _arabic_letters_for_match(needle)
         if n in hay or needle in hay_raw:
@@ -255,14 +257,11 @@ def _replace_voucher_with_ledger_from_narrative(column_amount: float, narrative:
     if not vals:
         return column_amount
     decimals = [v for v in vals if abs(v - int(v)) > 0.0001 and abs(v) >= 0.0001]
-    for d in decimals:
-        if abs(d - column_amount) < 0.02:
-            return column_amount
-    if _looks_like_serial_voucher_amount(column_amount) and decimals:
-        return round(decimals[0], 2)
     for v in vals:
         if abs(v - column_amount) < 0.02:
             return column_amount
+    if _looks_like_serial_voucher_amount(column_amount) and decimals:
+        return round(decimals[0], 2)
     if decimals:
         return round(decimals[0], 2)
     return column_amount
@@ -2016,17 +2015,25 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
         is_voucher_narrative = _text_contains_arabic_keyword(narrative, "سند قبض") or _text_contains_arabic_keyword(
             narrative, "سند صرف"
         )
-        if len(nar_plain) <= 200 and not is_voucher_narrative:
+
+        debit = safe(row[debit_col]) if debit_col and debit_col in df.columns else None
+        credit = safe(row[credit_col]) if credit_col and credit_col in df.columns else None
+        has_resolved_amount = (debit is not None and abs(debit) >= 0.0001) or (
+            credit is not None and abs(credit) >= 0.0001
+        )
+        if len(nar_plain) <= 200 and not is_voucher_narrative and not has_resolved_amount:
             # هذا الفحص يستهدف شظايا استخراج مشوّهة (أرقام صفحة/تاريخ متداخلة مع المبلغ) حيث
-            # يتكرر رقمان بنسبة تفاوت كبيرة بلا سياق. أسطر سندات القبض/الصرف مستثناة لأن تفاوت
-            # المبلغ عن رقم المرجع/رقم السند فيها طبيعي تماماً وليس دليل تلف (انظر
+            # يتكرر رقمان بنسبة تفاوت كبيرة بلا سياق، وذلك فقط حين لا يوجد أصلاً عمود مدين/دائن
+            # موثوق يعطينا المبلغ الحقيقي مباشرة. عندما يوجد عمود مدين/دائن حقيقي بالفعل (وهو
+            # الحال دوماً في استخراج PDF النصي، حيث يحمل عمود البيان السطر الخام كاملاً — أي
+            # الرصيد والمبلغ ورقم المرجع معاً بالضرورة، فتتفاوت قيمها الرقمية بشكل كبير وطبيعي
+            # تماماً وليس دليل تلف) لا حاجة إطلاقاً لإعادة تخمين المبلغ من نص البيان الخام، فهذا
+            # الفحص كان يُسقط أغلب الحركات الصحيحة ظلماً في هذه الحالة. أسطر سندات القبض/الصرف
+            # مستثناة أيضاً لأن تفاوت المبلغ عن رقم المرجع/رقم السند فيها طبيعي تماماً (انظر
             # _amount_from_voucher_narrative_line التي تتولى استخراج مبلغها الصحيح أصلاً).
             nn = [v for v in _parse_currency_numbers_from_narrative(narrative or "") if v and v > 30]
             if len(nn) >= 3 and max(nn) >= min(nn) * 2.12 - 1e-9:
                 continue
-
-        debit = safe(row[debit_col]) if debit_col and debit_col in df.columns else None
-        credit = safe(row[credit_col]) if credit_col and credit_col in df.columns else None
 
         balance_col = next((c for c in df.columns if _is_balance_column_name(c)), None)
         debit, credit = _correct_movement_if_debit_equals_balance(
