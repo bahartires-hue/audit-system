@@ -16,8 +16,11 @@ from .legacy_analyzer import legacy_analyze, legacy_process
 
 
 def _use_legacy_analyzer() -> bool:
-    """السلوك القديم للتحليل (مطابقة حرفية). عطّله بـ AUDITFLOW_LEGACY_ANALYZER=0."""
-    return os.environ.get("AUDITFLOW_LEGACY_ANALYZER", "1").lower() in ("1", "true", "yes")
+    """المحرك الحديث (كشف أعمدة مرن يدعم كل أنواع الملفات + مطابقة تدعم نفس اتجاه القيد بين
+    الملفين) هو الافتراضي الآن. السلوك القديم كان يتطلب اتجاه عكسي حصراً بين مدين/دائن، فإذا
+    قُورن نفس كشف الحساب بنسخة معدّلة منه (نفس الاتجاه) كانت كل الصفوف تُعتبر "بدون مقابل" حتى لو
+    صف واحد فقط فيه فرق مبلغ حقيقي. للرجوع للسلوك القديم صراحة فعّل AUDITFLOW_LEGACY_ANALYZER=1."""
+    return os.environ.get("AUDITFLOW_LEGACY_ANALYZER", "0").lower() in ("1", "true", "yes")
 
 
 def _is_plausible_currency_amount(x: float) -> bool:
