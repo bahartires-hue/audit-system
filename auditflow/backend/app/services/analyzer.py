@@ -95,10 +95,14 @@ _DOC_KIND_SPECS: List[Tuple[str, str]] = [
 
 
 def _has_arabic(s: str) -> bool:
-    return any("\u0600" <= c <= "\u06ff" for c in (s or ""))
+    return any("؀" <= c <= "ۿ" for c in (s or ""))
 
 
 def _expand_text_for_doc_kind(s: str) -> str:
+    """يبني مرشّحات بديلة لنص عربي قد يكون مستخرَجاً من PDF بترتيب معكوس. بعض ملفات PDF (تبعاً
+    لبرنامج المحاسبة المُصدِّر) تعكس كل كلمة على حدة مع إبقاء ترتيب الكلمات، وأخرى تعكس السطر
+    كاملاً كوحدة واحدة (ترتيب الكلمات أيضاً ينقلب)؛ لذلك تُبنى هنا كلتا الحالتين معاً كي تنجح
+    مطابقة الكلمات المفتاحية أيّاً كان أسلوب الانعكاس."""
     t = _normalize_doc_text(s)
     if not t:
         return ""
@@ -111,7 +115,25 @@ def _expand_text_for_doc_kind(s: str) -> str:
         else:
             rev.append(w)
     parts.append(" ".join(rev))
+    if _has_arabic(t):
+        parts.append(t[::-1])
     return " \n ".join(parts)
+
+
+def _text_contains_arabic_keyword(text: Optional[str], keyword: str) -> bool:
+    """يتحقق من وجود كلمة عربية داخل نص مستخرَج من PDF، مع مراعاة أن بعض مولّدات PDF (خصوصاً
+    برامج محاسبة قديمة) تُصدِّر النص العربي بحروف معكوسة الترتيب داخل كل كلمة و/أو بأشكال عرض
+    حرفية (Presentation Forms) لا تُطابق الأحرف العربية القياسية حرفياً (مثال حقيقي من ملف PDF
+    فعلي: "ﻥﺋﺍﺩ" تُطابق بعد التطبيع والعكس كلمة "دائن"، بينما المطابقة المباشرة لا تكتشف ذلك أبداً).
+    لذلك تُفحص المطابقة المباشرة أولاً، ثم يُفحص النص بعد تطبيعه وعكس كلماته إن لم يُعثر عليها.
+    الاعتماد على هذه الدالة بدل `keyword in text` ضروري لأي فحص كلمات مفتاحية على نص PDF خام حتى
+    لا تفشل صامتة على هذه الملفات (تخطي الترويسة/التذييل، اكتشاف صف رأس الجدول، ...)."""
+    if not text:
+        return False
+    if keyword in text:
+        return True
+    blob = _arabic_letters_for_match(_expand_text_for_doc_kind(text))
+    return _arabic_letters_for_match(keyword) in blob
 
 
 def infer_document_kind_from_narrative(text: Optional[str]) -> Optional[str]:
@@ -1104,6 +1126,41 @@ def _parse_number_token(token: str) -> Optional[float]:
         return None
 
 
+def _amount_from_voucher_narrative_line(
+    work_line: str, numbers: List[str]
+) -> Optional[Tuple[Optional[float], Optional[float]]]:
+    """بعض أسطر سندات القبض/الصرف المستخرجة من نص PDF (وليس من جدول أعمدة حقيقي) تكتب المبلغ
+    الحقيقي أولًا ثم رقم مرجع الحساب ثم رقم السند نفسه على نفس السطر (مثال حقيقي: "15,000.00 1043
+    ... دفعة من الحساب ... سند قبض بنكي 34 ..."). الدالة العامة `_debit_credit_from_tail_numbers`
+    مصممة لتخطيطات أعمدة الجدول (مدين/دائن/رصيد) فتُخطئ على هذا النمط وتحسب رقم المرجع أو رقم
+    السند كأنه مبلغ حركة ثانٍ (مما يُنتج مبلغاً وهمياً أو يُسقط الحركة الحقيقية بالكامل). عند
+    التعرّف على هذا النمط تحديداً — سطر يحوي «سند قبض»/«سند صرف» وأول رقم فيه أكبر بوضوح من بقية
+    الأرقام أو يحمل كسراً عشرياً يميّزه كمبلغ حقيقي — نُرجع المبلغ الأول فقط كطرف واحد، ونتجاهل بقية
+    الأرقام كونها مرجعية لا مالية. الاتجاه (مدين/دائن) يُحدَّد من نوع السند: سند القبض يقلّل ما هو
+    مستحق على الطرف الآخر (دائن)، وسند الصرف يزيده (مدين) — وهذا مؤكَّد تجريبياً من ترتيب أعمدة
+    الجدول الحقيقي (دائن/مدين) لنفس الملف عندما ينجح استخراج الجدول بدل النص."""
+    is_receipt = _text_contains_arabic_keyword(work_line, "سند قبض")
+    is_payment = _text_contains_arabic_keyword(work_line, "سند صرف")
+    if not (is_receipt or is_payment):
+        return None
+    vals = [_parse_number_token(n) for n in numbers]
+    vals = [v for v in vals if v is not None]
+    if len(vals) < 2:
+        return None
+    first = vals[0]
+    if first is None or abs(first) < 0.01:
+        return None
+    rest = [v for v in vals[1:] if v is not None]
+    if not rest:
+        return None
+    has_decimal = abs(first - int(first)) > 0.0001
+    clearly_larger = all(abs(first) >= abs(r) * 1.5 for r in rest)
+    if not (has_decimal or clearly_larger):
+        return None
+    amount = round(float(first), 2)
+    return (None, amount) if is_receipt else (amount, None)
+
+
 def _debit_credit_from_tail_numbers(numbers: List[str]) -> Tuple[Optional[float], Optional[float]]:
     if not numbers:
         return None, None
@@ -1164,7 +1221,7 @@ _LETTERHEAD_MARKERS = (
     "اسم العميل",
 )
 
-# أسطر تذييل / فوتر تُسرَّب أحياناً من PDF وتظهر كحركات وهمية
+# أسطر تذييل / فوتر تُسرَّب أحياناً من PDF وتظهر كحركات وهمية
 _PDF_FOOTER_MARKERS = (
     "تطوير الموقع",
     "السوداني",
@@ -1172,6 +1229,12 @@ _PDF_FOOTER_MARKERS = (
     "Mohammed",
     "Alsudani",
     "alsudani",
+    # أسطر إجمالي/توقيع/طباعة عامة تظهر في نهاية أغلب كشوف الحسابات الصادرة من برامج محاسبة
+    # عربية (وليست خاصة بمصدر واحد)؛ أي سطر يحتوي هذه العبارات هو ملخص/تذييل لا حركة فعلية.
+    "اجمالي العمليات",
+    "اجمالي الرصيد",
+    "طبع بواسطة",
+    "يعتبر هذا الكشف",
 )
 
 # لا نعتمد أزواج «نفس الاتجاه + فقط 45 نقطة»؛ ترفع الحد تترك صف بحر بدون شريك زائف.
@@ -1186,17 +1249,27 @@ def _skip_statement_letterhead_lines(lines: List[str]) -> List[str]:
         s = raw.strip()
         if not s:
             continue
-        if "مدين" in s and "دائن" in s:
+        has_debit = _text_contains_arabic_keyword(s, "مدين")
+        has_credit = _text_contains_arabic_keyword(s, "دائن")
+        has_date_word = _text_contains_arabic_keyword(s, "التاريخ")
+        has_balance = _text_contains_arabic_keyword(s, "الرصيد")
+        if has_debit and has_credit:
             start = i + 1
             break
-        if "مدين" in s and "التاريخ" in s:
+        if has_debit and has_date_word:
             start = i + 1
             break
-        if "الرصيد" in s and "مدين" in s:
+        if has_balance and has_debit:
             start = i + 1
             break
         if re.search(r"\d{4}\s*[-/.]\s*\d{1,2}\s*[-/.]\s*\d{1,2}", _normalize_arabic_digits(s)):
-            if any(m in s for m in _LETTERHEAD_MARKERS):
+            # سطر قصير لا يحوي غير تاريخ واحد وكلمة "تاريخ" (مثل إعلان نطاق الكشف "من تاريخ:
+            # .../إلى تاريخ: ...") هو من الترويسة لا حركة فعلية؛ الحركات الحقيقية أطول بكثير
+            # (تتضمن مبلغاً وبياناً ونوع مستند). هذا يلتقط صيغاً لا تحوي أياً من _LETTERHEAD_MARKERS
+            # الصريحة (كملفات تكتب "من تاريخ"/"إلى تاريخ" كل على سطر مستقل بدل عبارة واحدة مجمّعة).
+            if any(_text_contains_arabic_keyword(s, m) for m in _LETTERHEAD_MARKERS):
+                continue
+            if len(s) < 40 and _text_contains_arabic_keyword(s, "تاريخ"):
                 continue
             start = i
             break
@@ -1216,13 +1289,17 @@ def _extract_pdf_rows_from_text(raw_text: str) -> List[Dict[str, Any]]:
         line = _normalize_arabic_digits(raw_line).strip()
         if len(line) < 2:
             continue
-        if any(m in raw_line for m in _PDF_FOOTER_MARKERS):
+        if any(_text_contains_arabic_keyword(raw_line, m) for m in _PDF_FOOTER_MARKERS):
             continue
-        if "تطوير الموقع" in raw_line or ("تطوير" in raw_line and "موقع" in raw_line):
+        if _text_contains_arabic_keyword(raw_line, "تطوير الموقع") or (
+            _text_contains_arabic_keyword(raw_line, "تطوير") and _text_contains_arabic_keyword(raw_line, "موقع")
+        ):
             continue
-        if "محمد علي" in raw_line and "السوداني" in raw_line:
+        if _text_contains_arabic_keyword(raw_line, "محمد علي") and _text_contains_arabic_keyword(raw_line, "السوداني"):
             continue
-        if any(m in raw_line for m in _LETTERHEAD_MARKERS) and "مدين" not in raw_line:
+        if any(_text_contains_arabic_keyword(raw_line, m) for m in _LETTERHEAD_MARKERS) and not _text_contains_arabic_keyword(
+            raw_line, "مدين"
+        ):
             continue
 
         date_m = date_pat.search(line)
@@ -1239,23 +1316,28 @@ def _extract_pdf_rows_from_text(raw_text: str) -> List[Dict[str, Any]]:
             continue
 
         low_for_totals = _arabic_letters_for_match(work_line)
-        if "اجمال" in low_for_totals:
+        if "اجمال" in low_for_totals or _text_contains_arabic_keyword(work_line, "اجمال"):
             continue
 
         numbers = [n for n in num_pat.findall(work_line) if (pv := _parse_number_token(n)) is not None and _is_plausible_currency_amount(pv)]
         if not numbers:
             continue
 
+        voucher_override = _amount_from_voucher_narrative_line(work_line, numbers)
+
         pv_pos = [float(_parse_number_token(n) or 0) for n in numbers]
         pv_pos = [x for x in pv_pos if x > 0.01]
-        if len(pv_pos) >= 3 and min(pv_pos) > 30:
+        if voucher_override is None and len(pv_pos) >= 3 and min(pv_pos) > 30:
             if max(pv_pos) >= min(pv_pos) * 2.12 - 1e-9:
                 continue
         ws_compact = re.sub(r"\s+", "", work_line)
-        if "4455" in ws_compact and "1759" in ws_compact and len(pv_pos) >= 3:
+        if voucher_override is None and "4455" in ws_compact and "1759" in ws_compact and len(pv_pos) >= 3:
             continue
 
-        debit_val, credit_val = _debit_credit_from_tail_numbers(numbers)
+        if voucher_override is not None:
+            debit_val, credit_val = voucher_override
+        else:
+            debit_val, credit_val = _debit_credit_from_tail_numbers(numbers)
 
         if (debit_val is None or abs(debit_val) < 0.0001) and (credit_val is None or abs(credit_val) < 0.0001):
             continue
@@ -1324,8 +1406,14 @@ def _find_ledger_header_row_index(grid_rows: List[List[Any]], max_scan: int = 25
                 cell_texts.append(t)
         if len(cell_texts) < 2:
             continue
-        has_deb = any("مدين" in c and "دائن" not in c for c in cell_texts)
-        has_cred = any("دائن" in c and "مدين" not in c for c in cell_texts)
+        has_deb = any(
+            _text_contains_arabic_keyword(c, "مدين") and not _text_contains_arabic_keyword(c, "دائن")
+            for c in cell_texts
+        )
+        has_cred = any(
+            _text_contains_arabic_keyword(c, "دائن") and not _text_contains_arabic_keyword(c, "مدين")
+            for c in cell_texts
+        )
         if has_deb and has_cred:
             return idx
     return None
@@ -1455,7 +1543,14 @@ def read_pdf(file_path: str) -> Optional[pd.DataFrame]:
                         if row and any(cell is not None for cell in row):
                             grid_rows.append(row)
 
-            all_text = "\n".join(text_parts)
+            # كل صفحة قد تكرر ترويسة الكشف الكاملة (اسم الشركة/نطاق التاريخ/رقم العميل/رأس الجدول)
+            # في أعلاها، كما تفعل بعض برامج المحاسبة عند تعدد الصفحات. تصفية الترويسة يجب أن تتم
+            # لكل صفحة على حدة، وإلا فإن ترويسة الصفحة الثانية وما بعدها تُقرأ كأنها حركات فعلية
+            # لأن نقطة "بداية البيانات" التي حسبتها الدالة على النص المدمج تكون قد تجاوزتها فعلاً.
+            per_page_bodies = [
+                "\n".join(_skip_statement_letterhead_lines((pt or "").splitlines())) for pt in text_parts
+            ]
+            all_text = "\n".join(per_page_bodies)
 
             if grid_rows:
                 df = _dataframe_from_pdf_grid(grid_rows)
@@ -1614,11 +1709,13 @@ def _row_contains_statement_footer(row: pd.Series) -> bool:
         s = str(v).strip()
         if not s:
             continue
-        if any(m in s for m in _PDF_FOOTER_MARKERS):
+        if any(_text_contains_arabic_keyword(s, m) for m in _PDF_FOOTER_MARKERS):
             return True
-        if "تطوير الموقع" in s or ("تطوير" in s and "موقع" in s):
+        if _text_contains_arabic_keyword(s, "تطوير الموقع") or (
+            _text_contains_arabic_keyword(s, "تطوير") and _text_contains_arabic_keyword(s, "موقع")
+        ):
             return True
-        if "محمد علي" in s and "السوداني" in s:
+        if _text_contains_arabic_keyword(s, "محمد علي") and _text_contains_arabic_keyword(s, "السوداني"):
             return True
     return False
 
@@ -1712,11 +1809,18 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
         if _row_contains_statement_footer(row):
             continue
         nar_plain = _normalize_doc_text(narrative)
-        if "تطوير الموقع" in (narrative or "") or (
-            "محمد علي" in (narrative or "") and "السوداني" in (narrative or "")
+        if _text_contains_arabic_keyword(narrative, "تطوير الموقع") or (
+            _text_contains_arabic_keyword(narrative, "محمد علي") and _text_contains_arabic_keyword(narrative, "السوداني")
         ):
             continue
-        if len(nar_plain) <= 200:
+        is_voucher_narrative = _text_contains_arabic_keyword(narrative, "سند قبض") or _text_contains_arabic_keyword(
+            narrative, "سند صرف"
+        )
+        if len(nar_plain) <= 200 and not is_voucher_narrative:
+            # هذا الفحص يستهدف شظايا استخراج مشوّهة (أرقام صفحة/تاريخ متداخلة مع المبلغ) حيث
+            # يتكرر رقمان بنسبة تفاوت كبيرة بلا سياق. أسطر سندات القبض/الصرف مستثناة لأن تفاوت
+            # المبلغ عن رقم المرجع/رقم السند فيها طبيعي تماماً وليس دليل تلف (انظر
+            # _amount_from_voucher_narrative_line التي تتولى استخراج مبلغها الصحيح أصلاً).
             nn = [v for v in _parse_currency_numbers_from_narrative(narrative or "") if v and v > 30]
             if len(nn) >= 3 and max(nn) >= min(nn) * 2.12 - 1e-9:
                 continue
@@ -1761,6 +1865,14 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
             continue
 
         desc_out = _extract_row_description(row, df, description_col, counterparty_col, doc_col, doc_fb)
+        if not desc_out:
+            # لا يوجد عمود بيان/طرف آخر منفصل متاح (شائع في الاستخراج النصي من PDF عندما يكون
+            # عمود البيان نفسه هو مصدر "doc" الوحيد فيُستبعد). نحاول أخذ رقم مرجعي/فاتورة من نص
+            # السطر كإشارة تمييز احتياطية، لأن حقل doc قد يُبسَّط لاحقاً إلى تصنيف عام (مثل "فاتورة
+            # مبيعات") يُفقِد التمييز بين عمليتين مختلفتين فعلياً تتفقان بالمصادفة في المبلغ والتاريخ.
+            ref_num = _extract_doc_number_text(narrative)
+            if ref_num:
+                desc_out = ref_num
 
         if debit and credit and debit > 0 and credit > 0:
             date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col, doc_fb)
@@ -2035,4 +2147,3 @@ def compute_summary(
         "errors_count": errors_count,
         "warnings_count": warnings_count,
     }
-
