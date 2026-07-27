@@ -27,7 +27,7 @@ from .routes.importer import router as importer_router
 from .routers.smartpos_v2_api import router as smartpos_v2_router
 from .routers.trade_api import router as trade_router
 from .services.analyzer import analyze as analyze_pairs
-from .services.analyzer import compute_summary, process
+from .services.analyzer import analyze_companies, compute_summary, process, process_company
 from .services.ai_insights import full_analysis
 from .services.pdf_convert import pdf_to_excel_bytes
 from .services.reports import mismatches_to_csv_bytes, mismatches_to_excel_bytes, mismatches_to_pdf_bytes
@@ -169,6 +169,16 @@ def ui_home(request: Request):
 @app.get("/analyze", response_class=HTMLResponse)
 def ui_analyze(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "analyze.html")
+
+
+@app.get("/companies/analyze", response_class=HTMLResponse)
+def ui_companies_analyze(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "company_analyze.html")
+
+
+@app.get("/companies/reports", response_class=HTMLResponse)
+def ui_companies_reports(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "company_reports.html")
 
 
 @app.get("/convert", response_class=HTMLResponse)
@@ -340,6 +350,14 @@ def _compute_entry_counts(entries: List[Dict[str, Any]]) -> Dict[str, int]:
     return {"errors": errors, "warnings": warnings}
 
 
+_BRANCHES_ALLOWED_EXTS = (".xlsx", ".xls", ".xlsm", ".xlsb", ".csv")
+
+
+def _normalize_report_type(value: Optional[str]) -> str:
+    v = (value or "").strip().lower()
+    return "companies" if v == "companies" else "branches"
+
+
 @app.post("/analyze")
 def analyze_api(
     request: Request,
@@ -349,6 +367,7 @@ def analyze_api(
     b2: str = Form(...),
     title: Optional[str] = Form(None),
     strict_mirror_types: bool = Form(False),
+    report_type: str = Form("branches"),
 ):
     db = _SessionLocal()
     try:
@@ -358,6 +377,19 @@ def analyze_api(
     finally:
         db.close()
 
+    report_type = _normalize_report_type(report_type)
+
+    if report_type == "branches":
+        # مطابقة الفروع مخصصة لملفات Excel/CSV فقط — قرار صريح لفصلها عن مطابقة الشركات
+        # التي تبقى تقبل PDF أيضاً (يشتغل خلفها منطق مستقل عبر process_company/analyze_companies).
+        for f in (file1, file2):
+            name = (f.filename or "").strip().lower()
+            if not name.endswith(_BRANCHES_ALLOWED_EXTS):
+                raise HTTPException(
+                    400,
+                    "مطابقة الفروع تدعم ملفات Excel أو CSV فقط. لمطابقة ملفات PDF استخدم صفحة «مطابقة الشركات».",
+                )
+
     report_id = uuid.uuid4().hex
     try:
         saved1, original1 = save_upload_file(file1, UPLOAD_DIR / report_id / "file1")
@@ -365,10 +397,13 @@ def analyze_api(
     except ValueError as e:
         raise HTTPException(400, str(e))
 
+    process_fn = process_company if report_type == "companies" else process
+    analyze_fn = analyze_companies if report_type == "companies" else analyze_pairs
+
     try:
-        d1 = process(saved1, original1, b1)
-        d2 = process(saved2, original2, b2)
-        mismatch_entries, counts = analyze_pairs(
+        d1 = process_fn(saved1, original1, b1)
+        d2 = process_fn(saved2, original2, b2)
+        mismatch_entries, counts = analyze_fn(
             d1, d2, allow_same_direction=not strict_mirror_types
         )
     except HTTPException:
@@ -387,6 +422,7 @@ def analyze_api(
         title=title_eff,
         branch1_name=b1,
         branch2_name=b2,
+        report_type=report_type,
         file1_original=original1,
         file2_original=original2,
         file1_path=saved1,
@@ -459,14 +495,22 @@ def list_reports(
     request: Request,
     archived: str = Query("0"),
     q: str = Query(""),
+    report_type: str = Query("branches"),
 ):
     if _wants_html(request):
         return _require_login_page(request, FRONTEND_DIR / "reports.html")
+
+    report_type = _normalize_report_type(report_type)
 
     db = _SessionLocal()
     try:
         user = require_user(db, request)
         query = db.query(AnalysisReport).filter(AnalysisReport.user_id == user.id)
+        query = query.filter(
+            (AnalysisReport.report_type == report_type)
+            if report_type == "companies"
+            else ((AnalysisReport.report_type == "branches") | (AnalysisReport.report_type.is_(None)))
+        )
         ar = (archived or "0").strip().lower()
         if ar in ("0", "active", "false"):
             query = query.filter((AnalysisReport.archived.is_(None)) | (AnalysisReport.archived == 0))

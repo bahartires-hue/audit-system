@@ -52,6 +52,7 @@ def _migrate_postgresql() -> None:
         "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS tags_json JSON DEFAULT '[]'::json",
         "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS notes TEXT",
         "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS archived INTEGER DEFAULT 0",
+        "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS report_type VARCHAR DEFAULT 'branches'",
     ]
     with engine.begin() as conn:
         for sql in stmts:
@@ -59,6 +60,11 @@ def _migrate_postgresql() -> None:
         conn.execute(
             text(
                 "UPDATE analysis_reports SET archived = 0 WHERE archived IS NULL"
+            )
+        )
+        conn.execute(
+            text(
+                "UPDATE analysis_reports SET report_type = 'branches' WHERE report_type IS NULL OR report_type = ''"
             )
         )
         conn.execute(
@@ -189,9 +195,12 @@ def run_migrations() -> None:
                 conn.execute(text("ALTER TABLE analysis_reports ADD COLUMN notes TEXT"))
             if "archived" not in rcols:
                 conn.execute(text("ALTER TABLE analysis_reports ADD COLUMN archived INTEGER DEFAULT 0"))
+            if "report_type" not in rcols:
+                conn.execute(text("ALTER TABLE analysis_reports ADD COLUMN report_type VARCHAR DEFAULT 'branches'"))
 
 
         conn.execute(text("UPDATE analysis_reports SET archived = 0 WHERE archived IS NULL"))
+        conn.execute(text("UPDATE analysis_reports SET report_type = 'branches' WHERE report_type IS NULL OR report_type = ''"))
         conn.execute(text("UPDATE analysis_reports SET tags_json = '[]' WHERE tags_json IS NULL"))
         conn.execute(text("UPDATE users SET preferences_json = '{}' WHERE preferences_json IS NULL"))
         conn.execute(text("UPDATE users SET is_active = 1 WHERE is_active IS NULL"))

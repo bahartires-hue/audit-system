@@ -111,6 +111,7 @@ class AnalysisReport(Base):
 
     branch1_name = Column(String, nullable=False)
     branch2_name = Column(String, nullable=False)
+    report_type = Column(String, nullable=False, default="branches")
 
     file1_original = Column(String, nullable=True)
     file2_original = Column(String, nullable=True)

@@ -2354,3 +2354,27 @@ def compute_summary(
         "errors_count": errors_count,
         "warnings_count": warnings_count,
     }
+
+
+# ============================================================================
+# مطابقة الشركات (كشف حساب شركة مقابل كشف حساب شركة أخرى) — وحدة مستقلة تماماً عن
+# مطابقة الفروع أعلاه. اليوم تعتمد داخلياً على نفس محرك الاستخراج والمطابقة (process/analyze)
+# لأن طبيعة المقارنة اليوم متطابقة (كشف حساب مقابل كشف حساب)، لكنها معزولة عمداً بدالتين
+# باسمين مستقلّين حتى يمكن مستقبلاً إضافة قواعد خاصة بمطابقة الشركات (مثل مطابقة برقم السجل
+# التجاري أو الرقم الضريبي أو اسم الشركة) دون أي خطر على منطق مطابقة الفروع الحالي والمُختبر.
+# ============================================================================
+
+
+def process_company(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
+    """نقطة الدخول المستقلة لاستخراج حركات مطابقة الشركات."""
+    return process(file_path, filename, branch)
+
+
+def analyze_companies(
+    d1: List[Dict[str, Any]],
+    d2: List[Dict[str, Any]],
+    *,
+    allow_same_direction: bool = True,
+) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+    """نقطة الدخول المستقلة لمطابقة الشركات."""
+    return analyze(d1, d2, allow_same_direction=allow_same_direction)

@@ -201,7 +201,10 @@ async function loadReports() {
   const qInp = document.getElementById("reportsSearchInp");
   const archived = archivedSel ? archivedSel.value : "0";
   const q = qInp ? (qInp.value || "").trim() : "";
-  const data = await apiGet(`/reports?archived=${encodeURIComponent(archived)}&q=${encodeURIComponent(q)}`);
+  const reportType = document.body.dataset.reportType || "branches";
+  const data = await apiGet(
+    `/reports?archived=${encodeURIComponent(archived)}&q=${encodeURIComponent(q)}&report_type=${encodeURIComponent(reportType)}`
+  );
   const items = data.items || [];
   host.innerHTML = "";
   if (!items.length) {
@@ -822,7 +825,8 @@ function updateThemeToggleUi() {
 function initNavAndTheme() {
   const path = window.location.pathname || "";
   let key = "home";
-  if (path.startsWith("/analyze")) key = "analyze";
+  if (path.startsWith("/companies")) key = "companies";
+  else if (path.startsWith("/analyze")) key = "analyze";
   else if (path.startsWith("/convert")) key = "convert";
   else if (path.startsWith("/importer")) key = "importer";
   else if (path.startsWith("/reports")) key = "reports";
@@ -846,6 +850,14 @@ function initNavAndTheme() {
       text: "مستورد المنتجات",
       icon:
         '<svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h10M7 12h10M7 17h10"/><path stroke-linecap="round" stroke-linejoin="round" d="M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg>',
+    },
+    {
+      href: "/companies/analyze",
+      nav: "companies",
+      title: "مطابقة الشركات",
+      text: "مطابقة الشركات",
+      icon:
+        '<svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21V7a2 2 0 012-2h6a2 2 0 012 2v14M13 21V11a2 2 0 012-2h4a2 2 0 012 2v10M7 9h2M7 13h2M7 17h2"/></svg>',
     },
   ];
   const legalLinks = [

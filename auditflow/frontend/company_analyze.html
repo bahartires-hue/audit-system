@@ -12,7 +12,7 @@
         } catch (e) {}
       })();
     </script>
-    <title>تحليل | التطابق الأمثل | OptimalMatch</title>
+    <title>مطابقة الشركات | التطابق الأمثل | OptimalMatch</title>
     <link rel="icon" href="/static/favicon.svg?v=12" type="image/svg+xml" />
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
@@ -24,7 +24,7 @@
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
     </style>
   </head>
-  <body class="erp-shell bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
+  <body class="erp-shell bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen" data-report-type="companies">
     <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
 
     <aside class="erp-sidebar" aria-label="القائمة الرئيسية">
@@ -79,7 +79,7 @@
           </svg>
         </button>
         <div class="min-w-0 flex flex-col">
-          <span class="erp-topbar__title truncate">مطابقة الفروع</span>
+          <span class="erp-topbar__title truncate">مطابقة الشركات</span>
           <span class="text-[0.65rem] font-extrabold text-slate-500 dark:text-slate-400 truncate">التطابق الأمثل <span class="opacity-50">|</span> <span dir="ltr">OptimalMatch</span></span>
         </div>
         <div class="erp-search hidden sm:block">
@@ -102,22 +102,28 @@
       <main class="erp-main">
         <div class="max-w-6xl mx-auto w-full px-4 py-6 md:px-6">
       <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 md:p-8 shadow-sm">
-        <h1 class="text-2xl md:text-3xl font-extrabold text-center">تحليل المطابقة المالية</h1>
-        <p class="text-center text-slate-600 dark:text-slate-400 mt-2">ارفع ملفي الفرع الأول والثاني (Excel أو CSV فقط) ثم اضغط «ابدأ التحليل».</p>
+        <h1 class="text-2xl md:text-3xl font-extrabold text-center">مطابقة الشركات</h1>
+        <p class="text-center text-slate-600 dark:text-slate-400 mt-2">ارفع كشف حساب الشركة الأولى والشركة الثانية (Excel أو PDF أو CSV) ثم اضغط «ابدأ التحليل».</p>
         <p class="text-center text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-xl mx-auto">
           الحد المعتاد لحجم كل ملف حوالي <span class="font-extrabold text-slate-600 dark:text-slate-300">15 ميجابايت</span>؛ إن احتجت حداً أعلى يضبطه مسؤول النظام على الخادم.
         </p>
 
         <div class="grid lg:grid-cols-2 gap-4 mt-6">
           <section class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
-            <div class="font-extrabold text-slate-900 dark:text-slate-50 mb-3">الفرع الأول</div>
+            <div class="font-extrabold text-slate-900 dark:text-slate-50 mb-3">الشركة الأولى</div>
 
             <label class="block text-sm font-extrabold text-slate-700 dark:text-slate-300 mb-1">اسم الشركة</label>
-            <input id="b1" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20 text-slate-900 dark:text-slate-100" placeholder="اكتب الفرع الأول" />
+            <input id="b1" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20 text-slate-900 dark:text-slate-100" placeholder="اكتب اسم الشركة الأولى" />
 
-            <div class="text-center text-xs text-slate-500 dark:text-slate-400 mt-3 mb-3 font-extrabold">Excel أو CSV فقط</div>
+            <div class="flex gap-2 justify-center mt-3 mb-3">
+              <button type="button" id="b1_excel" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs active:bg-emerald-50 active:border-emerald-200 active:text-emerald-700" onclick="setType(1,'excel')">Excel</button>
+              <button type="button" id="b1_pdf" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs" onclick="setType(1,'pdf')">PDF</button>
+            </div>
+            <div class="flex justify-center mb-2">
+              <button type="button" id="convertPdf1Btn" class="px-3 py-1.5 rounded-lg border border-blue-200 text-blue-700 text-xs font-extrabold hover:bg-blue-50">تحويل PDF إلى Excel</button>
+            </div>
 
-            <input type="file" id="file1" class="hidden" accept=".xlsx,.xls,.xlsm,.xlsb,.csv" />
+            <input type="file" id="file1" class="hidden" />
             <div id="dz1" class="dropzone dropzone--rich border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl bg-white dark:bg-slate-950 min-h-upload flex items-center justify-center cursor-pointer transition-colors" draggable="false">
               <div class="dropzone-visual py-2">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
@@ -132,14 +138,20 @@
           </section>
 
           <section class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
-            <div class="font-extrabold text-slate-900 dark:text-slate-50 mb-3">الفرع الثاني</div>
+            <div class="font-extrabold text-slate-900 dark:text-slate-50 mb-3">الشركة الثانية</div>
 
             <label class="block text-sm font-extrabold text-slate-700 dark:text-slate-300 mb-1">اسم الشركة</label>
-            <input id="b2" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20 text-slate-900 dark:text-slate-100" placeholder="اكتب الفرع الثاني" />
+            <input id="b2" class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20 text-slate-900 dark:text-slate-100" placeholder="اكتب اسم الشركة الثانية" />
 
-            <div class="text-center text-xs text-slate-500 dark:text-slate-400 mt-3 mb-3 font-extrabold">Excel أو CSV فقط</div>
+            <div class="flex gap-2 justify-center mt-3 mb-3">
+              <button type="button" id="b2_excel" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs" onclick="setType(2,'excel')">Excel</button>
+              <button type="button" id="b2_pdf" class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 font-extrabold text-xs" onclick="setType(2,'pdf')">PDF</button>
+            </div>
+            <div class="flex justify-center mb-2">
+              <button type="button" id="convertPdf2Btn" class="px-3 py-1.5 rounded-lg border border-blue-200 text-blue-700 text-xs font-extrabold hover:bg-blue-50">تحويل PDF إلى Excel</button>
+            </div>
 
-            <input type="file" id="file2" class="hidden" accept=".xlsx,.xls,.xlsm,.xlsb,.csv" />
+            <input type="file" id="file2" class="hidden" />
             <div id="dz2" class="dropzone dropzone--rich border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl bg-white dark:bg-slate-950 min-h-upload flex items-center justify-center cursor-pointer transition-colors" draggable="false">
               <div class="dropzone-visual py-2">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
@@ -160,7 +172,7 @@
             <input
               id="title"
               class="w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2.5 outline-none text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-white/20"
-              placeholder="مثال: مطابقة يناير 2025"
+              placeholder="مثال: مطابقة شركة الفا وشركة بيتا"
             />
           </div>
           <label class="flex items-start gap-3 text-sm font-extrabold text-slate-700 dark:text-slate-300 cursor-pointer select-none leading-relaxed">
@@ -179,13 +191,34 @@
     <script src="/static/app.js?v=14"></script>
     <script>
       initAuthUI();
-      const type1 = "excel";
-      const type2 = "excel";
+      let type1 = "excel";
+      let type2 = "excel";
+
+      function setType(branch, type) {
+        if (branch === 1) type1 = type;
+        if (branch === 2) type2 = type;
+
+        const b1e = document.getElementById("b1_excel");
+        const b1p = document.getElementById("b1_pdf");
+        const b2e = document.getElementById("b2_excel");
+        const b2p = document.getElementById("b2_pdf");
+
+        const idle = " text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-600";
+        const xlsxOn = " bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/50 dark:border-emerald-700 dark:text-emerald-300";
+        const pdfOn = " bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/50 dark:border-blue-700 dark:text-blue-300";
+        const base = "px-3 py-1.5 rounded-full border font-extrabold text-xs";
+        if (b1e) b1e.className = base + (type1 === "excel" ? xlsxOn : idle);
+        if (b1p) b1p.className = base + (type1 === "pdf" ? pdfOn : idle);
+        if (b2e) b2e.className = base + (type2 === "excel" ? xlsxOn : idle);
+        if (b2p) b2p.className = base + (type2 === "pdf" ? pdfOn : idle);
+      }
 
       function validate(file, expected) {
         if (!file) return false;
         const n = (file.name || "").toLowerCase();
-        return /\.(xlsx|xls|xlsm|xlsb|csv)$/.test(n);
+        if (expected === "excel") return /\.(xlsx|xls|xlsm|xlsb|csv)$/.test(n);
+        if (expected === "pdf") return n.endsWith(".pdf");
+        return true;
       }
 
       function bindDZ(dzId, inputId, expectedGetter, fileNameId) {
@@ -227,18 +260,73 @@
       bindDZ("dz1", "file1", () => type1, "fileName1");
       bindDZ("dz2", "file2", () => type2, "fileName2");
 
+      // activate defaults
+      setType(1, "excel");
+      setType(2, "excel");
+
+      async function convertPdfForInput(inputId, expectedType, fileNameId, buttonId, branch) {
+        const input = document.getElementById(inputId);
+        const fileName = document.getElementById(fileNameId);
+        const btn = document.getElementById(buttonId);
+        if (!input || !btn) return;
+        const file = input.files?.[0] || null;
+        if (!file) {
+          showToast("اختر ملف PDF أولًا", "#ef4444");
+          return;
+        }
+        const n = (file.name || "").toLowerCase();
+        if (!n.endsWith(".pdf")) {
+          showToast("الملف المختار ليس PDF", "#ef4444");
+          return;
+        }
+        setLoading(btn, true, "جارٍ التحويل...");
+        try {
+          syncCsrfFromCookie();
+          const csrf = localStorage.getItem("csrf_token") || "";
+          const fd = new FormData();
+          fd.append("file", file);
+          const res = await fetch("/convert/pdf-to-excel", {
+            method: "POST",
+            body: fd,
+            headers: { Accept: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "X-CSRF-Token": csrf },
+            credentials: "include",
+          });
+          if (!res.ok) throw new Error(await readErrorMessage(res));
+          const blob = await res.blob();
+          const newName = (file.name || "converted.pdf").replace(/\.pdf$/i, ".xlsx");
+          const converted = new File([blob], newName, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+          const dt = new DataTransfer();
+          dt.items.add(converted);
+          input.files = dt.files;
+          if (fileName) fileName.innerText = "تم التحويل: " + converted.name;
+          setType(branch, "excel");
+          showToast("تم التحويل إلى Excel ✔️", "#10b981");
+        } catch (e) {
+          showToast(e.message || "فشل تحويل PDF", "#ef4444");
+        } finally {
+          setLoading(btn, false, "تحويل PDF إلى Excel");
+        }
+      }
+
+      document.getElementById("convertPdf1Btn")?.addEventListener("click", () =>
+        convertPdfForInput("file1", () => type1, "fileName1", "convertPdf1Btn", 1)
+      );
+      document.getElementById("convertPdf2Btn")?.addEventListener("click", () =>
+        convertPdfForInput("file2", () => type2, "fileName2", "convertPdf2Btn", 2)
+      );
+
       async function startAnalyze() {
         const btn = document.getElementById("startBtn");
         setLoading(btn, true, "جارٍ التحليل ...");
         try {
           const file1 = document.getElementById("file1").files?.[0] || null;
           const file2 = document.getElementById("file2").files?.[0] || null;
-          const b1 = document.getElementById("b1").value || "الفرع الأول";
-          const b2 = document.getElementById("b2").value || "الفرع الثاني";
+          const b1 = document.getElementById("b1").value || "الشركة الأولى";
+          const b2 = document.getElementById("b2").value || "الشركة الثانية";
           const title = document.getElementById("title").value || "";
 
           if (!file1 || !file2) {
-            showToast("اختَر ملفي الفرعين أولاً", "#ef4444");
+            showToast("اختَر ملفي الشركتين أولاً", "#ef4444");
             return;
           }
 
@@ -249,7 +337,7 @@
           fd.append("b2", b2);
           if (title) fd.append("title", title);
           if (document.getElementById("strictMirror")?.checked) fd.append("strict_mirror_types", "true");
-          fd.append("report_type", "branches");
+          fd.append("report_type", "companies");
 
           const data = await apiPostForm("/analyze", fd);
           showToast("تم التحليل ✔️", "#10b981");
@@ -263,4 +351,3 @@
     </script>
   </body>
 </html>
-
