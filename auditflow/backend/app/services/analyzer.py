@@ -9,8 +9,10 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 import pdfplumber
+from scipy.optimize import linear_sum_assignment
 
 from .legacy_analyzer import legacy_analyze, legacy_process
 
@@ -151,6 +153,12 @@ def _finalize_doc_for_row(doc_out: Optional[str], narrative: str) -> Optional[st
 
 
 def _dedupe_extracted_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """يحذف فقط صفوفًا مكررة حرفيًا بنفس المبلغ/النوع/التاريخ/المستند/البيان (أثر تقني ناتج عن
+    قراءة نفس السطر المصدري مرتين، مثل خلايا مدمجة في إكسل). لا يجوز حذف عمليتين مختلفتين
+    فعليًا لمجرد أنهما تتفقان في المبلغ والتاريخ والنوع دون أي دليل آخر — فمطابقة المبالغ
+    المتكررة (بما فيها الحالات بلا رقم مستند) هي مسؤولية محرك المطابقة (analyze/_assign_global_matches)
+    وليست مسؤولية مرحلة الاستخراج. لذلك يضاف المستند والبيان لمفتاح التطابق لتضييق نطاق الحذف
+    إلى الحالات شبه المؤكدة فقط."""
     order: List[Tuple[Any, ...]] = []
     by_key: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
 
@@ -179,6 +187,8 @@ def _dedupe_extracted_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             round(float(r["amount"]), 2),
             r.get("type"),
             r.get("date") or "",
+            _normalize_doc_text(r.get("doc") or ""),
+            _normalize_doc_text(r.get("desc") or ""),
         )
         if k not in by_key:
             by_key[k] = r
@@ -566,6 +576,7 @@ def detect_columns(df: pd.DataFrame) -> Dict[str, Optional[str]]:
             "doc_type": None,
             "description": None,
             "balance": None,
+            "counterparty": None,
         }
     df = df.copy()
     df.columns = df.columns.astype(str).str.strip()
@@ -651,6 +662,29 @@ def detect_columns(df: pd.DataFrame) -> Dict[str, Optional[str]]:
         if best_len >= 8:
             description_col = best_col
 
+    counterparty_col: Optional[str] = None
+    counterparty_names = [
+        "الفرع",
+        "اسم العميل",
+        "اسم المورد",
+        "العميل/المورد",
+        "العميل",
+        "المورد",
+        "الجهة",
+        "الطرف",
+        "customer",
+        "vendor",
+        "supplier",
+        "counterparty",
+        "party",
+    ]
+    for col in df.columns:
+        if col in (debit_col, credit_col, date_col, balance_col, doc_number_col, doc_type_col):
+            continue
+        if _name_has_any(col, counterparty_names):
+            counterparty_col = col
+            break
+
     return {
         "date": date_col,
         "debit": debit_col,
@@ -659,6 +693,7 @@ def detect_columns(df: pd.DataFrame) -> Dict[str, Optional[str]]:
         "doc_type": doc_type_col,
         "description": description_col,
         "balance": balance_col,
+        "counterparty": counterparty_col,
     }
 
 
@@ -848,6 +883,33 @@ def extract_row_date_doc(
     return date_out, doc_out
 
 
+def _extract_row_description(
+    row: pd.Series,
+    df: pd.DataFrame,
+    description_col: Optional[str],
+    counterparty_col: Optional[str],
+    doc_col: Optional[str],
+    doc_fallback_col: Optional[str],
+) -> Optional[str]:
+    """يستخرج نص وصف/طرف آخر لدعم محرك المطابقة عند تكرار نفس المبلغ بدون رقم مستند مرجعي. يُفضَّل
+    عمود اسم الطرف الآخر الصريح (counterparty، مثل عمود "الفرع" الذي يحمل اسم العميل/المورّد في
+    بعض الكشوف) لأنه أدق في تمييز الحركات المتشابهة؛ فإن لم يوجد يُستخدم عمود البيان/الوصف العام.
+    لا يُستخدم كمعرّف فريد بأي الحالتين، بل كعامل تشابه إضافي (انظر match_score في analyze())."""
+    for col in (counterparty_col, description_col):
+        if not col or col not in df.columns:
+            continue
+        if col in (doc_col, doc_fallback_col):
+            continue
+        val = row.get(col)
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            continue
+        text = _normalize_doc_text(val)
+        if not text:
+            continue
+        return text if len(text) <= 200 else (text[:200] + "...")
+    return None
+
+
 def _skip_likely_pdf_line_index_row(
     amount: float, debit: Optional[float], credit: Optional[float], both_positive: bool
 ) -> bool:
@@ -938,35 +1000,81 @@ def _is_likely_pdf_extraction_noise(
     return False
 
 
+_MAX_POSSIBLE_MATCH_SCORE = 200.0
+
+
+def _canonical_row_sort_key(index: int, row: Dict[str, Any]) -> Tuple[Any, ...]:
+    """مفتاح ترتيب قانوني (Canonical) لا يعتمد على ترتيب ورود الصفوف في الملف الأصلي. يُستخدم
+    لتطبيع الصفوف قبل المطابقة حتى تُعطي نفس البيانات دائمًا نفس النتيجة بغض النظر عن ترتيبها،
+    ولضمان أن الصفوف المتماثلة تمامًا (لا يوجد ما يميّزها) تُزاوَج بترتيب ثابت ومتوقع بدل العشوائية."""
+    return (
+        round(float(row.get("amount", 0.0) or 0.0), 2),
+        str(row.get("type") or ""),
+        str(row.get("date") or ""),
+        _normalize_doc_text(row.get("doc") or ""),
+        _normalize_doc_text(row.get("desc") or ""),
+        index,
+    )
+
+
 def _assign_global_matches(
     d1: List[Dict[str, Any]],
     d2: List[Dict[str, Any]],
     match_score_fn: Any,
     min_assign: int = 40,
 ) -> Dict[int, Tuple[int, int, List[str]]]:
-    """أفضل مطابقة عامة: نرتّب النقاط ثم نفضّل أقل فرق مبلغ عند التساوي."""
-    triples: List[Tuple[int, float, int, int, List[str]]] = []
-    for i, x1 in enumerate(d1):
-        if x1.get("type") == "error":
-            continue
-        for j, x2 in enumerate(d2):
-            if x2.get("type") == "error":
-                continue
-            score, reasons = match_score_fn(x1, x2)
-            if score < min_assign:
-                continue
-            ad = abs(float(x1["amount"]) - float(x2["amount"]))
-            triples.append((score, ad, i, j, reasons))
-    triples.sort(key=lambda t: (-t[0], t[1]))
-    used_i: set[int] = set()
-    used_j: set[int] = set()
+    """مطابقة ثنائية مُثلى عالميًا (خوارزمية Hungarian عبر scipy.optimize.linear_sum_assignment)
+    بين قائمتين من الحركات. لا تعتمد على ترتيب الصفوف (تُطبَّع أولًا بترتيب قانوني)، ولا تختار أول
+    نتيجة تظهر (Greedy)، بل تبحث عن أفضل توزيع إجمالي للمبالغ كلها معًا؛ ولذلك تُعطي دائمًا نفس
+    النتيجة لنفس البيانات، بما في ذلك حالات تكرار نفس المبلغ عدة مرات دون رقم مستند مرجعي.
+
+    لإضافة قاعدة مطابقة جديدة مستقبلًا: يكفي تعديل/إضافة عامل تسجيل نقاط داخل match_score_fn نفسها
+    (انظر التعليق في analyze()) — منطق التخصيص هنا عام ولا يحتاج تعديلًا لكل قاعدة جديدة.
+    """
+    n, m = len(d1), len(d2)
     out: Dict[int, Tuple[int, int, List[str]]] = {}
-    for score, _ad, i, j, reasons in triples:
-        if i in used_i or j in used_j:
-            continue
-        used_i.add(i)
-        used_j.add(j)
-        out[i] = (j, score, reasons)
+    if n == 0 or m == 0:
+        return out
+
+    order1 = sorted(range(n), key=lambda i: _canonical_row_sort_key(i, d1[i]))
+    order2 = sorted(range(m), key=lambda j: _canonical_row_sort_key(j, d2[j]))
+
+    valid1 = [i for i in order1 if d1[i].get("type") != "error"]
+    valid2 = [j for j in order2 if d2[j].get("type") != "error"]
+    n2, m2 = len(valid1), len(valid2)
+    if n2 == 0 or m2 == 0:
+        return out
+
+    max_score = _MAX_POSSIBLE_MATCH_SCORE
+    big_m = max_score * 4 + 1000.0
+    unmatched_cost = max(0.0, max_score - float(min_assign)) + 0.5
+
+    size = n2 + m2
+    cost = np.full((size, size), big_m, dtype=float)
+    scores: Dict[Tuple[int, int], Tuple[int, List[str]]] = {}
+
+    for a, i in enumerate(valid1):
+        x1 = d1[i]
+        for b, j in enumerate(valid2):
+            x2 = d2[j]
+            score, reasons = match_score_fn(x1, x2)
+            if score >= min_assign:
+                cost[a, b] = max_score - float(score)
+                scores[(a, b)] = (score, reasons)
+
+    for a in range(n2):
+        cost[a, m2 + a] = unmatched_cost
+    for b in range(m2):
+        cost[n2 + b, b] = unmatched_cost
+    cost[n2:, m2:] = 0.0
+
+    row_ind, col_ind = linear_sum_assignment(cost)
+
+    for a, b in zip(row_ind, col_ind):
+        if a < n2 and b < m2 and (a, b) in scores:
+            score, reasons = scores[(a, b)]
+            out[valid1[a]] = (valid2[b], score, reasons)
+
     return out
 
 
@@ -1590,6 +1698,8 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
     debit_col = detected_cols.get("debit")
     credit_col = detected_cols.get("credit")
     date_col = detected_cols.get("date")
+    description_col = detected_cols.get("description")
+    counterparty_col = detected_cols.get("counterparty")
     doc_col, doc_fb = resolve_document_columns(df)
 
     data: List[Dict[str, Any]] = []
@@ -1650,6 +1760,8 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
         if debit is None and credit is None:
             continue
 
+        desc_out = _extract_row_description(row, df, description_col, counterparty_col, doc_col, doc_fb)
+
         if debit and credit and debit > 0 and credit > 0:
             date_out, doc_out = extract_row_date_doc(row, df, date_col, doc_col, doc_fb)
             if not date_out:
@@ -1666,6 +1778,7 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
                     "branch": branch,
                     "date": date_out,
                     "doc": doc_out,
+                    "desc": desc_out,
                 }
             )
             continue
@@ -1695,6 +1808,7 @@ def process(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
                 "branch": branch,
                 "date": date_out,
                 "doc": doc_out,
+                "desc": desc_out,
             }
         )
 
@@ -1714,15 +1828,19 @@ def analyze(
     counts: Dict[str, int] = {}
 
     def remove_reversals(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        cleaned: List[Dict[str, Any]] = []
-        used_local = [False] * len(data)
-        for i, x1 in enumerate(data):
-            if used_local[i]:
+        """يحذف أزواج "عكس القيد" الواضحة (نفس المبلغ، اتجاه معاكس، فارق يوم واحد كحد أقصى، ونفس
+        نوع المستند إن وُجد) ضمن نفس الملف. يعمل على ترتيب قانوني (canonical) للبيانات بدل ترتيب
+        ورودها الأصلي، حتى لا يتغيّر الناتج بتغيّر ترتيب الصفوف في الملف المصدر."""
+        canonical_order = sorted(range(len(data)), key=lambda idx: _canonical_row_sort_key(idx, data[idx]))
+        removed_local = [False] * len(data)
+        for pos, i in enumerate(canonical_order):
+            if removed_local[i]:
                 continue
-            found = False
-            for j, x2 in enumerate(data):
-                if i == j or used_local[j]:
+            x1 = data[i]
+            for j in canonical_order[pos + 1 :]:
+                if removed_local[j]:
                     continue
+                x2 = data[j]
                 if x1["branch"] != x2["branch"]:
                     continue
                 if x1["type"] == x2["type"]:
@@ -1736,13 +1854,10 @@ def analyze(
                 if dm1 and dm2:
                     if not match_doc(dm1, dm2):
                         continue
-                used_local[i] = True
-                used_local[j] = True
-                found = True
+                removed_local[i] = True
+                removed_local[j] = True
                 break
-            if not found:
-                cleaned.append(x1)
-        return cleaned
+        return [x for idx, x in enumerate(data) if not removed_local[idx]]
 
     d1 = remove_reversals(d1)
     d2 = remove_reversals(d2)
@@ -1756,6 +1871,14 @@ def analyze(
         return res, counts
 
     def match_score(x1: Dict[str, Any], x2: Dict[str, Any]) -> Tuple[int, List[str]]:
+        """درجة تطابق متعددة العوامل بين حركتين (مبلغ + اتجاه + نوع مستند + نافذة تاريخ مرنة +
+        تشابه البيان/الطرف الآخر). تُستخدم هذه الدرجة كمُدخل لمحرك مطابقة عالمي (Hungarian) في
+        _assign_global_matches، وليست جزءًا من اختيار greedy — لذلك يمكن هنا فقط التركيز على
+        "ما مدى توافق هذين السطرين" دون القلق من ترتيب الفحص.
+
+        لإضافة عامل تسجيل جديد مستقبلًا (مثال: تطابق رقم فرع محاسبي، أو نمط ترقيم مستندات مخصص):
+        أضِف كتلة `score += ...` أو veto جديدة هنا، وحدّث _MAX_POSSIBLE_MATCH_SCORE أعلاه إذا رفعت
+        السقف النظري للدرجة."""
         score = 0
         reasons: List[str] = []
 
@@ -1811,6 +1934,20 @@ def analyze(
         else:
             reasons.append("لا تاريخ في كلا السطرين")
 
+        # عامل إضافي: تشابه البيان/اسم الطرف الآخر (عمود مثل "الفرع" الذي يحمل اسم العميل/المورّد).
+        # يساعد هذا تحديدًا في تمييز حركات بنفس المبلغ والتاريخ والنوع عند غياب رقم مستند مرجعي،
+        # بدل ترك الاختيار بينها عشوائيًا.
+        desc1 = _normalize_doc_text(x1.get("desc") or "")
+        desc2 = _normalize_doc_text(x2.get("desc") or "")
+        if desc1 and desc2:
+            sim = SequenceMatcher(
+                None, _arabic_letters_for_match(desc1), _arabic_letters_for_match(desc2)
+            ).ratio()
+            if sim >= 0.5:
+                bonus = int(round(sim * 12))
+                score += bonus
+                reasons.append(f"تشابه البيان/الطرف الآخر ({int(round(sim * 100))}%)")
+
         return score, reasons
 
     assignment = _assign_global_matches(d1, d2, match_score, MIN_ASSIGN_SCORE)
@@ -1836,7 +1973,23 @@ def analyze(
             b = x1.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
             continue
-        _j, s, r = assignment[i]
+        j_match, s, r = assignment[i]
+        x2 = d2[j_match]
+        amount_diff = abs(float(x1["amount"]) - float(x2["amount"]))
+        if amount_diff > 0.01:
+            # فرق في المبلغ هو جوهر ما يطلبه التدقيق (دائن/مدين) — يجب أن يظهر دائمًا مهما كانت
+            # درجة التطابق الإجمالية عالية بسبب عوامل أخرى (تاريخ/اتجاه/تشابه بيان)، فلا يجوز أن
+            # تُخفيه هذه العوامل الإضافية.
+            res.append(
+                {
+                    **x1,
+                    "reason": (
+                        f"فرق في المبلغ ⚠️ | {x1['amount']} مقابل {x2['amount']} "
+                        f"(فرق {round(amount_diff, 2)}) | score={s} | {' , '.join(r)}"
+                    ),
+                }
+            )
+            continue
         if s >= STRONG_MATCH_SCORE:
             continue
         res.append({**x1, "reason": f"تطابق ضعيف ⚠️ | score={s} | {' , '.join(r)}"})
