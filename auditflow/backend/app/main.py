@@ -27,7 +27,13 @@ from .routes.importer import router as importer_router
 from .routers.smartpos_v2_api import router as smartpos_v2_router
 from .routers.trade_api import router as trade_router
 from .services.analyzer import analyze as analyze_pairs
-from .services.analyzer import analyze_companies, compute_summary, process, process_company
+from .services.analyzer import (
+    analyze_companies,
+    compute_company_category_summary,
+    compute_summary,
+    process,
+    process_company,
+)
 from .services.ai_insights import full_analysis
 from .services.pdf_convert import pdf_to_excel_bytes
 from .services.reports import mismatches_to_csv_bytes, mismatches_to_excel_bytes, mismatches_to_pdf_bytes
@@ -436,6 +442,11 @@ def analyze_api(
             "counts": counts,
             "branch1_total": len(d1),
             "branch2_total": len(d2),
+            "category_summary": (
+                compute_company_category_summary(d1, d2, mismatch_entries)
+                if report_type == "companies"
+                else {}
+            ),
         },
         analysis_json={
             "extracted_branch1": d1,

@@ -2548,6 +2548,47 @@ def _company_match_score(
     return max(score, 0), reasons
 
 
+def _company_aging_bucket(date_value: Any) -> Optional[str]:
+    """يصنّف عمر الحركة اعتمادًا على تاريخها مقابل تاريخ اليوم (٠-٣٠ / ٣٠-٦٠ / ٦٠-٩٠ / أكثر من
+    ٩٠ يومًا) — يفيد في تحديد أي الحركات غير المتطابقة قديمة وتحتاج متابعة عاجلة، مقابل حركات
+    حديثة قد تكون طبيعية (لسا ما انعكست بالجهة الأخرى). يعيد None إن تعذّر قراءة التاريخ."""
+    ts = _parsed_timestamp_or_nat(date_value)
+    if pd.isna(ts):
+        return None
+    try:
+        days = int((pd.Timestamp.now().normalize() - ts.normalize()).days)
+    except Exception:
+        return None
+    if days < 0:
+        return "بتاريخ مستقبلي"
+    if days <= 30:
+        return "٠-٣٠ يوم"
+    if days <= 60:
+        return "٣٠-٦٠ يوم"
+    if days <= 90:
+        return "٦٠-٩٠ يوم"
+    return "أكثر من ٩٠ يوم"
+
+
+def _company_amount_diff_note(a1: float, a2: float) -> Optional[str]:
+    """تفسير إضافي لفرق مبلغ صغير نسبيًا بدل ما يظهر كفرق مجهول السبب: إما رسوم/عمولة تحويل
+    بنكي متوقعة (فرق صغير جدًا نسبة للمبلغ)، أو فرق يطابق ضريبة قيمة مضافة ١٥٪ محتملة (حال كانت
+    إحدى الشركتين تسجّل المبلغ شامل الضريبة والأخرى صافي قبل الضريبة). لا يُلغي ظهور تحذير \"فرق في
+    المبلغ\" نفسه — الهدف توضيح السبب المحتمل فقط لتسهيل المراجعة."""
+    diff = abs(a1 - a2)
+    if diff < 0.01:
+        return None
+    base = max(abs(a1), abs(a2)) or 1.0
+    ratio = diff / base
+    if ratio <= 0.02:
+        return "فرق بسيط قد يكون رسوم/عمولة تحويل بنكي"
+    for vat_rate in (0.15, 0.05):
+        expected_gross_diff = min(abs(a1), abs(a2)) * vat_rate
+        if expected_gross_diff > 0 and abs(diff - expected_gross_diff) <= max(1.0, expected_gross_diff * 0.05):
+            return f"الفرق يطابق ضريبة قيمة مضافة {int(vat_rate * 100)}٪ محتملة (مبلغ شامل مقابل صافي)"
+    return None
+
+
 def analyze_companies(
     d1: List[Dict[str, Any]],
     d2: List[Dict[str, Any]],
@@ -2597,7 +2638,8 @@ def analyze_companies(
 
     if not d2:
         for x in d1:
-            res.append({**x, "reason": "لا يوجد مقابل ❌ (كشف الشركة الثانية فارغ)"})
+            aging = _company_aging_bucket(x.get("date"))
+            res.append({**x, "score": 0, "aging": aging, "reason": "لا يوجد مقابل ❌ (كشف الشركة الثانية فارغ)"})
             b = x.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
         return res, counts
@@ -2624,7 +2666,16 @@ def analyze_companies(
                 if s > best_s:
                     best_s, best_r = s, r
             tail = f" | {' , '.join(best_r)}" if best_r else ""
-            res.append({**x1, "reason": f"لا يوجد مقابل ❌ | أفضل مرشح score={best_s}{tail}"})
+            aging = _company_aging_bucket(x1.get("date"))
+            aging_tail = f" | عمر الحركة: {aging}" if aging else ""
+            res.append(
+                {
+                    **x1,
+                    "score": max(best_s, 0),
+                    "aging": aging,
+                    "reason": f"لا يوجد مقابل ❌ | أفضل مرشح score={best_s}{tail}{aging_tail}",
+                }
+            )
             b = x1.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
             continue
@@ -2634,19 +2685,22 @@ def analyze_companies(
         if amount_diff > 0.01:
             b1_label = x1.get("branch") or "الشركة الأولى"
             b2_label = x2.get("branch") or "الشركة الثانية"
+            note = _company_amount_diff_note(float(x1["amount"]), float(x2["amount"]))
+            note_tail = f" | {note}" if note else ""
             res.append(
                 {
                     **x1,
+                    "score": s,
                     "reason": (
                         f"فرق في المبلغ ⚠️ | {b1_label}: {x1['amount']} مقابل {b2_label}: {x2['amount']} "
-                        f"(فرق {round(amount_diff, 2)}) | score={s} | {' , '.join(r)}"
+                        f"(فرق {round(amount_diff, 2)}){note_tail} | score={s} | {' , '.join(r)}"
                     ),
                 }
             )
             continue
         if s >= COMPANY_STRONG_MATCH_SCORE:
             continue
-        res.append({**x1, "reason": f"تطابق بثقة منخفضة ⚠️ | score={s} | {' , '.join(r)}"})
+        res.append({**x1, "score": s, "reason": f"تطابق بثقة منخفضة ⚠️ | score={s} | {' , '.join(r)}"})
 
     for j, x in enumerate(d2):
         if j in matched_js:
@@ -2656,8 +2710,57 @@ def analyze_companies(
             b = x.get("branch") or "unknown"
             counts[b] = counts.get(b, 0) + 1
             continue
-        res.append({**x, "reason": "لا يوجد مقابل ❌ (من الشركة الأخرى)"})
+        best_s2 = -1
+        best_r2: List[str] = []
+        for x1c in d1:
+            if x1c.get("type") == "error":
+                continue
+            s2, r2 = score_fn(x1c, x)
+            if s2 > best_s2:
+                best_s2, best_r2 = s2, r2
+        tail2 = f" | {' , '.join(best_r2)}" if best_r2 else ""
+        aging2 = _company_aging_bucket(x.get("date"))
+        aging_tail2 = f" | عمر الحركة: {aging2}" if aging2 else ""
+        res.append(
+            {
+                **x,
+                "score": max(best_s2, 0),
+                "aging": aging2,
+                "reason": f"لا يوجد مقابل ❌ (من الشركة الأخرى) | أفضل مرشح score={best_s2}{tail2}{aging_tail2}",
+            }
+        )
         b = x.get("branch") or "unknown"
         counts[b] = counts.get(b, 0) + 1
 
     return res, counts
+
+
+def compute_company_category_summary(
+    d1: List[Dict[str, Any]],
+    d2: List[Dict[str, Any]],
+    mismatch_entries: List[Dict[str, Any]],
+) -> Dict[str, Dict[str, int]]:
+    """ملخّص حسب التصنيف المحاسبي الموحّد (SalesInvoice/PurchaseInvoice/Payment/Return/
+    Adjustment/غير مصنّف): لكل تصنيف، كم عدد حركاته الكلي (من كلا الكشفين) وكم منها ظهر ضمن
+    قائمة عدم التطابق (mismatch_entries) — الباقي يُحسب متطابقًا ضمنيًا (تمامًا كما تُحسب
+    matched_ops في compute_summary، حيث السكوت = تطابق). يفيد في إعطاء صورة سريعة: أي نوع حركة
+    (فواتير؟ سدادات؟ مردودات؟) فيه أكبر نسبة مشاكل، بدل تصفّح كل الأسطر واحدًا واحدًا."""
+    totals: Dict[str, int] = {}
+    for row in list(d1) + list(d2):
+        if row.get("type") == "error":
+            continue
+        cat = classify_company_doc_category(row.get("doc"), row.get("desc")) or "غير مصنّف"
+        totals[cat] = totals.get(cat, 0) + 1
+
+    mismatched: Dict[str, int] = {}
+    for row in mismatch_entries:
+        if row.get("type") == "error":
+            continue
+        cat = classify_company_doc_category(row.get("doc"), row.get("desc")) or "غير مصنّف"
+        mismatched[cat] = mismatched.get(cat, 0) + 1
+
+    summary: Dict[str, Dict[str, int]] = {}
+    for cat, total in totals.items():
+        mism = mismatched.get(cat, 0)
+        summary[cat] = {"total": total, "mismatched": mism, "matched": max(0, total - mism)}
+    return summary
