@@ -788,6 +788,26 @@ def _series_to_datetimes_for_detection(series: pd.Series) -> pd.Series:
     return pd.to_datetime(series, errors="coerce")
 
 
+_ISO_YEAR_FIRST_DATE_RE = re.compile(r"^\s*\d{4}\s*[-/.]\s*\d{1,2}\s*[-/.]\s*\d{1,2}\s*$")
+
+
+def _parse_date_string_unambiguous(s: str) -> Any:
+    """يفصل حالة السنة أولاً (YYYY-MM-DD) لأنها غير قابلة للَبس بالأساس — الجزء الأول أربعة أرقام
+    فلا يمكن أن يكون يوماً أبداً، فالترتيب دائماً سنة-شهر-يوم بصرف النظر عن dayfirst. تمرير
+    dayfirst=True لِـ pandas/dateutil على نص كهذا يُنتج أحياناً قلباً خاطئاً للشهر واليوم عندما
+    يكون كلاهما ≤ 12 (مثال حقيقي: '2026-01-02' مع dayfirst=True يُقرأ كأنه 1 فبراير بدل 2 يناير).
+    لصيغ أخرى (يوم/شهر/سنة الشائعة خليجياً) نُبقي على تجربة dayfirst=True أولاً كما كان."""
+    if _ISO_YEAR_FIRST_DATE_RE.match(s):
+        v = pd.to_datetime(s, errors="coerce", dayfirst=False)
+        if pd.notna(v):
+            return v
+    for dayfirst in (True, False):
+        v = pd.to_datetime(s, errors="coerce", dayfirst=dayfirst)
+        if pd.notna(v):
+            return v
+    return pd.NaT
+
+
 def _parsed_timestamp_or_nat(val: Any) -> Any:
     """Parse Excel/PDF date cells and Arabic digits; prefer day-first (GCC). Handles Excel serials."""
     if val is None:
@@ -802,11 +822,7 @@ def _parsed_timestamp_or_nat(val: Any) -> Any:
         s = _normalize_arabic_digits(t)
         if not s or s in ("-", "—", "–"):
             return pd.NaT
-        for dayfirst in (True, False):
-            v = pd.to_datetime(s, errors="coerce", dayfirst=dayfirst)
-            if pd.notna(v):
-                return v
-        return pd.NaT
+        return _parse_date_string_unambiguous(s)
 
     xf: Optional[float] = None
     try:
@@ -844,11 +860,7 @@ def _parsed_timestamp_or_nat(val: Any) -> Any:
     s = _normalize_arabic_digits(str(val).strip())
     if not s or s in ("-", "—", "–"):
         return pd.NaT
-    for dayfirst in (True, False):
-        v = pd.to_datetime(s, errors="coerce", dayfirst=dayfirst)
-        if pd.notna(v):
-            return v
-    return pd.NaT
+    return _parse_date_string_unambiguous(s)
 
 
 def _parse_datetime_cell_to_iso(val: Any) -> Optional[str]:
@@ -869,10 +881,9 @@ def _iso_date_from_narrative(narrative: str) -> Optional[str]:
     if not m:
         return None
     tok = m.group(1).strip()
-    for dayfirst in (True, False):
-        d = pd.to_datetime(tok, errors="coerce", dayfirst=dayfirst)
-        if pd.notna(d):
-            return d.strftime("%Y-%m-%d")
+    d = _parse_date_string_unambiguous(tok)
+    if pd.notna(d):
+        return d.strftime("%Y-%m-%d")
     return None
 
 
@@ -1145,8 +1156,17 @@ def _amount_from_voucher_narrative_line(
         return None
     vals = [_parse_number_token(n) for n in numbers]
     vals = [v for v in vals if v is not None]
-    if len(vals) < 2:
+    if not vals:
         return None
+    # فلترة الأرقام المرجعية (بلا فاصلة عشرية) في مرحلة سابقة من الاستخراج قد تُبقي رقماً واحداً
+    # فقط هنا (المبلغ الحقيقي نفسه، بعد إسقاط رقم الحساب/رقم السند المرجعيين) — في هذه الحالة لا
+    # حاجة لمقارنته ببقية الأرقام (لم يعد هناك ما يُقارَن به أصلاً)؛ نأخذه مباشرة كمبلغ السند.
+    if len(vals) == 1:
+        only = vals[0]
+        if only is None or abs(only) < 0.01:
+            return None
+        amount0 = round(float(only), 2)
+        return (None, amount0) if is_receipt else (amount0, None)
     first = vals[0]
     if first is None or abs(first) < 0.01:
         return None
@@ -1214,6 +1234,102 @@ def _debit_credit_from_tail_numbers(numbers: List[str]) -> Tuple[Optional[float]
     return vals[-2], vals[-1]
 
 
+def _resolve_debit_credit_via_balance(
+    vals: List[float], prev_balance: float, learned_sign: Optional[int]
+) -> Optional[Tuple[Optional[float], Optional[float], float, int]]:
+    """يحاول حل ثلاثية أرقام غامضة (رصيد/مدين/دائن بأي ترتيب فعلي في هذا الملف) عبر استمرارية
+    الحساب بدل الاعتماد على ترتيب أو حجم الأرقام فقط: أي كشف حساب صحيح يحقق الرصيد الجديد = الرصيد
+    السابق ± حركة هذا السطر. هذا يجعل الحل عاماً لأي تنسيق PDF — بعض الملفات تكتب الأعمدة بترتيب
+    (رصيد، مدين، دائن) بدل الترتيب المعتاد (مدين، دائن، رصيد)، والاعتماد على حجم الأرقام وحده
+    (كما تفعل _debit_credit_from_tail_numbers) يُخطئ حينها فيأخذ قيمة الرصيد نفسها كأنها حركة
+    جديدة. نجرّب كل تموضع ممكن لعمود الرصيد ولإشارة الأثر (بعض الكشوفات تُعامل الدائن كزيادة
+    والمدين كنقصان، وأخرى العكس تماماً حسب زاوية الطرف الآخر)، ونقبل فقط تطابقاً حسابياً مؤكَّداً
+    ضمن هامش سماحية صغير (فروق التقريب). عند العثور على تطابق نُرجع أيضاً الإشارة المستخدمة ليُعاد
+    استخدامها في الأسطر اللاحقة (تقليل احتمال تطابق عرضي كاذب) وليُحدَّث بها الرصيد الجاري للأسطر
+    التي تُحسم بطريقة أخرى (سند قبض/صرف أو الاستدلال القديم بالحجم).
+
+    ملاحظة مهمة: نقصر موضع "الرصيد" على الطرف الأول أو الأخير من الثلاثية فقط (لا الوسط) لأن كل
+    تخطيطات الجداول المحاسبية الحقيقية تضع عمود الرصيد في أحد طرفي مجموعة (مدين/دائن/رصيد) لا
+    بينهما. بدون هذا القيد يظهر تطابق حسابي زائف أحياناً عند اختيار الوسط كرصيد — لأن الأرقام
+    الثلاثة مرتبطة رياضياً بالتعريف (الرصيد الجديد = السابق - مدين + دائن)، فقد يتحقق نفس التطابق
+    الحسابي بالصدفة لأكثر من تخصيص واحد لو سُمح للوسط أن يكون رصيداً."""
+    if len(vals) != 3:
+        return None
+    signs = (learned_sign,) if learned_sign is not None else (1, -1)
+    best: Optional[Tuple[float, float, float, int, float]] = None
+    for bal_idx in (0, 2):
+        others = [i for i in range(3) if i != bal_idx]
+        bal_val = vals[bal_idx]
+        for debit_idx, credit_idx in (tuple(others), tuple(reversed(others))):
+            debit_val = vals[debit_idx]
+            credit_val = vals[credit_idx]
+            for sign in signs:
+                predicted = prev_balance + sign * (credit_val - debit_val)
+                err = abs(predicted - bal_val)
+                if err < 0.02:
+                    cand = (debit_val, credit_val, bal_val, sign, err)
+                    if best is None or err < best[4]:
+                        best = cand
+    if best is None:
+        return None
+    debit_val, credit_val, bal_val, sign, _err = best
+    debit_out = debit_val if abs(debit_val) >= 0.01 else None
+    credit_out = credit_val if abs(credit_val) >= 0.01 else None
+    return debit_out, credit_out, bal_val, sign
+
+
+def _detect_pdf_amount_column_order(
+    pages_words: List[List[Dict[str, Any]]]
+) -> Optional[Tuple[str, str, str]]:
+    """يكتشف الترتيب الفعلي الحقيقي لأعمدة (رصيد/مدين/دائن) في جدول الكشف من إحداثيات صف
+    العناوين نفسه (لا افتراضاً)، بمطابقة موضع كل عمود (x0) عند وجود كلمتَي "مدين" و"دائن" معاً
+    على نفس السطر البصري (نفس top تقريباً) — هذا هو صف العناوين الحقيقي وليس أي سطر حركة عابر
+    يذكر "دائن" كوصف طريقة دفع (مثل "لأجل دائن رقم 1157")، لأن سطر الوصف هذا لا يحمل كلمة "مدين"
+    أبداً بجانبها. يعمل هذا لأي قالب PDF يعرض العناوين الثلاثة معاً بغض النظر عن ترتيبها الفعلي
+    على الصفحة (بعض البرامج تكتب رصيد أولاً بدل الترتيب الشائع مدين ثم دائن ثم رصيد)، فيجعل حل
+    الغموض في الأرقام الثلاثة عاماً بدل الاعتماد فقط على حجم/موضع الأرقام داخل النص."""
+    for words in pages_words:
+        if not words:
+            continue
+        by_top: Dict[int, List[Dict[str, Any]]] = {}
+        for w in words:
+            top = w.get("top")
+            text = w.get("text")
+            x0 = w.get("x0")
+            if top is None or text is None or x0 is None:
+                continue
+            by_top.setdefault(round(top), []).append(w)
+        keys = sorted(by_top.keys())
+        used: set = set()
+        clusters: List[List[Dict[str, Any]]] = []
+        for k in keys:
+            if k in used:
+                continue
+            group = list(by_top[k])
+            used.add(k)
+            for k2 in keys:
+                if k2 in used:
+                    continue
+                if abs(k2 - k) <= 2:
+                    group.extend(by_top[k2])
+                    used.add(k2)
+            clusters.append(group)
+        for group in clusters:
+            debit_w = next((w for w in group if _text_contains_arabic_keyword(w["text"], "مدين")), None)
+            credit_w = next((w for w in group if _text_contains_arabic_keyword(w["text"], "دائن")), None)
+            if debit_w is None or credit_w is None:
+                continue
+            balance_w = next((w for w in group if _text_contains_arabic_keyword(w["text"], "الرصيد")), None)
+            cols = [("debit", debit_w["x0"]), ("credit", credit_w["x0"])]
+            if balance_w is not None:
+                cols.append(("balance", balance_w["x0"]))
+            if len(cols) != 3:
+                continue
+            cols.sort(key=lambda t: t[1])
+            return (cols[0][0], cols[1][0], cols[2][0])
+    return None
+
+
 _LETTERHEAD_MARKERS = (
     "الرقم الضريبي",
     "السجل التجاري",
@@ -1276,7 +1392,9 @@ def _skip_statement_letterhead_lines(lines: List[str]) -> List[str]:
     return lines[start:] if start else lines
 
 
-def _extract_pdf_rows_from_text(raw_text: str) -> List[Dict[str, Any]]:
+def _extract_pdf_rows_from_text(
+    raw_text: str, column_order_hint: Optional[Tuple[str, str, str]] = None
+) -> List[Dict[str, Any]]:
     date_pat = re.compile(
         r"(\d{4}\s*[/\-\.]\s*\d{1,2}\s*[/\-\.]\s*\d{1,2}|\d{1,2}\s*[/\-\.]\s*\d{1,2}\s*[/\-\.]\s*\d{2,4})"
     )
@@ -1285,6 +1403,15 @@ def _extract_pdf_rows_from_text(raw_text: str) -> List[Dict[str, Any]]:
     body_lines = _skip_statement_letterhead_lines((raw_text or "").splitlines())
     rows: List[Dict[str, Any]] = []
     last_date: Optional[str] = None
+    # بعض تصديرات PDF تكرر رقم المستند/رقم الصف كسطر منفصل بلا تاريخ خاص به (مثال حقيقي: سطر
+    # "1157مﻗر نﺋاد لﺟا" يحمل فقط رقم مرجع الفاتورة 1157، وسطر آخر يحمل رقم الصف "3" وحده)، وحتى
+    # على نفس سطر الحركة يظهر أحياناً رقم مستند/مرجع صحيح إلى جانب المبلغ الحقيقي (فاتورة 1157،
+    # سند 787...). هذه الأرقام ليست حركات ولا مبالغ، لكنها كانت تُقرأ كأرقام مرشّحة لأنها تمر فحص
+    # "مبلغ معقول" رغم كونها مراجع بحتة. المبالغ المالية الحقيقية في هذه الملفات تُكتب دائماً بفاصلة
+    # عشرية (21219.00)، أما أرقام المرجع/الصف/المستند فهي صحيحة دوماً بلا فاصلة — هذا الفارق عام عبر
+    # كل برامج المحاسبة العربية تقريباً وليس خاصاً بملف واحد، فنعتمده لاستبعادها قبل أي حساب لاحق.
+    running_balance = 0.0
+    balance_sign: Optional[int] = None
     for raw_line in body_lines:
         line = _normalize_arabic_digits(raw_line).strip()
         if len(line) < 2:
@@ -1319,25 +1446,88 @@ def _extract_pdf_rows_from_text(raw_text: str) -> List[Dict[str, Any]]:
         if "اجمال" in low_for_totals or _text_contains_arabic_keyword(work_line, "اجمال"):
             continue
 
-        numbers = [n for n in num_pat.findall(work_line) if (pv := _parse_number_token(n)) is not None and _is_plausible_currency_amount(pv)]
+        numbers = [
+            n
+            for n in num_pat.findall(work_line)
+            if (pv := _parse_number_token(n)) is not None
+            and _is_plausible_currency_amount(pv)
+            and ("." in n or "٫" in n or pv == 0)
+        ]
         if not numbers:
             continue
 
-        voucher_override = _amount_from_voucher_narrative_line(work_line, numbers)
+        # سطر الإجمالي/التذييل يكرر أحياناً تسمية عمود مجردة (مثل "دائن") متبوعة بأرقام المجاميع
+        # الكلية للكشف، دون أي وصف حركة فعلي ودون تاريخ خاص به (يعتمد فقط على last_date الموروث من
+        # آخر حركة حقيقية) — نميّز هذا عامةً بغياب أي كلمة نوع مستند معروفة (فاتورة/سند/قيد/مردود..)
+        # مع عدم بقاء نص وصفي يُذكر بعد حذف الأرقام، بدل البحث عن نص "اجمالي" حرفياً فقط والذي قد لا
+        # يظهر بهذه الصيغة بالذات في كل برامج المحاسبة (بعضها يكتفي بتكرار تسمية العمود).
+        if date_m is None:
+            remainder = num_pat.sub("", work_line)
+            remainder = re.sub(r"[\s:#\-]+", "", remainder)
+            if infer_document_kind_from_narrative(work_line) is None and len(remainder) < 8:
+                continue
+
+        # عندما نعرف الترتيب الفعلي لأعمدة رصيد/مدين/دائن من صف عناوين الجدول الحقيقي (بالإحداثيات)،
+        # نستخدمه مباشرة لحسم الثلاثية الغامضة، ونمنحه أولوية حتى على استدلال سند القبض/الصرف
+        # القديم — ذاك الاستدلال افترض أن أول رقم في السطر هو مبلغ السند نفسه (صحيح في ملفات ترتّب
+        # الأعمدة مدين/دائن/رصيد)، لكنه يُخطئ إن كان أول رقم فعلياً هو عمود الرصيد كما في هذا القالب
+        # (رصيد أولاً)، فيأخذ قيمة الرصيد بدل مبلغ السند الحقيقي. موضع العمود من الإحداثيات الحقيقية
+        # أوثق من أي تخمين نصي دوماً متى كان متاحاً لنفس الملف.
+        # حين يتجاوز عدد الأرقام المرشحة 3 (تلوّث نادر من سطر مجاور متراكب نصياً بسبب استخراج PDF،
+        # مثل عبارة "من تاريخه" تتداخل حرفياً مع سطر الحركة الفعلي في نفس الموضع تقريباً على
+        # الصفحة)، فإن أرقام الحركة الحقيقية الثلاثة تظهر دوماً في آخر القائمة (لأن الضجيج المُقحَم
+        # يسبقها في ترتيب الاستخراج)، فنأخذ آخر 3 عناصر فقط بدل رفض الحسم بالكامل.
+        column_hint_resolution = None
+        if column_order_hint is not None and len(numbers) >= 3:
+            vals_f0 = [_parse_number_token(n) for n in numbers[-3:]]
+            if all(v is not None for v in vals_f0):
+                mapped = dict(zip(column_order_hint, vals_f0))
+                d0 = mapped.get("debit")
+                c0 = mapped.get("credit")
+                column_hint_resolution = (
+                    d0 if d0 is not None and abs(d0) >= 0.0001 else None,
+                    c0 if c0 is not None and abs(c0) >= 0.0001 else None,
+                )
+
+        voucher_override = None
+        if column_hint_resolution is None:
+            voucher_override = _amount_from_voucher_narrative_line(work_line, numbers)
 
         pv_pos = [float(_parse_number_token(n) or 0) for n in numbers]
         pv_pos = [x for x in pv_pos if x > 0.01]
-        if voucher_override is None and len(pv_pos) >= 3 and min(pv_pos) > 30:
+        if column_hint_resolution is None and voucher_override is None and len(pv_pos) >= 3 and min(pv_pos) > 30:
             if max(pv_pos) >= min(pv_pos) * 2.12 - 1e-9:
                 continue
         ws_compact = re.sub(r"\s+", "", work_line)
-        if voucher_override is None and "4455" in ws_compact and "1759" in ws_compact and len(pv_pos) >= 3:
+        if (
+            column_hint_resolution is None
+            and voucher_override is None
+            and "4455" in ws_compact
+            and "1759" in ws_compact
+            and len(pv_pos) >= 3
+        ):
             continue
 
-        if voucher_override is not None:
+        balance_resolution = None
+        if voucher_override is None and column_hint_resolution is None:
+            vals_f = [v for v in (_parse_number_token(n) for n in numbers) if v is not None]
+            balance_resolution = _resolve_debit_credit_via_balance(
+                [float(v) for v in vals_f], running_balance, balance_sign
+            )
+
+        if column_hint_resolution is not None:
+            debit_val, credit_val = column_hint_resolution
+        elif voucher_override is not None:
             debit_val, credit_val = voucher_override
+        elif balance_resolution is not None:
+            debit_val, credit_val, new_balance, used_sign = balance_resolution
+            running_balance = new_balance
+            if balance_sign is None:
+                balance_sign = used_sign
         else:
             debit_val, credit_val = _debit_credit_from_tail_numbers(numbers)
+            if balance_sign is not None:
+                running_balance += balance_sign * ((credit_val or 0.0) - (debit_val or 0.0))
 
         if (debit_val is None or abs(debit_val) < 0.0001) and (credit_val is None or abs(credit_val) < 0.0001):
             continue
@@ -1529,12 +1719,18 @@ def read_pdf(file_path: str) -> Optional[pd.DataFrame]:
     table_df: Optional[pd.DataFrame] = None
     all_text = ""
 
+    column_order_hint: Optional[Tuple[str, str, str]] = None
     try:
         with pdfplumber.open(file_path) as pdf:
             grid_rows: List[List[Any]] = []
             text_parts: List[str] = []
+            pages_words: List[List[Dict[str, Any]]] = []
             for page in pdf.pages:
                 text_parts.append(page.extract_text() or "")
+                try:
+                    pages_words.append(page.extract_words(use_text_flow=False, keep_blank_chars=False))
+                except Exception:
+                    pages_words.append([])
                 tables = _extract_tables_best_effort(page)
                 if not tables:
                     continue
@@ -1552,6 +1748,10 @@ def read_pdf(file_path: str) -> Optional[pd.DataFrame]:
             ]
             all_text = "\n".join(per_page_bodies)
 
+            # نكتشف الترتيب الفعلي لأعمدة رصيد/مدين/دائن من إحداثيات صف العناوين الحقيقي في
+            # الصفحة (وليس تخميناً) — يجعل حسم الثلاثيات الغامضة عاماً لأي قالب PDF مشابه.
+            column_order_hint = _detect_pdf_amount_column_order(pages_words)
+
             if grid_rows:
                 df = _dataframe_from_pdf_grid(grid_rows)
                 if df is not None and not df.empty:
@@ -1559,7 +1759,7 @@ def read_pdf(file_path: str) -> Optional[pd.DataFrame]:
     except Exception:
         return None
 
-    parsed_rows = _extract_pdf_rows_from_text(all_text)
+    parsed_rows = _extract_pdf_rows_from_text(all_text, column_order_hint=column_order_hint)
     text_df: Optional[pd.DataFrame] = None
     if parsed_rows:
         text_df = pd.DataFrame(parsed_rows).dropna(how="all")
