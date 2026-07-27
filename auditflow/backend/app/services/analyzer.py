@@ -2357,17 +2357,195 @@ def compute_summary(
 
 
 # ============================================================================
-# مطابقة الشركات (كشف حساب شركة مقابل كشف حساب شركة أخرى) — وحدة مستقلة تماماً عن
-# مطابقة الفروع أعلاه. اليوم تعتمد داخلياً على نفس محرك الاستخراج والمطابقة (process/analyze)
-# لأن طبيعة المقارنة اليوم متطابقة (كشف حساب مقابل كشف حساب)، لكنها معزولة عمداً بدالتين
-# باسمين مستقلّين حتى يمكن مستقبلاً إضافة قواعد خاصة بمطابقة الشركات (مثل مطابقة برقم السجل
-# التجاري أو الرقم الضريبي أو اسم الشركة) دون أي خطر على منطق مطابقة الفروع الحالي والمُختبر.
+# مطابقة الشركات (كشف حساب شركة مقابل كشف حساب شركة أخرى) — وحدة مستقلة تماماً عن مطابقة
+# الفروع أعلاه، بمنطق مطابقة مختلف تماماً (وليس فقط واجهة مختلفة على نفس المحرك).
+#
+# الفكرة: لا نطابق حسب اسم المستند الحرفي، بل حسب الأثر المحاسبي الموحّد للحركة. عندما تتعامل
+# شركتان معًا (مورد وعميل)، تسجّل كل واحدة نفس العملية باسم مختلف حسب نظامها المحاسبي:
+#   شركة A (المورد): فاتورة مبيعات ... ثم عند الاستلام: سند قبض / سند قبض بنكي / قيد يومية
+#   شركة B (العميل): فاتورة مشتريات ... ثم عند السداد: سند صرف / تحويل بنكي / قيد يومية / دفعة من الحساب
+# فالمطابقة بالاسم الحرفي تفشل (سند قبض ≠ سند صرف)، بينما محاسبياً هي نفس العملية من منظورين.
+# لذلك نحوّل أولاً كل مستند إلى تصنيف موحّد (classify_company_doc_category)، ثم نطابق التصنيفات
+# المتوافقة (_company_categories_compatible) بدل الأسماء الحرفية. هذا يجعل المطابقة تعمل بين أي
+# برنامج محاسبي (المحاسب الشامل، SAP، Odoo، Oracle، QuickBooks...) دون تخصيص لكل برنامج.
+#
+# تُعاد استخدام أدوات عامة غير مرتبطة بمنطق الفروع (محرك المطابقة الشامل _assign_global_matches
+# القائم على خوارزمية Hungarian، وأدوات مساعدة عامة مثل استخراج الأرقام/التواريخ)، لكن دالة
+# التسجيل (_company_match_score) والتصنيف وإزالة العكسيات كلها مستقلة تماماً ولا تستدعي analyze()
+# أو match_doc() الخاصتين بالفروع — أي تعديل هنا لا يمسّ مطابقة الفروع إطلاقاً.
 # ============================================================================
 
 
 def process_company(file_path: str, filename: str, branch: str) -> List[Dict[str, Any]]:
-    """نقطة الدخول المستقلة لاستخراج حركات مطابقة الشركات."""
+    """نقطة الدخول المستقلة لاستخراج حركات مطابقة الشركات (نفس محرك استخراج الفروع حاليًا،
+    لأن قراءة Excel/PDF واستنتاج المدين/الدائن/التاريخ لا تختلف بين فرعين أو شركتين)."""
     return process(file_path, filename, branch)
+
+
+# التصنيف المحاسبي الموحّد. تُفحص القواعد بالترتيب ويُعتمد أول تطابق (الأكثر تحديدًا أولاً).
+_COMPANY_DOC_CATEGORY_RULES: Tuple[Tuple[str, str], ...] = (
+    ("مردود مبيعات", "Return"),
+    ("مردود مشتريات", "Return"),
+    ("مرتجع مبيعات", "Return"),
+    ("مرتجع مشتريات", "Return"),
+    ("إشعار دائن", "Adjustment"),
+    ("إشعار مدين", "Adjustment"),
+    ("اشعار دائن", "Adjustment"),
+    ("اشعار مدين", "Adjustment"),
+    ("تسوية", "Adjustment"),
+    ("فاتورة ضريبية مبيعات", "SalesInvoice"),
+    ("فاتورة مبيعات", "SalesInvoice"),
+    ("فاتورة ضريبية مشتريات", "PurchaseInvoice"),
+    ("فاتورة مشتريات", "PurchaseInvoice"),
+    ("سند قبض بنكي", "Payment"),
+    ("سند قبض نقدي", "Payment"),
+    ("سند قبض", "Payment"),
+    ("سند صرف بنكي", "Payment"),
+    ("سند صرف نقدي", "Payment"),
+    ("سند صرف", "Payment"),
+    ("تحويل بنكي", "Payment"),
+    ("تحويل مالي", "Payment"),
+    ("دفعة من الحساب", "Payment"),
+    ("دفعة", "Payment"),
+    ("سداد", "Payment"),
+    ("قيد يومية", "Payment"),
+    ("قيد محاسبي", "Payment"),
+    ("مبيعات", "SalesInvoice"),
+    ("مشتريات", "PurchaseInvoice"),
+    ("فاتورة", "Invoice"),
+)
+
+# أي التصنيفات تُعتبر متوافقة مع بعضها عبر الشركتين. فاتورة المبيعات لدى شركة = فاتورة مشتريات
+# لدى الأخرى؛ وكل أنواع السداد/القبض/القيود اليومية تقع تحت "Payment" الموحّدة.
+_COMPANY_CATEGORY_COMPAT: Dict[str, frozenset] = {
+    "SalesInvoice": frozenset({"SalesInvoice", "PurchaseInvoice", "Invoice"}),
+    "PurchaseInvoice": frozenset({"PurchaseInvoice", "SalesInvoice", "Invoice"}),
+    "Invoice": frozenset({"Invoice", "SalesInvoice", "PurchaseInvoice"}),
+    "Payment": frozenset({"Payment"}),
+    "Return": frozenset({"Return"}),
+    "Adjustment": frozenset({"Adjustment"}),
+}
+
+
+def classify_company_doc_category(*texts: Optional[str]) -> Optional[str]:
+    """يحوّل نص نوع المستند (و/أو البيان) إلى تصنيف محاسبي موحّد. يفحص كل نص مُمرَّر بالترتيب
+    ويعتمد أول تصنيف موجود؛ يعيد None إن لم يتعرّف على أي كلمة مفتاحية (لا مانع من المطابقة
+    حينها، بل تُعامَل كغياب إشارة نوع مستند تمامًا مثل مطابقة الفروع)."""
+    for text in texts:
+        if not text:
+            continue
+        for keyword, category in _COMPANY_DOC_CATEGORY_RULES:
+            if _text_contains_arabic_keyword(str(text), keyword):
+                return category
+    return None
+
+
+def _company_categories_compatible(cat1: Optional[str], cat2: Optional[str]) -> Optional[bool]:
+    """True/False إذا كان التصنيفان معروفين لدى الطرفين، أو None إذا تعذّر التصنيف من أحد
+    الجانبين أو كليهما (عندها لا نمنع المطابقة إطلاقًا، فقط لا نعزّز الدرجة بهذا العامل)."""
+    if not cat1 or not cat2:
+        return None
+    return cat2 in _COMPANY_CATEGORY_COMPAT.get(cat1, frozenset())
+
+
+def _extract_company_reference_number(row: Dict[str, Any]) -> Optional[str]:
+    """رقم مرجعي/فاتورة إن وُجد ضمن عمودي doc/desc لهذا السطر، يُستخدم كعامل تعزيز إضافي عند
+    تعدد المرشحين المحتملين بنفس المبلغ والتصنيف والتاريخ التقريبي."""
+    for source in (row.get("doc"), row.get("desc")):
+        num = _extract_doc_number_text(source or "")
+        if num:
+            return num
+    return None
+
+
+COMPANY_DATE_TOLERANCE_DAYS = 5
+COMPANY_MIN_ASSIGN_SCORE = 35
+COMPANY_STRONG_MATCH_SCORE = 65
+_COMPANY_MAX_POSSIBLE_MATCH_SCORE = 155.0
+
+
+def _company_match_score(
+    x1: Dict[str, Any],
+    x2: Dict[str, Any],
+    *,
+    allow_same_direction: bool = True,
+) -> Tuple[int, List[str]]:
+    """درجة تطابق مستقلة تمامًا عن match_score الخاصة بالفروع، مبنية على خوارزمية المستخدم:
+    1) تحويل نوع المستند إلى تصنيف موحّد ثم مطابقة التصنيفات المتوافقة (وليس الاسم الحرفي).
+    2) مطابقة المبلغ. 3) مطابقة التاريخ بسماحية ±COMPANY_DATE_TOLERANCE_DAYS أيام.
+    4) مطابقة رقم الفاتورة/المرجع إن وجد. الاختيار بين عدة مرشحين يتم عبر محرك المطابقة الشامل
+    (Hungarian) الذي يستدعي هذه الدالة، فيختار أعلى Confidence Score إجمالاً."""
+    score = 0
+    reasons: List[str] = []
+
+    diff = abs(x1["amount"] - x2["amount"])
+    if diff < 0.01:
+        score += 50
+        reasons.append("نفس المبلغ")
+    elif diff < 1:
+        score += 30
+        reasons.append("مبلغ قريب جدًا")
+    else:
+        reasons.append("فرق مبلغ (غير مانع من الترشّح، يظهر كتحذير إن اختير هذا الزوج)")
+
+    cat1 = classify_company_doc_category(x1.get("doc"), x1.get("desc"))
+    cat2 = classify_company_doc_category(x2.get("doc"), x2.get("desc"))
+    compat = _company_categories_compatible(cat1, cat2)
+    if compat is False:
+        return 0, [f"أثر محاسبي غير متوافق ({cat1 or '؟'} ≠ {cat2 or '؟'})"]
+    if compat is True:
+        score += 35
+        if cat1 == cat2:
+            reasons.append(f"نفس الأثر المحاسبي الموحّد ({cat1})")
+        else:
+            reasons.append(f"أثر محاسبي متقابل ({cat1} ⇔ {cat2})")
+    else:
+        score += 8
+        reasons.append("لا يوجد تصنيف مستند واضح من أحد الجانبين")
+
+    dd1 = _parsed_timestamp_or_nat(x1.get("date"))
+    dd2 = _parsed_timestamp_or_nat(x2.get("date"))
+    has1, has2 = pd.notna(dd1), pd.notna(dd2)
+    if has1 and has2:
+        days = abs(int((dd1 - dd2).days))
+        if days == 0:
+            score += 30
+            reasons.append("نفس اليوم")
+        elif days <= COMPANY_DATE_TOLERANCE_DAYS:
+            score += max(10, 24 - days * 3)
+            reasons.append(f"ضمن سماحية {COMPANY_DATE_TOLERANCE_DAYS} أيام (فارق {days} يوم)")
+        else:
+            # عقوبة كبيرة عمدًا: تجاوز سماحية التاريخ المعلَنة يجب ألا يختفي بصمت خلف قوة عوامل
+            # أخرى (مبلغ + تصنيف) — إما يتراجع تحت عتبة التطابق القوي فيظهر كتحذير بثقة منخفضة،
+            # أو يفوز عليه رقم مرجعي مطابق فعليًا (إشارة أقوى من التاريخ نفسه) فيبقى مؤكدًا.
+            score -= 35
+            reasons.append(f"خارج سماحية {COMPANY_DATE_TOLERANCE_DAYS} أيام (فارق {days} يوم)")
+    elif has1 or has2:
+        score += 5
+        reasons.append("تاريخ من جهة واحدة فقط")
+    else:
+        reasons.append("لا تاريخ في كلا السطرين")
+
+    ref1 = _extract_company_reference_number(x1)
+    ref2 = _extract_company_reference_number(x2)
+    if ref1 and ref2:
+        if ref1 == ref2:
+            score += 25
+            reasons.append(f"تطابق رقم مرجعي/فاتورة ({ref1})")
+        else:
+            reasons.append("رقم مرجعي مختلف (غير مانع)")
+
+    same_dir = x1["type"] == x2["type"]
+    if not same_dir:
+        score += 10
+        reasons.append("أثر محاسبي متقابل (مدين لدى طرف، دائن لدى الآخر)")
+    elif allow_same_direction:
+        score += 5
+        reasons.append("نفس الاتجاه المسجّل لدى الشركتين")
+    else:
+        return 0, ["نفس الاتجاه (غير مسموح في الوضع الصارم)"]
+
+    return max(score, 0), reasons
 
 
 def analyze_companies(
@@ -2376,5 +2554,110 @@ def analyze_companies(
     *,
     allow_same_direction: bool = True,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
-    """نقطة الدخول المستقلة لمطابقة الشركات."""
-    return analyze(d1, d2, allow_same_direction=allow_same_direction)
+    """مطابقة كشف حساب شركة مقابل كشف حساب شركة أخرى بالاعتماد على الأثر المحاسبي الموحّد
+    للحركة، لا اسم المستند الحرفي. منطق مستقل تمامًا عن analyze() الخاصة بالفروع أعلاه (لا
+    تستدعيها ولا تستدعي match_doc)، ولذلك أي تطوير لاحق هنا آمن تمامًا على مطابقة الفروع."""
+    res: List[Dict[str, Any]] = []
+    counts: Dict[str, int] = {}
+
+    def remove_company_reversals(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """يحذف أزواج عكس قيد واضحة داخل كشف الشركة نفسه (نفس المبلغ، اتجاه معاكس، فارق يوم
+        واحد كحد أقصى، وأثر محاسبي متوافق إن أمكن تصنيفه) — نفس مبدأ إزالة العكسيات في مطابقة
+        الفروع، لكن معتمِد على التصنيف الموحّد بدل match_doc الخاصة بالفروع."""
+        canonical_order = sorted(range(len(data)), key=lambda idx: _canonical_row_sort_key(idx, data[idx]))
+        removed_local = [False] * len(data)
+        for pos, i in enumerate(canonical_order):
+            if removed_local[i]:
+                continue
+            x1 = data[i]
+            for j in canonical_order[pos + 1:]:
+                if removed_local[j]:
+                    continue
+                x2 = data[j]
+                if x1["branch"] != x2["branch"]:
+                    continue
+                if x1["type"] == x2["type"]:
+                    continue
+                if abs(x1["amount"] - x2["amount"]) > 0.01:
+                    continue
+                days = date_diff_days(x1["date"], x2["date"])
+                if days is None or days > 1:
+                    continue
+                c1 = classify_company_doc_category(x1.get("doc"), x1.get("desc"))
+                c2 = classify_company_doc_category(x2.get("doc"), x2.get("desc"))
+                if c1 and c2 and _company_categories_compatible(c1, c2) is False:
+                    continue
+                removed_local[i] = True
+                removed_local[j] = True
+                break
+        return [x for idx, x in enumerate(data) if not removed_local[idx]]
+
+    d1 = remove_company_reversals(d1)
+    d2 = remove_company_reversals(d2)
+
+    if not d2:
+        for x in d1:
+            res.append({**x, "reason": "لا يوجد مقابل ❌ (كشف الشركة الثانية فارغ)"})
+            b = x.get("branch") or "unknown"
+            counts[b] = counts.get(b, 0) + 1
+        return res, counts
+
+    def score_fn(x1: Dict[str, Any], x2: Dict[str, Any]) -> Tuple[int, List[str]]:
+        return _company_match_score(x1, x2, allow_same_direction=allow_same_direction)
+
+    assignment = _assign_global_matches(d1, d2, score_fn, COMPANY_MIN_ASSIGN_SCORE)
+    matched_js = {v[0] for v in assignment.values()}
+
+    for i, x1 in enumerate(d1):
+        if x1.get("type") == "error":
+            res.append(x1)
+            b = x1.get("branch") or "unknown"
+            counts[b] = counts.get(b, 0) + 1
+            continue
+        if i not in assignment:
+            best_s = -1
+            best_r: List[str] = []
+            for x2 in d2:
+                if x2.get("type") == "error":
+                    continue
+                s, r = score_fn(x1, x2)
+                if s > best_s:
+                    best_s, best_r = s, r
+            tail = f" | {' , '.join(best_r)}" if best_r else ""
+            res.append({**x1, "reason": f"لا يوجد مقابل ❌ | أفضل مرشح score={best_s}{tail}"})
+            b = x1.get("branch") or "unknown"
+            counts[b] = counts.get(b, 0) + 1
+            continue
+        j_match, s, r = assignment[i]
+        x2 = d2[j_match]
+        amount_diff = abs(float(x1["amount"]) - float(x2["amount"]))
+        if amount_diff > 0.01:
+            b1_label = x1.get("branch") or "الشركة الأولى"
+            b2_label = x2.get("branch") or "الشركة الثانية"
+            res.append(
+                {
+                    **x1,
+                    "reason": (
+                        f"فرق في المبلغ ⚠️ | {b1_label}: {x1['amount']} مقابل {b2_label}: {x2['amount']} "
+                        f"(فرق {round(amount_diff, 2)}) | score={s} | {' , '.join(r)}"
+                    ),
+                }
+            )
+            continue
+        if s >= COMPANY_STRONG_MATCH_SCORE:
+            continue
+        res.append({**x1, "reason": f"تطابق بثقة منخفضة ⚠️ | score={s} | {' , '.join(r)}"})
+
+    for j, x in enumerate(d2):
+        if j in matched_js:
+            continue
+        if x.get("type") == "error":
+            res.append(x)
+            b = x.get("branch") or "unknown"
+            counts[b] = counts.get(b, 0) + 1
+            continue
+        res.append({**x, "reason": "لا يوجد مقابل ❌ (من الشركة الأخرى)"})
+        b = x.get("branch") or "unknown"
+        counts[b] = counts.get(b, 0) + 1
+
+    return res, counts
