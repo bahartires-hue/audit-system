@@ -66,3 +66,38 @@ def generate_text(system_prompt: str, user_text: str, max_chars: int = 12000) ->
 
     data = json.loads(raw)
     return _extract_output_text(data).strip()
+
+
+def transcribe_audio(content: bytes, filename: str) -> str:
+    """يرفع ملف صوتي إلى OpenAI Whisper ويعيد النص المفرّغ (بالعربية أو أي لغة أخرى).
+
+    يرفع RuntimeError برسالة عربية عند الفشل.
+    """
+    if not ai_text_enabled():
+        raise RuntimeError("خدمة تحويل الصوت إلى نص غير مفعّلة حالياً (مفتاح OPENAI_API_KEY غير موجود)")
+
+    import requests
+
+    try:
+        resp = requests.post(
+            "https://api.openai.com/v1/audio/transcriptions",
+            headers={"Authorization": f"Bearer {_api_key()}"},
+            data={"model": "whisper-1"},
+            files={"file": (filename or "audio.mp3", content, "application/octet-stream")},
+            timeout=120,
+        )
+    except Exception as e:
+        raise RuntimeError(f"تعذر الاتصال بخدمة تحويل الصوت إلى نص: {str(e)}")
+
+    if resp.status_code >= 400:
+        raise RuntimeError(f"فشل تحويل الصوت إلى نص: {resp.text[:220]}")
+
+    try:
+        data = resp.json()
+    except Exception:
+        raise RuntimeError("استجابة غير متوقعة من خدمة تحويل الصوت إلى نص")
+
+    text = (data or {}).get("text") or ""
+    if not text.strip():
+        raise RuntimeError("لم يتم التعرف على أي كلام داخل الملف الصوتي")
+    return text.strip()

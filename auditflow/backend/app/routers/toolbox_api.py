@@ -12,7 +12,7 @@ from fastapi.responses import Response
 
 from ..auth_core import require_csrf, require_user, user_can_access_page_key
 from ..db import SessionLocal
-from ..services.ai_text_tools import ai_text_enabled, generate_text
+from ..services.ai_text_tools import ai_text_enabled, generate_text, transcribe_audio
 from ..services.ocr_vision import extract_text_from_image, ocr_enabled
 
 router = APIRouter(prefix="/api/tools", tags=["toolbox"])
@@ -1171,3 +1171,241 @@ async def pdf_summarize(request: Request, file: UploadFile = File(...)):
     except RuntimeError as e:
         raise HTTPException(400, str(e))
     return {"result": result}
+
+
+# ============================================================ أدوات AI (المرحلة 3)
+def _extract_document_text(name: str, content: bytes, max_pages: int = 200) -> str:
+    """يستخرج نصًا عاديًا من ملف PDF أو Word أو نصي (txt)."""
+    name = (name or "").lower()
+    if name.endswith(".pdf"):
+        import pdfplumber
+
+        try:
+            parts = []
+            with pdfplumber.open(io.BytesIO(content)) as pdf:
+                for page in pdf.pages[:max_pages]:
+                    txt = page.extract_text() or ""
+                    if txt:
+                        parts.append(txt)
+            return "\n".join(parts)
+        except Exception as e:
+            raise HTTPException(400, f"تعذر قراءة ملف PDF: {str(e)}")
+    if name.endswith(".docx"):
+        from docx import Document as DocxDoc
+
+        try:
+            doc = DocxDoc(io.BytesIO(content))
+        except Exception as e:
+            raise HTTPException(400, f"تعذر قراءة ملف Word: {str(e)}")
+        return "\n".join((p.text or "") for p in doc.paragraphs)
+    if name.endswith(".txt"):
+        try:
+            return content.decode("utf-8", errors="ignore")
+        except Exception as e:
+            raise HTTPException(400, f"تعذر قراءة الملف النصي: {str(e)}")
+    raise HTTPException(400, "الصيغ المدعومة: PDF أو Word (.docx) أو نص (.txt)")
+
+
+@router.post("/speech-to-text")
+async def speech_to_text(request: Request, file: UploadFile = File(...)):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    name = (file.filename or "").lower()
+    allowed_ext = (".mp3", ".wav", ".m4a", ".ogg", ".webm", ".mp4", ".mpeg", ".mpga")
+    if not name.endswith(allowed_ext):
+        raise HTTPException(400, "صيغة الملف الصوتي غير مدعومة")
+    content = await file.read()
+    if len(content) > 25 * 1024 * 1024:
+        raise HTTPException(400, "حجم الملف الصوتي يجب ألا يتجاوز 25 ميجابايت")
+    try:
+        text = transcribe_audio(content, file.filename or "audio.mp3")
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    return {"result": text}
+
+
+@router.post("/contract-analyze")
+async def contract_analyze(request: Request, file: UploadFile = File(...)):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    if not ai_text_enabled():
+        raise HTTPException(400, "خدمة تحليل العقود غير مفعّلة حالياً")
+    name = (file.filename or "").lower()
+    if not (name.endswith(".pdf") or name.endswith(".docx")):
+        raise HTTPException(400, "الملف يجب أن يكون PDF أو Word (.docx)")
+    content = await file.read()
+    text = _extract_document_text(name, content)
+    if not text.strip():
+        raise HTTPException(400, "لم يتم العثور على نص قابل للتحليل في المستند")
+    system_prompt = (
+        "أنت مساعد تحليل عقود. لديك نص عقد. استخرج بالعربية وبشكل نقاط واضحة: "
+        "1) أطراف العقد والغرض منه إن وجد، 2) أهم الالتزامات على كل طرف، "
+        "3) البنود التي قد تشكل خطرًا أو غموضًا (مثل الغرامات، الفسخ، التجديد التلقائي، حل النزاعات)، "
+        "4) أي بنود أساسية تبدو ناقصة. اختم بجملة توضح أن هذا تحليل استرشادي عام وليس استشارة قانونية ملزمة."
+    )
+    try:
+        result = generate_text(system_prompt, text, max_chars=30000)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    return {"result": result}
+
+
+@router.post("/document-qa")
+async def document_qa(request: Request, file: UploadFile = File(...), question: str = Form(...)):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    if not ai_text_enabled():
+        raise HTTPException(400, "خدمة الأسئلة عن المستندات غير مفعّلة حالياً")
+    q = (question or "").strip()
+    if not q:
+        raise HTTPException(400, "الرجاء إدخال سؤال")
+    name = (file.filename or "").lower()
+    if not (name.endswith(".pdf") or name.endswith(".docx") or name.endswith(".txt")):
+        raise HTTPException(400, "الصيغ المدعومة: PDF أو Word (.docx) أو نص (.txt)")
+    content = await file.read()
+    text = _extract_document_text(name, content)
+    if not text.strip():
+        raise HTTPException(400, "لم يتم العثور على نص قابل للقراءة في المستند (قد يكون ممسوحًا ضوئيًا)")
+    system_prompt = (
+        "أجب عن سؤال المستخدم بالعربية اعتمادًا فقط على نص المستند المرفق أدناه. "
+        "إذا لم تجد إجابة واضحة داخل المستند، صرّح بذلك بوضوح ولا تخترع معلومات غير موجودة فيه."
+    )
+    user_text = f"نص المستند:\n{text}\n\nسؤال المستخدم: {q}"
+    try:
+        result = generate_text(system_prompt, user_text, max_chars=30000)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    return {"result": result}
+
+
+@router.post("/duplicate-invoice-detect")
+async def duplicate_invoice_detect(request: Request, file: UploadFile = File(...)):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    name = (file.filename or "").lower()
+    if not (name.endswith(".xlsx") or name.endswith(".xls") or name.endswith(".csv")):
+        raise HTTPException(400, "الملف يجب أن يكون Excel أو CSV")
+    content = await file.read()
+    import pandas as pd
+
+    try:
+        df = _read_tabular(name, content)
+    except Exception as e:
+        raise HTTPException(400, f"تعذر قراءة الملف: {str(e)}")
+    if df.empty:
+        raise HTTPException(400, "الملف لا يحتوي على بيانات")
+
+    invoice_keywords = ["invoice", "فاتورة", "رقم_الفاتورة", "رقم الفاتورة", "invoice_no", "invoice_number"]
+    invoice_col = None
+    for col in df.columns:
+        col_norm = str(col).strip().lower()
+        if any(k in col_norm for k in invoice_keywords):
+            invoice_col = col
+            break
+
+    if invoice_col is not None:
+        dup_mask = df.duplicated(subset=[invoice_col], keep=False) & df[invoice_col].notna()
+        dup_df = df[dup_mask].sort_values(by=[invoice_col])
+        clean_df = df[~dup_mask]
+        basis = f"العمود «{invoice_col}»"
+    else:
+        dup_mask = df.duplicated(keep=False)
+        dup_df = df[dup_mask]
+        clean_df = df[~dup_mask]
+        basis = "تطابق الصف بالكامل (لم يتم العثور على عمود رقم فاتورة واضح)"
+
+    out = io.BytesIO()
+    with pd.ExcelWriter(out, engine="openpyxl") as writer:
+        dup_df.to_excel(writer, index=False, sheet_name="فواتير مكررة")
+        clean_df.to_excel(writer, index=False, sheet_name="بدون تكرار")
+    resp = _attachment(
+        out.getvalue(), "duplicate_invoices.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    resp.headers["X-Duplicate-Rows"] = str(len(dup_df))
+    resp.headers["X-Basis"] = quote(basis, safe="")
+    return resp
+
+
+@router.post("/narrative-report")
+async def narrative_report(request: Request, file: UploadFile = File(...), title: str = Form("تقرير تحليلي")):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    if not ai_text_enabled():
+        raise HTTPException(400, "خدمة التقرير التلقائي غير مفعّلة حالياً")
+    name = (file.filename or "").lower()
+    if not (name.endswith(".xlsx") or name.endswith(".xls") or name.endswith(".csv")):
+        raise HTTPException(400, "الملف يجب أن يكون Excel أو CSV")
+    content = await file.read()
+    import pandas as pd
+
+    try:
+        df = _read_tabular(name, content)
+    except Exception as e:
+        raise HTTPException(400, f"تعذر قراءة الملف: {str(e)}")
+    if df.empty:
+        raise HTTPException(400, "الملف لا يحتوي على بيانات")
+
+    numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+    summary = {
+        "rows": len(df),
+        "columns": list(map(str, df.columns))[:30],
+        "numeric_summary": {
+            str(c): {
+                "sum": float(df[c].sum()),
+                "mean": float(df[c].mean()),
+                "min": float(df[c].min()),
+                "max": float(df[c].max()),
+            }
+            for c in numeric_cols[:10]
+        },
+        "sample_rows": json.loads(df.head(10).to_json(orient="records", force_ascii=False)),
+    }
+    system_prompt = (
+        "أنت محلل أعمال. اكتب تقريرًا سرديًا احترافيًا بالعربية عن البيانات التالية، بعنوان رئيسي وأقسام واضحة: "
+        "مقدمة موجزة، أهم النتائج والاتجاهات (نقاط)، ثم توصيات عملية قابلة للتنفيذ. "
+        "استخدم فقط الأرقام الموجودة فعليًا في البيانات ولا تخترع أرقامًا."
+    )
+    try:
+        narrative = generate_text(system_prompt, json.dumps(summary, ensure_ascii=False)[:12000], max_chars=12000)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
+
+    styles = getSampleStyleSheet()
+    out = io.BytesIO()
+    pdf_doc = SimpleDocTemplate(out, pagesize=A4, topMargin=2 * cm, bottomMargin=2 * cm)
+    elements = [Paragraph((title or "تقرير تحليلي").replace("&", "&amp;"), styles["Title"]), Spacer(1, 12)]
+    for line in narrative.split("\n"):
+        txt = line.strip()
+        if not txt:
+            elements.append(Spacer(1, 8))
+            continue
+        safe = txt.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        elements.append(Paragraph(safe, styles["Normal"]))
+        elements.append(Spacer(1, 4))
+    pdf_doc.build(elements)
+    return _attachment(out.getvalue(), "narrative_report.pdf", "application/pdf")

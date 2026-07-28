@@ -842,6 +842,46 @@
               { name: "file", type: "file", accept: ".pdf", label: "ملف PDF", required: true },
             ],
           },
+{
+            key: "speech-to-text", group: "ai", icon: "🎤", color: "#4fa3f7", title: "تحويل صوت إلى نص",
+            desc: "ارفع ملفًا صوتيًا واحصل على نصّه المفرّغ فورًا", endpoint: "/api/tools/speech-to-text", resultType: "json",
+            formatResult: function (data) { return data.result; },
+            fields: [
+              { name: "file", type: "file", accept: ".mp3,.wav,.m4a,.ogg,.webm,.mp4,.mpeg,.mpga", label: "الملف الصوتي", required: true },
+            ],
+          },
+          {
+            key: "contract-analyze", group: "ai", icon: "📜", color: "#c9a24d", title: "تحليل العقود",
+            desc: "اكتشف أبرز البنود والمخاطر في أي عقد (تحليل استرشادي عام وليس استشارة قانونية)", endpoint: "/api/tools/contract-analyze", resultType: "json",
+            formatResult: function (data) { return data.result; },
+            fields: [
+              { name: "file", type: "file", accept: ".pdf,.docx", label: "ملف العقد (PDF أو Word)", required: true },
+            ],
+          },
+          {
+            key: "document-qa", group: "ai", icon: "💬", color: "#8a6adf", title: "محادثة AI على المستندات",
+            desc: "ارفع مستندًا واطرح عليه أي سؤال ليجيبك الذكاء الاصطناعي بناءً على محتواه", endpoint: "/api/tools/document-qa", resultType: "json",
+            formatResult: function (data) { return data.result; },
+            fields: [
+              { name: "file", type: "file", accept: ".pdf,.docx,.txt", label: "المستند", required: true },
+              { name: "question", type: "textarea", label: "سؤالك عن المستند", required: true },
+            ],
+          },
+          {
+            key: "duplicate-invoice-detect", group: "ai", icon: "🧾", color: "#ef4444", title: "اكتشاف الفواتير المكررة",
+            desc: "افحص ملف فواتير لاكتشاف الفواتير المكررة", endpoint: "/api/tools/duplicate-invoice-detect", resultType: "file",
+            fields: [
+              { name: "file", type: "file", accept: ".xlsx,.xls,.csv", label: "ملف الفواتير", required: true },
+            ],
+          },
+          {
+            key: "narrative-report", group: "ai", icon: "📚", color: "#3fcf8e", title: "تقرير تلقائي سردي",
+            desc: "حوّل بيانات Excel إلى تقرير PDF سردي مكتوب بالذكاء الاصطناعي", endpoint: "/api/tools/narrative-report", resultType: "file",
+            fields: [
+              { name: "file", type: "file", accept: ".xlsx,.xls,.csv", label: "ملف Excel أو CSV", required: true },
+              { name: "title", type: "text", label: "عنوان التقرير", value: "تقرير تحليلي" },
+            ],
+          },
         ];
 
         var grid = document.getElementById("toolsGrid");
