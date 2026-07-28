@@ -7,9 +7,11 @@
       (function () {
         try {
           var t = localStorage.getItem("auditflow-theme");
-          var d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          var d = t === "light" ? false : true;
           document.documentElement.classList.toggle("dark", d);
-        } catch (e) {}
+        } catch (e) {
+          document.documentElement.classList.add("dark");
+        }
       })();
     </script>
     <title>تسجيل الدخول | التطابق الأمثل | OptimalMatch</title>
@@ -22,29 +24,93 @@
         font-family: "IBM Plex Sans Arabic", system-ui, sans-serif;
       }
     </style>
+    <style>
+      body.login-shell {
+        --login-gold: #c9a24d;
+        --login-gold-soft: #e8cd85;
+        --login-gold-dim: rgba(201, 164, 77, 0.28);
+        --login-navy: #070b16;
+        --login-navy-2: #0d1424;
+        --login-navy-3: #131b30;
+        --login-cream: #f6f1e4;
+        --login-cream-2: #fdf9ef;
+      }
+      body.login-shell {
+        background: linear-gradient(180deg, var(--login-cream) 0%, #efe6d0 45%, #e7dbc0 100%) !important;
+      }
+      html.dark body.login-shell {
+        background: linear-gradient(180deg, var(--login-navy) 0%, var(--login-navy-2) 50%, var(--login-navy) 100%) !important;
+      }
+      @media (min-width: 768px) {
+        body.login-shell .login-aside {
+          background: linear-gradient(160deg, #0a0f1e 0%, #241a08 55%, #0a0f1e 100%) !important;
+          color: #f4e9cf !important;
+          border-inline-start: 1px solid var(--login-gold-dim);
+        }
+      }
+      body.login-shell .login-aside h2 { color: #f4e9cf; }
+      body.login-shell .login-aside p { color: #d9c9a3; }
+      body.login-shell .login-aside li { color: #e3d3a8; }
+      body.login-shell .login-logo-mark {
+        width: 72px;
+        height: 72px;
+        border-radius: 18px;
+        background: linear-gradient(160deg, #8a6a1f 0%, var(--login-gold) 45%, var(--login-gold-soft) 100%);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #1a1406;
+        box-shadow: 0 10px 28px rgba(201, 164, 77, 0.35);
+      }
+      body.login-shell .app-brand__mark {
+        background: linear-gradient(160deg, #8a6a1f 0%, var(--login-gold) 45%, var(--login-gold-soft) 100%) !important;
+        color: #1a1406 !important;
+      }
+      body.login-shell .theme-toggle-btn {
+        border-color: var(--login-gold-dim) !important;
+        color: var(--login-gold-soft) !important;
+      }
+      html.dark body.login-shell .theme-toggle-btn { color: var(--login-gold-soft) !important; }
+      body.login-shell .audit-cta-link {
+        background: linear-gradient(270deg, #8a6a1f 0%, var(--login-gold) 45%, var(--login-gold-soft) 100%) !important;
+      }
+      body.login-shell .login-card {
+        background: linear-gradient(175deg, var(--login-cream-2), #ffffff) !important;
+        border-color: rgba(180, 140, 60, 0.35) !important;
+      }
+      html.dark body.login-shell .login-card {
+        background: linear-gradient(175deg, var(--login-navy-2), var(--login-navy-3)) !important;
+        border-color: var(--login-gold-dim) !important;
+      }
+      body.login-shell .login-card h1 { color: #201a0c; }
+      html.dark body.login-shell .login-card h1 { color: #f4e9cf; }
+      body.login-shell .login-brand-label { color: #8a6a1f !important; }
+      html.dark body.login-shell .login-brand-label { color: var(--login-gold-soft) !important; }
+      body.login-shell footer { color: #8a7f63; }
+      html.dark body.login-shell footer { color: #8a93a8; }
+    </style>
   </head>
   <body class="login-shell text-slate-900 dark:text-slate-100 min-h-screen">
     <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
 
     <aside class="login-aside">
-      <div class="mb-6">
-        <img
-          src="/static/logo.png?v=15"
-          alt="التطابق الأمثل OptimalMatch"
-          class="mx-auto drop-shadow-lg rounded-xl"
-          style="width: 220px; height: 120px; object-fit: cover; object-position: top"
-        />
+      <div class="mb-6 flex justify-center">
+        <span class="login-logo-mark" aria-hidden="true">
+          <svg width="34" height="34" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" /><path d="M10.5 16.5L14.5 20.5L22 12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
       </div>
       <div class="flex items-center gap-3 mb-8">
         <span class="app-brand__mark" style="width: 3rem; height: 3rem">
           <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path d="M8 16l5 5 11-11" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" /><path d="M10.5 16.5L14.5 20.5L22 12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </span>
         <span class="app-brand__wordmark">
-          <span class="text-xl font-extrabold tracking-tight text-white" style="background: none; -webkit-text-fill-color: #ecfdf5; color: #ecfdf5">التطابق الأمثل</span>
-          <span class="text-xs font-extrabold tracking-wide opacity-90" dir="ltr" style="color: #6ee7b7">OptimalMatch</span>
-          <span class="text-[0.68rem] font-bold opacity-90" style="color: #c7f9e4">مطابقة مالية دقيقة بخطوات بسيطة</span>
+          <span class="text-xl font-extrabold tracking-tight" style="background: none; -webkit-text-fill-color: #f4e9cf; color: #f4e9cf">التطابق الأمثل</span>
+          <span class="text-xs font-extrabold tracking-wide opacity-90" dir="ltr" style="color: #e8cd85">OptimalMatch</span>
+          <span class="text-[0.68rem] font-bold opacity-90" style="color: #d9c48c">مطابقة مالية دقيقة بخطوات بسيطة</span>
         </span>
       </div>
       <h2>مطابقة مالية دقيقة بخطوات بسيطة</h2>
@@ -61,7 +127,7 @@
         <a href="/" class="app-brand login-hide-md" aria-label="التطابق الأمثل OptimalMatch">
           <span class="app-brand__mark" aria-hidden="true">
             <svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M8 16l5 5 11-11" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" /><path d="M10.5 16.5L14.5 20.5L22 12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </span>
           <span class="app-brand__wordmark">
@@ -75,17 +141,17 @@
 
       <main class="flex flex-1 items-center justify-center px-4 py-8">
         <div
-          class="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-8 relative overflow-hidden"
+          class="login-card w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-8 relative overflow-hidden"
         >
           <div class="absolute top-0 left-0 right-0 h-1 audit-cta-link opacity-90"></div>
           <div class="flex justify-center mb-6">
             <span class="app-brand__mark" style="width: 3.25rem; height: 3.25rem">
               <svg width="26" height="26" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                <path d="M8 16l5 5 11-11" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" /><path d="M10.5 16.5L14.5 20.5L22 12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
             </span>
           </div>
-          <p class="text-center text-xs font-extrabold text-emerald-700 dark:text-emerald-400 mb-1" dir="rtl">
+          <p class="login-brand-label text-center text-xs font-extrabold text-emerald-700 dark:text-emerald-400 mb-1" dir="rtl">
             التطابق الأمثل <span class="opacity-60 mx-1">|</span> <span dir="ltr">OptimalMatch</span>
           </p>
           <h1 class="text-2xl font-extrabold text-center text-slate-900 dark:text-slate-50">مرحباً بك</h1>
