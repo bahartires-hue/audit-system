@@ -7,9 +7,11 @@
       (function () {
         try {
           var t = localStorage.getItem("auditflow-theme");
-          var d = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+          var d = t === "light" ? false : true;
           document.documentElement.classList.toggle("dark", d);
-        } catch (e) {}
+        } catch (e) {
+          document.documentElement.classList.add("dark");
+        }
       })();
     </script>
     <title>الرئيسية | التطابق الأمثل OptimalMatch</title>
@@ -302,8 +304,8 @@
       </nav>
       <div class="op-support-card">
         <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:var(--gold-soft)"><path stroke-linecap="round" stroke-linejoin="round" d="M18 10a6 6 0 10-12 0v2a2 2 0 00-2 2v2a2 2 0 002 2h1v-6a5 5 0 0110 0v6h1a2 2 0 002-2v-2a2 2 0 00-2-2v-2z"/></svg>
-        <span style="font-size:0.62rem;font-weight:800;color:#e8cd85;">الدعم الفني</span>
-        <a href="/contact" style="font-size:0.58rem;font-weight:800;color:#8a93a8;">تواصل معنا</a>
+        <span style="font-size:0.62rem;font-weight:800;color:var(--gold-soft);">الدعم الفني</span>
+        <a href="/contact" style="font-size:0.58rem;font-weight:800;color:var(--text-muted);">تواصل معنا</a>
       </div>
     </aside>
 
@@ -329,14 +331,18 @@
         <button type="button" id="navMenuBtn" class="nav-toggle-btn nav-burger-only op-icon-btn" aria-controls="mobileNavDrawer" aria-expanded="false" aria-label="فتح القائمة">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/></svg>
         </button>
-        <div class="flex items-center gap-3">
+        <div class="min-w-0 flex flex-col">
+          <span style="font-weight:800;color:var(--text-heading);font-size:0.85rem;">الرئيسية</span>
+          <span style="font-size:0.62rem;font-weight:800;color:var(--text-muted);">التطابق الأمثل <span dir="ltr">OptimalMatch</span></span>
+        </div>
+        <div class="flex items-center gap-3" style="margin-inline-start:auto;">
           <div class="op-avatar" id="opAvatarInitial">؟</div>
           <div>
             <div class="op-profile-name" id="opProfileName">زائر</div>
             <div class="op-profile-role" id="opProfileRole">—</div>
           </div>
         </div>
-        <div class="flex items-center gap-2 ms-auto">
+        <div class="flex items-center gap-2">
           <button type="button" class="op-icon-btn" title="الإشعارات" aria-label="الإشعارات">
             <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
           </button>
