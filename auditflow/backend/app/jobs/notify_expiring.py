@@ -31,7 +31,7 @@ def main() -> None:
             try:
                 send_plain_email(
                     to_email=str(u.email),
-                    subject="تنبيه قرب انتهاء الاشتراك | OptimalMatch",
+                    subject="تنبيه قرب انتهاء الاشتراك | OptimalSuite AI",
                     body=(
                         f"مرحباً {u.username},\n\n"
                         f"اشتراكك ({u.plan_name}) سينتهي قريباً في {u.subscription_expires_at}.\n"

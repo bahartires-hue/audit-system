@@ -47,10 +47,10 @@ _HTML_NO_CACHE = {
     "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
     "Pragma": "no-cache",
     "Expires": "0",
-    "X-OptimalMatch-UI": UI_ASSET_VERSION,
+    "X-OptimalSuite-UI": UI_ASSET_VERSION,
 }
 
-app = FastAPI(title="OptimalMatch API | التطابق الأمثل")
+app = FastAPI(title="OptimalSuite AI API")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -105,7 +105,7 @@ async def ui_cache_headers(request: Request, call_next):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
-        response.headers["X-OptimalMatch-UI"] = UI_ASSET_VERSION
+        response.headers["X-OptimalSuite-UI"] = UI_ASSET_VERSION
     return response
 
 

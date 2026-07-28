@@ -41,7 +41,7 @@ router = APIRouter(tags=["auth"])
 def _default_admin_config() -> dict:
     return {
         "admin_contact": (os.getenv("AUDITFLOW_ADMIN_CONTACT") or "").strip(),
-        "company_name": "OptimalMatch",
+        "company_name": "OptimalSuite AI",
         "social_links": {
             "whatsapp": "https://wa.me/966558815838",
             "email": "mailto:auditsystem2030@gmail.com",
@@ -755,7 +755,7 @@ async def admin_notify_expiring(request: Request):
             try:
                 send_plain_email(
                     to_email=str(u.email),
-                    subject="تنبيه قرب انتهاء الاشتراك | OptimalMatch",
+                    subject="تنبيه قرب انتهاء الاشتراك | OptimalSuite AI",
                     body=(
                         f"مرحباً {u.username},\n\n"
                         f"اشتراكك ({u.plan_name}) سينتهي قريبًا في {u.subscription_expires_at}.\n"

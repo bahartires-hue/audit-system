@@ -982,10 +982,10 @@ function initNavAndTheme() {
 
   // Normalize brand spelling across pages.
   document.querySelectorAll(".app-brand__text").forEach((el) => {
-    el.textContent = "التطابق الأمثل";
+    el.textContent = "OptimalSuite AI";
   });
   document.querySelectorAll(".app-brand__en").forEach((el) => {
-    el.textContent = "OptimalMatch";
+    el.textContent = "OptimalSuite AI";
   });
 }
 

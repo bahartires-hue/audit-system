@@ -46,7 +46,7 @@ def send_password_reset_email(to_email: str, reset_link: str) -> None:
         raise RuntimeError("SMTP_FROM غير مضبوط")
 
     msg = EmailMessage()
-    msg["Subject"] = "استعادة كلمة المرور | التطابق الأمثل"
+    msg["Subject"] = "استعادة كلمة المرور | OptimalSuite AI"
     msg["From"] = sender
     msg["To"] = to_email
     msg.set_content(
@@ -79,10 +79,10 @@ def send_smtp_test_email(to_email: str) -> None:
     if not sender:
         raise RuntimeError("SMTP_FROM غير مضبوط")
     msg = EmailMessage()
-    msg["Subject"] = "SMTP Test | OptimalMatch"
+    msg["Subject"] = "SMTP Test | OptimalSuite AI"
     msg["From"] = sender
     msg["To"] = to_email
-    msg.set_content("SMTP test successful from OptimalMatch.")
+    msg.set_content("SMTP test successful from OptimalSuite AI.")
     with smtplib.SMTP(host, port, timeout=20) as smtp:
         smtp.ehlo()
         try:
