@@ -14,7 +14,7 @@
         }
       })();
     </script>
-    <title>المساعد الذكي | OptimalSuite AI</title>
+    <title>مركز أدوات الذكاء الاصطناعي | OptimalSuite AI</title>
     <link rel="icon" href="/static/favicon.svg?v=9" type="image/svg+xml" />
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
@@ -275,7 +275,76 @@
       body.op-dashboard .op-main .text-rose-600 { color: #c0435a !important; }
       body.op-dashboard .op-main details summary { color: var(--text-heading); }
 
-    </style>
+    
+      /* ============================== مركز أدوات الذكاء الاصطناعي: تبويبات + نافذة الأداة ============================== */
+      body.op-dashboard .op-tools-header {
+        display: flex; align-items: center; gap: 1rem; margin-bottom: 1.25rem;
+      }
+      body.op-dashboard .op-tools-header .op-shell-icon { font-size: 2.3rem; margin: 0; }
+      body.op-dashboard .op-tools-header h1 { color: var(--text-heading); font-size: 1.35rem; font-weight: 800; }
+      body.op-dashboard .op-tabs {
+        display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap;
+        border-bottom: 1px solid var(--gold-dim); padding-bottom: 0.75rem;
+      }
+      body.op-dashboard .op-tab-btn {
+        padding: 0.6rem 1.2rem; border-radius: 12px; border: 1px solid var(--gold-dim);
+        background: var(--surface-soft); color: var(--text-body); font-weight: 800; font-size: 0.85rem;
+        cursor: pointer; transition: all 0.15s ease;
+      }
+      body.op-dashboard .op-tab-btn:hover { border-color: var(--gold); color: var(--text-heading); }
+      body.op-dashboard .op-tab-btn--active {
+        background: linear-gradient(270deg, #8a6a1f 0%, var(--gold) 45%, var(--gold-soft) 100%);
+        color: #1a1406; border-color: transparent; box-shadow: 0 6px 16px rgba(180, 140, 60, 0.25);
+      }
+      body.op-dashboard .op-tab-panel { animation: opFadeIn 0.2s ease; }
+      @keyframes opFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+      body.op-dashboard .op-tool-modal-overlay {
+        position: fixed; inset: 0; background: rgba(20, 16, 6, 0.55); backdrop-filter: blur(2px);
+        display: flex; align-items: center; justify-content: center; z-index: 200; padding: 1rem;
+      }
+      body.op-dashboard .op-tool-modal {
+        background: linear-gradient(175deg, var(--bg-2), var(--bg-1)); border: 1px solid var(--gold-dim);
+        border-radius: 20px; padding: 1.5rem; width: 100%; max-width: 520px; max-height: 88vh; overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+      }
+      body.op-dashboard .op-tool-modal-head { display: flex; align-items: flex-start; gap: 0.85rem; margin-bottom: 1.1rem; }
+      body.op-dashboard .op-tool-modal-head h3 { color: var(--text-heading); font-weight: 800; font-size: 1.05rem; margin-bottom: 0.2rem; }
+      body.op-dashboard .op-tool-modal-head p { color: var(--text-muted); font-size: 0.78rem; font-weight: 700; margin: 0; }
+      body.op-dashboard .op-tool-modal-head button {
+        margin-inline-start: auto; background: transparent; border: none; color: var(--text-muted);
+        font-size: 1.1rem; cursor: pointer; line-height: 1;
+      }
+      body.op-dashboard .op-tool-modal-head button:hover { color: var(--text-heading); }
+      body.op-dashboard .op-tool-field { margin-bottom: 0.9rem; }
+      body.op-dashboard .op-tool-field label {
+        display: block; color: var(--text-heading); font-weight: 800; font-size: 0.8rem; margin-bottom: 0.35rem;
+      }
+      body.op-dashboard .op-tool-field input[type="text"],
+      body.op-dashboard .op-tool-field input[type="number"],
+      body.op-dashboard .op-tool-field input[type="password"],
+      body.op-dashboard .op-tool-field select {
+        width: 100%; padding: 0.6rem 0.75rem; border-radius: 10px; border: 1px solid var(--input-border);
+        background: var(--input-bg); color: var(--input-text); font-size: 0.85rem; font-weight: 600;
+      }
+      body.op-dashboard .op-tool-field input[type="file"] {
+        width: 100%; padding: 0.5rem; border-radius: 10px; border: 1px dashed var(--gold-dim);
+        background: var(--surface-soft); color: var(--text-body); font-size: 0.78rem; font-weight: 700;
+      }
+      body.op-dashboard .op-tool-modal-result {
+        margin-top: 0.5rem; margin-bottom: 1rem; padding: 0.85rem; border-radius: 12px;
+        background: var(--surface-soft); border: 1px solid var(--gold-dim); font-size: 0.8rem;
+        color: var(--text-body); white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow-y: auto;
+      }
+      body.op-dashboard .op-tool-modal-actions { display: flex; gap: 0.6rem; justify-content: flex-end; }
+      body.op-dashboard .op-tool-modal-actions button {
+        border: none; cursor: pointer; font-family: inherit;
+      }
+      body.op-dashboard .op-tool-btn-secondary {
+        padding: 0.55rem 1rem; border-radius: 10px; background: var(--surface-soft);
+        border: 1px solid var(--gold-dim) !important; color: var(--text-body); font-weight: 800; font-size: 0.8rem;
+      }
+</style>
   </head>
   <body class="op-dashboard erp-shell min-h-screen" data-report-type="dashboard">
     <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
@@ -291,7 +360,7 @@
         <a href="/matching" class="op-side-link nav-link nav-link--idle" data-nav="op-matching" title="مطابقة الحسابات"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a4 4 0 115.657 0l-.879.878a2 2 0 00-.586 1.415V19a1 1 0 01-1 1h-2a1 1 0 01-1-1v-.464a2 2 0 00-.586-1.415l-.879-.878z"/></svg></a>
         <a href="/branches-management" class="op-side-link nav-link nav-link--idle" data-nav="op-branches" title="إدارة الفروع"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21V7a2 2 0 012-2h6a2 2 0 012 2v14M13 21V11a2 2 0 012-2h4a2 2 0 012 2v10M7 9h2M7 13h2M7 17h2"/></svg></a>
         <a href="/hr" class="op-side-link nav-link nav-link--idle" data-nav="op-hr" title="الموارد البشرية"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-4-4"/></svg></a>
-        <a href="/finance" class="op-side-link nav-link nav-link--active" data-nav="op-finance" title="المساعد الذكي"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 8h6m-5 4h4m-6 4h8M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg></a>
+        <a href="/finance" class="op-side-link nav-link nav-link--active" data-nav="op-finance" title="مركز الأدوات الذكية"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 8h6m-5 4h4m-6 4h8M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg></a>
         <a href="/inventory-management" class="op-side-link nav-link nav-link--idle" data-nav="op-inventory" title="إدارة المخزون"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg></a>
         <a href="/suppliers" class="op-side-link nav-link nav-link--idle" data-nav="op-suppliers" title="إدارة المستندات"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13h1l2 7h11l2-7h1M8 13V7a4 4 0 118 0v6m-9 0h10"/></svg></a>
         <a href="/analytics" class="op-side-link nav-link nav-link--idle" data-nav="op-analytics" title="التقارير والتحليلات"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg></a>
@@ -315,7 +384,7 @@
         <a href="/matching" data-nav="op-matching" class="nav-link nav-link--idle">مطابقة الحسابات</a>
         <a href="/branches-management" data-nav="op-branches" class="nav-link nav-link--idle">إدارة الفروع</a>
         <a href="/hr" data-nav="op-hr" class="nav-link nav-link--idle">الموارد البشرية</a>
-        <a href="/finance" data-nav="op-finance" class="nav-link nav-link--active">المساعد الذكي</a>
+        <a href="/finance" data-nav="op-finance" class="nav-link nav-link--active">مركز الأدوات الذكية</a>
         <a href="/inventory-management" data-nav="op-inventory" class="nav-link nav-link--idle">إدارة المخزون</a>
         <a href="/suppliers" data-nav="op-suppliers" class="nav-link nav-link--idle">إدارة المستندات</a>
         <a href="/analytics" data-nav="op-analytics" class="nav-link nav-link--idle">التقارير والتحليلات</a>
@@ -337,7 +406,7 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
         </button>
         <div class="min-w-0 flex flex-col">
-          <span style="font-weight:800;color:var(--text-heading);font-size:0.85rem;">المساعد الذكي</span>
+          <span style="font-weight:800;color:var(--text-heading);font-size:0.85rem;">مركز الأدوات الذكية</span>
         </div>
         <div class="flex items-center gap-3" style="margin-inline-start:auto;">
           <div class="op-avatar" id="opAvatarInitial">؟</div>
@@ -361,34 +430,79 @@
       </header>
 
       <main class="op-main">
-        <div class="op-shell-card">
+        <div class="op-tools-header">
           <div class="op-shell-icon">🤖</div>
-          <div class="op-shell-badge">قيد التطوير 🚧</div>
-          <h1>المساعد الذكي</h1>
-          <p>مساعد ذكي يجاوب على استفساراتك ويحلل بيانات النظام نيابة عنك — سيتم تفعيل هذا القسم وبرمجته بالكامل قريبًا.</p>
-          <a href="/" class="op-module-btn">العودة للرئيسية ←</a>
+          <div>
+            <h1>مركز أدوات الذكاء الاصطناعي</h1>
+            <p style="margin:0;color:var(--text-muted);font-weight:700;font-size:0.85rem;">مساعدك الذكي وأدواتك الجاهزة في مكان واحد</p>
+          </div>
         </div>
 
-        <section class="op-modules-panel" style="margin-top:1.5rem;">
-          <div class="op-modules-head">
-            <h2>أدوات متاحة الآن ضمن المساعد الذكي</h2>
-            <span>جاهزة للاستخدام رغم أن القسم الرئيسي لسا قيد التطوير</span>
+        <div class="op-tabs" role="tablist">
+          <button class="op-tab-btn op-tab-btn--active" data-tab="assistant" type="button" role="tab">🤖 المساعد الذكي</button>
+          <button class="op-tab-btn" data-tab="tools" type="button" role="tab">🛠 الأدوات الذكية</button>
+          <button class="op-tab-btn" data-tab="experimental" type="button" role="tab">✨ ميزات تجريبية</button>
+        </div>
+
+        <div class="op-tab-panel" data-panel="assistant">
+          <div class="op-shell-card">
+            <div class="op-shell-icon">🤖</div>
+            <div class="op-shell-badge">قيد التطوير 🚧</div>
+            <h1>المساعد الذكي</h1>
+            <p>مساعد ذكي يجاوب على استفساراتك ويحلل بيانات النظام نيابة عنك — سيتم تفعيل هذا القسم وبرمجته بالكامل قريبًا.</p>
+            <a href="/" class="op-module-btn">العودة للرئيسية ←</a>
           </div>
-          <div class="op-modules-grid" style="grid-template-columns: repeat(2, 1fr); max-width: 560px;">
-            <div class="op-module-card">
-              <div class="op-module-icon" style="background:#3fcf8e22;color:#3fcf8e;">📥</div>
-              <div class="op-module-title">مستورد المنتجات</div>
-              <div class="op-module-desc">استيراد بيانات المنتجات دفعة واحدة عبر ملف</div>
-              <a href="/importer" class="op-module-btn">فتح الأداة ←</a>
+        </div>
+
+        <div class="op-tab-panel" data-panel="tools" style="display:none;">
+          <section class="op-modules-panel">
+            <div class="op-modules-head">
+              <h2>🛠 الأدوات الذكية</h2>
+              <span>13 أداة جاهزة للاستخدام الآن</span>
             </div>
-            <div class="op-module-card" data-nav="op-convert">
-              <div class="op-module-icon" style="background:#4fa3f722;color:#4fa3f7;">🔄</div>
-              <div class="op-module-title">تحويل الملفات</div>
-              <div class="op-module-desc">تحويل ملفات Excel وPDF وCSV بين الصيغ بسهولة</div>
-              <a href="/convert" class="op-module-btn">فتح الأداة ←</a>
+            <div class="op-modules-grid" id="toolsGrid" style="grid-template-columns: repeat(4, 1fr);">
+              <div class="op-module-card">
+                <div class="op-module-icon" style="background:#3fcf8e22;color:#3fcf8e;">📥</div>
+                <div class="op-module-title">مستورد المنتجات</div>
+                <div class="op-module-desc">استيراد بيانات المنتجات دفعة واحدة عبر ملف</div>
+                <a href="/importer" class="op-module-btn">فتح الأداة ←</a>
+              </div>
+              <div class="op-module-card" data-nav="op-convert">
+                <div class="op-module-icon" style="background:#4fa3f722;color:#4fa3f7;">🔄</div>
+                <div class="op-module-title">تحويل الملفات</div>
+                <div class="op-module-desc">تحويل ملفات Excel وPDF وCSV بين الصيغ بسهولة</div>
+                <a href="/convert" class="op-module-btn">فتح الأداة ←</a>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="op-tab-panel" data-panel="experimental" style="display:none;">
+          <div class="op-shell-card">
+            <div class="op-shell-icon">✨</div>
+            <div class="op-shell-badge">قريبًا</div>
+            <h1>ميزات تجريبية</h1>
+            <p>سيتم إضافة أدوات وتجارب جديدة هنا تباعًا فور اكتمالها.</p>
+          </div>
+        </div>
+
+        <div id="toolModalOverlay" class="op-tool-modal-overlay" style="display:none;">
+          <div class="op-tool-modal">
+            <div class="op-tool-modal-head">
+              <div id="toolModalIcon" class="op-module-icon" style="margin-bottom:0;"></div>
+              <div>
+                <h3 id="toolModalTitle"></h3>
+                <p id="toolModalDesc"></p>
+              </div>
+              <button id="toolModalClose" type="button" aria-label="إغلاق">✕</button>
+            </div>
+            <div id="toolModalFields" class="op-tool-modal-fields"></div>
+            <div id="toolModalResult" class="op-tool-modal-result" style="display:none;"></div>
+            <div class="op-tool-modal-actions">
+              <button id="toolModalSubmit" class="op-module-btn" type="button">تشغيل الأداة</button>
             </div>
           </div>
-        </section>
+        </div>
 
       </main>
     </div>
@@ -435,5 +549,280 @@
       })();
       
     </script>
-  </body>
+  
+    <script>
+      (function () {
+        var TOOLS = [
+          {
+            key: "pdf-merge", icon: "📎", color: "#4fa3f7", title: "دمج ملفات PDF",
+            desc: "ادمج عدة ملفات PDF في ملف واحد", endpoint: "/api/tools/pdf-merge", resultType: "file",
+            fields: [
+              { name: "files", type: "file", multiple: true, accept: ".pdf", label: "اختر ملفي PDF أو أكثر", required: true },
+            ],
+          },
+          {
+            key: "pdf-split", icon: "✂️", color: "#f76a4f", title: "تقسيم ملف PDF",
+            desc: "استخرج صفحات محددة من ملف PDF كملف أو أكثر", endpoint: "/api/tools/pdf-split", resultType: "file",
+            fields: [
+              { name: "file", type: "file", accept: ".pdf", label: "ملف PDF", required: true },
+              { name: "ranges", type: "text", label: "نطاق الصفحات (مثال: 1-2,4)", placeholder: "1-2,4" },
+            ],
+          },
+          {
+            key: "pdf-protect", icon: "🔒", color: "#c9a24d", title: "حماية / فك حماية PDF",
+            desc: "أضف كلمة مرور لملف PDF أو أزلها", endpoint: "/api/tools/pdf-protect", resultType: "file",
+            fields: [
+              { name: "file", type: "file", accept: ".pdf", label: "ملف PDF", required: true },
+              { name: "action", type: "select", label: "الإجراء", options: [
+                { value: "protect", label: "حماية بكلمة مرور" },
+                { value: "unprotect", label: "إزالة الحماية" },
+              ] },
+              { name: "password", type: "password", label: "كلمة المرور", required: true },
+            ],
+          },
+          {
+            key: "compress", icon: "🗜️", color: "#3fcf8e", title: "ضغط الملفات",
+            desc: "قلّل حجم الصور وملفات PDF بسهولة", endpoint: "/api/tools/compress", resultType: "file",
+            fields: [
+              { name: "file", type: "file", accept: ".pdf,.jpg,.jpeg,.png,.webp", label: "اختر صورة أو PDF", required: true },
+              { name: "quality", type: "number", label: "جودة الضغط (10-95)", value: "70" },
+            ],
+          },
+          {
+            key: "qrcode", icon: "🔳", color: "#8a6adf", title: "توليد رمز QR",
+            desc: "أنشئ رمز استجابة سريعة من نص أو رابط", endpoint: "/api/tools/qrcode", resultType: "file",
+            fields: [
+              { name: "text", type: "text", label: "النص أو الرابط", required: true },
+              { name: "size", type: "number", label: "حجم الرمز", value: "10" },
+            ],
+          },
+          {
+            key: "barcode", icon: "📊", color: "#4f9fc9", title: "توليد باركود",
+            desc: "أنشئ باركود لمنتج أو رمز", endpoint: "/api/tools/barcode", resultType: "file",
+            fields: [
+              { name: "text", type: "text", label: "النص أو الرقم", required: true },
+              { name: "barcode_type", type: "select", label: "نوع الباركود", options: [
+                { value: "code128", label: "Code128" },
+                { value: "ean13", label: "EAN-13" },
+                { value: "ean8", label: "EAN-8" },
+                { value: "code39", label: "Code39" },
+                { value: "upca", label: "UPC-A" },
+              ] },
+            ],
+          },
+          {
+            key: "date-convert", icon: "🗓️", color: "#cf8e3f", title: "محول التاريخ الهجري/الميلادي",
+            desc: "حوّل التاريخ بين الهجري والميلادي", endpoint: "/api/tools/date-convert", resultType: "json",
+            formatResult: function (data) { return (data.label || "النتيجة") + ": " + data.result; },
+            fields: [
+              { name: "date", type: "text", label: "التاريخ (YYYY-MM-DD)", placeholder: "2026-07-28", required: true },
+              { name: "direction", type: "select", label: "الاتجاه", options: [
+                { value: "g2h", label: "ميلادي ← هجري" },
+                { value: "h2g", label: "هجري ← ميلادي" },
+              ] },
+            ],
+          },
+          {
+            key: "excel-clean", icon: "🧹", color: "#3fcf8e", title: "منظف ملفات Excel",
+            desc: "احذف التكرارات والصفوف الفارغة ونظّف البيانات", endpoint: "/api/tools/excel-clean", resultType: "file",
+            fields: [
+              { name: "file", type: "file", accept: ".xlsx,.xls,.csv", label: "ملف Excel أو CSV", required: true },
+            ],
+          },
+          {
+            key: "excel-report", icon: "📈", color: "#4fa3f7", title: "تقرير Excel برسوم بيانية",
+            desc: "حوّل بياناتك إلى تقرير PDF مع رسم بياني", endpoint: "/api/tools/excel-report", resultType: "file",
+            fields: [
+              { name: "file", type: "file", accept: ".xlsx,.xls,.csv", label: "ملف Excel أو CSV", required: true },
+              { name: "title", type: "text", label: "عنوان التقرير", value: "تقرير البيانات" },
+            ],
+          },
+          {
+            key: "ocr", icon: "🔎", color: "#8a6adf", title: "استخراج النص من الصور (OCR)",
+            desc: "استخرج النص من الصور أو صفحات PDF الممسوحة ضوئيًا", endpoint: "/api/tools/ocr", resultType: "text",
+            formatResult: function (data) { return data.text || "لم يتم العثور على نص"; },
+            fields: [
+              { name: "file", type: "file", accept: ".jpg,.jpeg,.png,.webp,.gif,.pdf", label: "اختر صورة أو ملف PDF", required: true },
+            ],
+          },
+        ];
+
+        var grid = document.getElementById("toolsGrid");
+        if (grid) {
+          var cardsHtml = TOOLS.map(function (t) {
+            return (
+              '<div class="op-module-card" data-tool-key="' + t.key + '" style="cursor:pointer;">' +
+              '<div class="op-module-icon" style="background:' + t.color + '22;color:' + t.color + ';">' + t.icon + "</div>" +
+              '<div class="op-module-title">' + t.title + "</div>" +
+              '<div class="op-module-desc">' + t.desc + "</div>" +
+              '<button type="button" class="op-module-btn" style="border:none;">فتح الأداة ←</button>' +
+              "</div>"
+            );
+          }).join("");
+          grid.insertAdjacentHTML("beforeend", cardsHtml);
+        }
+
+        var overlay = document.getElementById("toolModalOverlay");
+        var modalIcon = document.getElementById("toolModalIcon");
+        var modalTitle = document.getElementById("toolModalTitle");
+        var modalDesc = document.getElementById("toolModalDesc");
+        var modalFields = document.getElementById("toolModalFields");
+        var modalResult = document.getElementById("toolModalResult");
+        var modalSubmit = document.getElementById("toolModalSubmit");
+        var modalClose = document.getElementById("toolModalClose");
+        var currentTool = null;
+
+        function fieldInputHtml(f) {
+          var id = "toolField_" + f.name;
+          if (f.type === "select") {
+            var opts = (f.options || []).map(function (o) {
+              return '<option value="' + o.value + '">' + o.label + "</option>";
+            }).join("");
+            return '<select id="' + id + '">' + opts + "</select>";
+          }
+          if (f.type === "file") {
+            var multi = f.multiple ? " multiple" : "";
+            var accept = f.accept ? ' accept="' + f.accept + '"' : "";
+            return '<input type="file" id="' + id + '"' + multi + accept + " />";
+          }
+          var val = f.value !== undefined ? ' value="' + f.value + '"' : "";
+          var placeholder = f.placeholder ? ' placeholder="' + f.placeholder + '"' : "";
+          return '<input type="' + f.type + '" id="' + id + '"' + val + placeholder + " />";
+        }
+
+        function openToolModal(tool) {
+          currentTool = tool;
+          modalIcon.style.background = tool.color + "22";
+          modalIcon.style.color = tool.color;
+          modalIcon.textContent = tool.icon;
+          modalTitle.textContent = tool.title;
+          modalDesc.textContent = tool.desc;
+          modalFields.innerHTML = tool.fields.map(function (f) {
+            return (
+              '<div class="op-tool-field">' +
+              (f.label ? "<label>" + f.label + "</label>" : "") +
+              fieldInputHtml(f) +
+              "</div>"
+            );
+          }).join("");
+          modalResult.style.display = "none";
+          modalResult.textContent = "";
+          modalSubmit.textContent = "تشغيل الأداة";
+          overlay.style.display = "flex";
+        }
+
+        function closeToolModal() {
+          overlay.style.display = "none";
+          currentTool = null;
+        }
+
+        function parseDownloadFilename(contentDisposition, fallback) {
+          var cd = contentDisposition || "";
+          var utf = cd.match(/filename\*=UTF-8''([^;\s]+)/i);
+          if (utf) {
+            try { return decodeURIComponent(utf[1].trim()); } catch (e) { return utf[1].trim(); }
+          }
+          var m = cd.match(/filename\s*=\s*"?([^";\n]+)"?/i);
+          if (m) return m[1].trim();
+          return fallback;
+        }
+
+        modalClose.addEventListener("click", closeToolModal);
+        overlay.addEventListener("click", function (e) {
+          if (e.target === overlay) closeToolModal();
+        });
+
+        document.addEventListener("click", function (e) {
+          var card = e.target.closest("[data-tool-key]");
+          if (!card) return;
+          var tool = TOOLS.find(function (t) { return t.key === card.getAttribute("data-tool-key"); });
+          if (tool) openToolModal(tool);
+        });
+
+        modalSubmit.addEventListener("click", async function () {
+          if (!currentTool) return;
+          var fd = new FormData();
+          for (var i = 0; i < currentTool.fields.length; i++) {
+            var f = currentTool.fields[i];
+            var el = document.getElementById("toolField_" + f.name);
+            if (!el) continue;
+            if (f.type === "file") {
+              if (f.multiple) {
+                if (!el.files || el.files.length < 2) {
+                  showToast("الرجاء اختيار ملفين على الأقل", "#ef4444");
+                  return;
+                }
+                for (var j = 0; j < el.files.length; j++) fd.append(f.name, el.files[j]);
+              } else {
+                if (f.required && (!el.files || !el.files.length)) {
+                  showToast("الرجاء اختيار ملف", "#ef4444");
+                  return;
+                }
+                if (el.files && el.files.length) fd.append(f.name, el.files[0]);
+              }
+            } else {
+              var v = el.value || "";
+              if (f.required && !v.trim()) {
+                showToast("الرجاء تعبئة كل الحقول المطلوبة", "#ef4444");
+                return;
+              }
+              fd.append(f.name, v);
+            }
+          }
+
+          setLoading(modalSubmit, true, "جارٍ التنفيذ...");
+          try {
+            syncCsrfFromCookie();
+            var csrf = localStorage.getItem("csrf_token") || "";
+            var res = await fetch(currentTool.endpoint, {
+              method: "POST",
+              body: fd,
+              headers: { "X-CSRF-Token": csrf },
+              credentials: "include",
+            });
+            if (!res.ok) throw new Error(await readErrorMessage(res));
+
+            if (currentTool.resultType === "file") {
+              var blob = await res.blob();
+              var filename = parseDownloadFilename(res.headers.get("Content-Disposition"), currentTool.key + "-result");
+              var a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = filename;
+              document.body.appendChild(a);
+              a.click();
+              URL.revokeObjectURL(a.href);
+              a.remove();
+              modalResult.style.display = "block";
+              modalResult.textContent = "تم التنفيذ بنجاح، وبدأ تنزيل الملف (" + filename + ") ✔️";
+              showToast("تم التنفيذ والتنزيل ✔️", "#10b981");
+            } else {
+              var data = await res.json();
+              var text = currentTool.formatResult ? currentTool.formatResult(data) : JSON.stringify(data);
+              modalResult.style.display = "block";
+              modalResult.textContent = text;
+              showToast("تم التنفيذ بنجاح ✔️", "#10b981");
+            }
+          } catch (e) {
+            modalResult.style.display = "block";
+            modalResult.textContent = e.message || "حدث خطأ أثناء تنفيذ الأداة";
+            showToast(e.message || "فشل تنفيذ الأداة", "#ef4444");
+          } finally {
+            setLoading(modalSubmit, false, "تشغيل الأداة");
+          }
+        });
+
+        var tabButtons = document.querySelectorAll(".op-tab-btn");
+        var tabPanels = document.querySelectorAll(".op-tab-panel");
+        tabButtons.forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var key = btn.getAttribute("data-tab");
+            tabButtons.forEach(function (b) { b.classList.toggle("op-tab-btn--active", b === btn); });
+            tabPanels.forEach(function (p) {
+              p.style.display = p.getAttribute("data-panel") === key ? "" : "none";
+            });
+          });
+        });
+      })();
+    </script>
+</body>
 </html>

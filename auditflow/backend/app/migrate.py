@@ -19,6 +19,7 @@ def _migrate_postgresql() -> None:
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences_json JSON DEFAULT '{}'::json",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_pages JSON",
+        "ALTER TABLE documents ADD COLUMN IF NOT EXISTS extracted_text TEXT",
         # items
         "ALTER TABLE items ADD COLUMN IF NOT EXISTS bolt_pattern VARCHAR",
         "ALTER TABLE items ADD COLUMN IF NOT EXISTS barcode VARCHAR",
@@ -124,6 +125,12 @@ def run_migrations() -> None:
                 conn.execute(text("ALTER TABLE users ADD COLUMN preferences_json JSON"))
             if "allowed_pages" not in ucols:
                 conn.execute(text("ALTER TABLE users ADD COLUMN allowed_pages JSON"))
+
+        r_docs = conn.execute(text("PRAGMA table_info(documents)"))
+        doc_cols = [row[1] for row in r_docs.fetchall()]
+        if doc_cols:
+            if "extracted_text" not in doc_cols:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN extracted_text TEXT"))
 
         r_items = conn.execute(text("PRAGMA table_info(items)"))
         item_cols = [row[1] for row in r_items.fetchall()]

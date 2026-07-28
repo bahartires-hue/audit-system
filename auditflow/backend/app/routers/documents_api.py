@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import io
 import os
 import uuid
 from pathlib import Path
@@ -27,6 +28,7 @@ _ALLOWED_SUFFIXES = (
     ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp",
     ".doc", ".docx", ".xls", ".xlsx", ".csv", ".zip", ".txt",
 )
+_MAX_EXTRACT_CHARS = 200_000
 
 # نفس منطق حساب مجلد الرفع في main.py (auditflow/uploads أو AUDITFLOW_DATA_ROOT/uploads)،
 # محسوب محليًا هنا لتفادي استيراد دائري مع main.py.
@@ -49,8 +51,61 @@ def _attachment_headers(download_name: str) -> dict:
     ext = Path(raw).suffix
     ascii_fallback = f"download{ext}" if ext else "download.bin"
     return {
-        "Content-Disposition": f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quote(raw, safe='')}"
+        "Content-Disposition": f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8\'\'{quote(raw, safe='')}"
     }
+
+
+def _extract_text_best_effort(content: bytes, suffix: str) -> str:
+    """محاولة استخراج نص من الملف لأغراض البحث الداخلي. لا يرفع أي استثناء أبداً."""
+    try:
+        suf = (suffix or "").lower()
+        if suf == ".pdf":
+            import pdfplumber
+
+            parts = []
+            with pdfplumber.open(io.BytesIO(content)) as pdf:
+                for page in pdf.pages[:60]:
+                    txt = page.extract_text() or ""
+                    if txt:
+                        parts.append(txt)
+            return "\n".join(parts)[:_MAX_EXTRACT_CHARS]
+        if suf in (".xlsx", ".xls"):
+            import pandas as pd
+
+            frames = pd.read_excel(io.BytesIO(content), sheet_name=None, dtype=str)
+            parts = []
+            for _name, df in frames.items():
+                parts.append(df.to_csv(index=False))
+            return "\n".join(parts)[:_MAX_EXTRACT_CHARS]
+        if suf == ".csv":
+            try:
+                return content.decode("utf-8-sig")[:_MAX_EXTRACT_CHARS]
+            except Exception:
+                return content.decode("utf-8", errors="ignore")[:_MAX_EXTRACT_CHARS]
+        if suf == ".txt":
+            try:
+                return content.decode("utf-8-sig")[:_MAX_EXTRACT_CHARS]
+            except Exception:
+                return content.decode("utf-8", errors="ignore")[:_MAX_EXTRACT_CHARS]
+    except Exception:
+        return ""
+    return ""
+
+
+def _make_snippet(text: str, query: str, radius: int = 60) -> str:
+    if not text or not query:
+        return ""
+    low = text.lower()
+    qn = query.lower()
+    idx = low.find(qn)
+    if idx < 0:
+        return ""
+    start = max(0, idx - radius)
+    end = min(len(text), idx + len(query) + radius)
+    snippet = text[start:end].strip().replace("\n", " ")
+    prefix = "…" if start > 0 else ""
+    suffix = "…" if end < len(text) else ""
+    return f"{prefix}{snippet}{suffix}"
 
 
 @router.post("")
@@ -83,6 +138,8 @@ async def upload_document(
         with open(saved_path, "wb") as f:
             f.write(content)
 
+        extracted = _extract_text_best_effort(content, suffix)
+
         doc = Document(
             id=uuid.uuid4().hex,
             user_id=user.id,
@@ -92,6 +149,7 @@ async def upload_document(
             stored_filename=saved_name,
             size_bytes=len(content),
             notes=(notes or "").strip()[:2000],
+            extracted_text=extracted or None,
         )
         db.add(doc)
         db.commit()
@@ -135,21 +193,31 @@ def list_documents(
                 users[u.id] = u.username
         items = []
         for d in rows:
-            if qn and qn not in (d.title or "").lower() and qn not in (d.original_filename or "").lower():
-                continue
-            items.append(
-                {
-                    "id": d.id,
-                    "doc_type": d.doc_type,
-                    "doc_type_label": DOC_TYPE_LABELS_AR.get(d.doc_type, d.doc_type),
-                    "title": d.title,
-                    "original_filename": d.original_filename,
-                    "size_bytes": d.size_bytes,
-                    "notes": d.notes or "",
-                    "uploaded_by": users.get(d.user_id, "-"),
-                    "created_at": d.created_at.isoformat() + "Z" if d.created_at else None,
-                }
-            )
+            haystack_title = (d.title or "").lower()
+            haystack_name = (d.original_filename or "").lower()
+            haystack_text = (d.extracted_text or "").lower()
+            matched_in_content = False
+            if qn:
+                in_title = qn in haystack_title
+                in_name = qn in haystack_name
+                in_text = qn in haystack_text
+                if not (in_title or in_name or in_text):
+                    continue
+                matched_in_content = in_text and not in_title and not in_name
+            item = {
+                "id": d.id,
+                "doc_type": d.doc_type,
+                "doc_type_label": DOC_TYPE_LABELS_AR.get(d.doc_type, d.doc_type),
+                "title": d.title,
+                "original_filename": d.original_filename,
+                "size_bytes": d.size_bytes,
+                "notes": d.notes or "",
+                "uploaded_by": users.get(d.user_id, "-"),
+                "created_at": d.created_at.isoformat() + "Z" if d.created_at else None,
+            }
+            if qn and matched_in_content:
+                item["match_snippet"] = _make_snippet(d.extracted_text or "", q.strip())
+            items.append(item)
         return {"items": items, "types": [{"key": k, "label": v} for k, v in DOC_TYPE_LABELS_AR.items()]}
     finally:
         db.close()

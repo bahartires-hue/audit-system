@@ -96,6 +96,7 @@ class Document(Base):
     stored_filename = Column(String, nullable=False)
     size_bytes = Column(Integer, nullable=False, default=0)
     notes = Column(Text, nullable=True)
+    extracted_text = Column(Text, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
 

@@ -24,6 +24,7 @@ from .rate_limit import limiter
 from .routers.auth_api import router as auth_router
 from .routers.cashierko_api import router as cashierko_router
 from .routers.documents_api import router as documents_router
+from .routers.toolbox_api import router as toolbox_router
 from .routes.importer import router as importer_router
 from .routers.smartpos_v2_api import router as smartpos_v2_router
 from .routers.trade_api import router as trade_router
@@ -136,6 +137,7 @@ app.include_router(auth_router)
 app.include_router(trade_router)
 app.include_router(cashierko_router)
 app.include_router(documents_router)
+app.include_router(toolbox_router)
 app.include_router(smartpos_v2_router)
 app.include_router(importer_router)
 

@@ -20,3 +20,8 @@ pytest
 httpx
 openai>=1.0.0
 cloudinary
+pypdf
+qrcode
+python-barcode
+hijridate
+Pillow
