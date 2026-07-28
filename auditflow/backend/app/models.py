@@ -85,6 +85,20 @@ class InviteCode(Base):
     disabled = Column(Integer, nullable=False, default=0)
 
 
+class Document(Base):
+    __tablename__ = "documents"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    doc_type = Column(String, nullable=False, default="file")  # invoice | contract | file | attachment
+    title = Column(String, nullable=False)
+    original_filename = Column(String, nullable=False)
+    stored_filename = Column(String, nullable=False)
+    size_bytes = Column(Integer, nullable=False, default=0)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
 

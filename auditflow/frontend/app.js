@@ -1003,17 +1003,18 @@ async function applyPagePermissionsUI() {
     }
   } catch (e) {}
 
-  const navLinks = document.querySelectorAll('a[data-nav^="op-"]');
-  if (!navLinks.length) return;
+  // يشمل روابط الشريط الجانبي (a[data-nav]) وأيضًا بطاقات "الأنظمة المتاحة" في الرئيسية (div.op-module-card[data-nav]).
+  const navEls = document.querySelectorAll('[data-nav^="op-"]');
+  if (!navEls.length) return;
   try {
     const me = await apiGet("/auth/me");
     if (!me || !me.username) return;
     if (me.is_admin) return; // المدير يرى كل شيء دائمًا
     const allowed = new Set(me.allowed_pages || []);
-    navLinks.forEach((a) => {
-      const key = a.getAttribute("data-nav");
+    navEls.forEach((el) => {
+      const key = el.getAttribute("data-nav");
       if (key === "op-home") return; // الرئيسية متاحة دائمًا
-      if (!allowed.has(key)) a.style.display = "none";
+      if (!allowed.has(key)) el.style.display = "none";
     });
   } catch (e) {}
 }
