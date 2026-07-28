@@ -187,6 +187,12 @@
       body.op-dashboard .op-modules-head span { color: var(--text-muted); font-size: 0.8rem; font-weight: 700; }
       body.op-dashboard .op-modules-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
       @media (max-width: 1024px) { body.op-dashboard .op-modules-grid { grid-template-columns: repeat(2, 1fr); } }
+      body.op-dashboard .op-btn-chip {
+        border: 1px solid var(--gold-dim); background: var(--bg-2); color: var(--text-heading);
+        border-radius: 999px; padding: 6px 14px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: all 0.15s ease;
+      }
+      body.op-dashboard .op-btn-chip:hover { filter: brightness(1.05); }
+      body.op-dashboard .op-btn-chip.active { background: var(--gold); color: #1a1200; border-color: var(--gold); }
       @media (max-width: 600px) { body.op-dashboard .op-modules-grid { grid-template-columns: 1fr; } }
       body.op-dashboard .op-module-card {
         background: var(--surface-soft);
@@ -459,17 +465,24 @@
         <div class="op-tab-panel" data-panel="tools" style="display:none;">
           <section class="op-modules-panel">
             <div class="op-modules-head">
-              <h2>🛠 الأدوات الذكية</h2>
-              <span>13 أداة جاهزة للاستخدام الآن</span>
+              <h2>⚡ مركز أدوات الذكاء الاصطناعي</h2>
+              <span id="toolsCountLabel">أداة جاهزة للاستخدام الآن</span>
+            </div>
+            <div class="op-tool-filters" id="toolFilters" style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 16px;">
+              <button type="button" class="op-btn-chip active" data-filter="all">الكل</button>
+              <button type="button" class="op-btn-chip" data-filter="files">📄 ملفات</button>
+              <button type="button" class="op-btn-chip" data-filter="excel">📊 Excel</button>
+              <button type="button" class="op-btn-chip" data-filter="ai">🧠 أدوات AI</button>
+              <button type="button" class="op-btn-chip" data-filter="quick">⚡ أدوات سريعة</button>
             </div>
             <div class="op-modules-grid" id="toolsGrid" style="grid-template-columns: repeat(4, 1fr);">
-              <div class="op-module-card">
+              <div class="op-module-card" data-group="quick">
                 <div class="op-module-icon" style="background:#3fcf8e22;color:#3fcf8e;">📥</div>
                 <div class="op-module-title">مستورد المنتجات</div>
                 <div class="op-module-desc">استيراد بيانات المنتجات دفعة واحدة عبر ملف</div>
                 <a href="/importer" class="op-module-btn">فتح الأداة ←</a>
               </div>
-              <div class="op-module-card" data-nav="op-convert">
+              <div class="op-module-card" data-nav="op-convert" data-group="files">
                 <div class="op-module-icon" style="background:#4fa3f722;color:#4fa3f7;">🔄</div>
                 <div class="op-module-title">تحويل الملفات</div>
                 <div class="op-module-desc">تحويل ملفات Excel وPDF وCSV بين الصيغ بسهولة</div>
@@ -556,14 +569,14 @@
       (function () {
         var TOOLS = [
           {
-            key: "pdf-merge", icon: "📎", color: "#4fa3f7", title: "دمج ملفات PDF",
+            key: "pdf-merge", group: "files", icon: "📎", color: "#4fa3f7", title: "دمج ملفات PDF",
             desc: "ادمج عدة ملفات PDF في ملف واحد", endpoint: "/api/tools/pdf-merge", resultType: "file",
             fields: [
               { name: "files", type: "file", multiple: true, accept: ".pdf", label: "اختر ملفي PDF أو أكثر", required: true },
             ],
           },
           {
-            key: "pdf-split", icon: "✂️", color: "#f76a4f", title: "تقسيم ملف PDF",
+            key: "pdf-split", group: "files", icon: "✂️", color: "#f76a4f", title: "تقسيم ملف PDF",
             desc: "استخرج صفحات محددة من ملف PDF كملف أو أكثر", endpoint: "/api/tools/pdf-split", resultType: "file",
             fields: [
               { name: "file", type: "file", accept: ".pdf", label: "ملف PDF", required: true },
@@ -571,7 +584,7 @@
             ],
           },
           {
-            key: "pdf-protect", icon: "🔒", color: "#c9a24d", title: "حماية / فك حماية PDF",
+            key: "pdf-protect", group: "files", icon: "🔒", color: "#c9a24d", title: "حماية / فك حماية PDF",
             desc: "أضف كلمة مرور لملف PDF أو أزلها", endpoint: "/api/tools/pdf-protect", resultType: "file",
             fields: [
               { name: "file", type: "file", accept: ".pdf", label: "ملف PDF", required: true },
@@ -583,7 +596,7 @@
             ],
           },
           {
-            key: "compress", icon: "🗜️", color: "#3fcf8e", title: "ضغط الملفات",
+            key: "compress", group: "files", icon: "🗜️", color: "#3fcf8e", title: "ضغط الملفات",
             desc: "قلّل حجم الصور وملفات PDF بسهولة", endpoint: "/api/tools/compress", resultType: "file",
             fields: [
               { name: "file", type: "file", accept: ".pdf,.jpg,.jpeg,.png,.webp", label: "اختر صورة أو PDF", required: true },
@@ -591,7 +604,7 @@
             ],
           },
           {
-            key: "qrcode", icon: "🔳", color: "#8a6adf", title: "توليد رمز QR",
+            key: "qrcode", group: "quick", icon: "🔳", color: "#8a6adf", title: "توليد رمز QR",
             desc: "أنشئ رمز استجابة سريعة من نص أو رابط", endpoint: "/api/tools/qrcode", resultType: "file",
             fields: [
               { name: "text", type: "text", label: "النص أو الرابط", required: true },
@@ -599,7 +612,7 @@
             ],
           },
           {
-            key: "barcode", icon: "📊", color: "#4f9fc9", title: "توليد باركود",
+            key: "barcode", group: "quick", icon: "📊", color: "#4f9fc9", title: "توليد باركود",
             desc: "أنشئ باركود لمنتج أو رمز", endpoint: "/api/tools/barcode", resultType: "file",
             fields: [
               { name: "text", type: "text", label: "النص أو الرقم", required: true },
@@ -613,7 +626,7 @@
             ],
           },
           {
-            key: "date-convert", icon: "🗓️", color: "#cf8e3f", title: "محول التاريخ الهجري/الميلادي",
+            key: "date-convert", group: "quick", icon: "🗓️", color: "#cf8e3f", title: "محول التاريخ الهجري/الميلادي",
             desc: "حوّل التاريخ بين الهجري والميلادي", endpoint: "/api/tools/date-convert", resultType: "json",
             formatResult: function (data) { return (data.label || "النتيجة") + ": " + data.result; },
             fields: [
@@ -625,14 +638,14 @@
             ],
           },
           {
-            key: "excel-clean", icon: "🧹", color: "#3fcf8e", title: "منظف ملفات Excel",
+            key: "excel-clean", group: "excel", icon: "🧹", color: "#3fcf8e", title: "منظف ملفات Excel",
             desc: "احذف التكرارات والصفوف الفارغة ونظّف البيانات", endpoint: "/api/tools/excel-clean", resultType: "file",
             fields: [
               { name: "file", type: "file", accept: ".xlsx,.xls,.csv", label: "ملف Excel أو CSV", required: true },
             ],
           },
           {
-            key: "excel-report", icon: "📈", color: "#4fa3f7", title: "تقرير Excel برسوم بيانية",
+            key: "excel-report", group: "excel", icon: "📈", color: "#4fa3f7", title: "تقرير Excel برسوم بيانية",
             desc: "حوّل بياناتك إلى تقرير PDF مع رسم بياني", endpoint: "/api/tools/excel-report", resultType: "file",
             fields: [
               { name: "file", type: "file", accept: ".xlsx,.xls,.csv", label: "ملف Excel أو CSV", required: true },
@@ -640,11 +653,193 @@
             ],
           },
           {
-            key: "ocr", icon: "🔎", color: "#8a6adf", title: "استخراج النص من الصور (OCR)",
+            key: "ocr", group: "files", icon: "🔎", color: "#8a6adf", title: "استخراج النص من الصور (OCR)",
             desc: "استخرج النص من الصور أو صفحات PDF الممسوحة ضوئيًا", endpoint: "/api/tools/ocr", resultType: "text",
             formatResult: function (data) { return data.text || "لم يتم العثور على نص"; },
             fields: [
               { name: "file", type: "file", accept: ".jpg,.jpeg,.png,.webp,.gif,.pdf", label: "اختر صورة أو ملف PDF", required: true },
+            ],
+          },
+{
+            key: "sku-generator", group: "quick", icon: "🏷️", color: "#4f9fc9", title: "مولد أكواد SKU",
+            desc: "أنشئ دفعة من أكواد SKU لمنتجاتك تلقائيًا", endpoint: "/api/tools/sku-generator", resultType: "json",
+            formatResult: function (data) { return (data.items || []).join("\n"); },
+            fields: [
+              { name: "prefix", type: "text", label: "البادئة", value: "SKU" },
+              { name: "category", type: "text", label: "رمز التصنيف (اختياري)" },
+              { name: "start_number", type: "number", label: "يبدأ من رقم", value: "1" },
+              { name: "count", type: "number", label: "عدد الأكواد", value: "10" },
+              { name: "digits", type: "number", label: "عدد الخانات الرقمية", value: "5" },
+            ],
+          },
+          {
+            key: "item-number-generator", group: "quick", icon: "🔢", color: "#4f9fc9", title: "مولد أرقام الأصناف",
+            desc: "أنشئ أرقام أصناف تسلسلية مع إمكانية إضافة التاريخ", endpoint: "/api/tools/item-number-generator", resultType: "json",
+            formatResult: function (data) { return (data.items || []).join("\n"); },
+            fields: [
+              { name: "prefix", type: "text", label: "البادئة", value: "ITM" },
+              { name: "start_number", type: "number", label: "يبدأ من رقم", value: "1" },
+              { name: "count", type: "number", label: "عدد الأرقام", value: "10" },
+              { name: "digits", type: "number", label: "عدد الخانات الرقمية", value: "6" },
+              { name: "use_date", type: "checkbox", label: "إضافة تاريخ اليوم" },
+            ],
+          },
+          {
+            key: "password-generator", group: "quick", icon: "🔑", color: "#8a6adf", title: "مولد كلمات المرور",
+            desc: "أنشئ كلمات مرور قوية وعشوائية بدفعة واحدة", endpoint: "/api/tools/password-generator", resultType: "json",
+            formatResult: function (data) { return (data.items || []).join("\n"); },
+            fields: [
+              { name: "length", type: "number", label: "طول كلمة المرور", value: "16" },
+              { name: "count", type: "number", label: "عدد كلمات المرور", value: "5" },
+              { name: "include_uppercase", type: "checkbox", label: "أحرف كبيرة", value: true },
+              { name: "include_numbers", type: "checkbox", label: "أرقام", value: true },
+              { name: "include_symbols", type: "checkbox", label: "رموز خاصة", value: true },
+            ],
+          },
+          {
+            key: "percentage-calculator", group: "quick", icon: "📐", color: "#cf8e3f", title: "حاسبة النسب المئوية",
+            desc: "احسب النسبة المئوية أو نسبة التغيير بين رقمين", endpoint: "/api/tools/percentage-calculator", resultType: "json",
+            formatResult: function (data) { return data.label; },
+            fields: [
+              { name: "mode", type: "select", label: "نوع الحساب", options: [
+                { value: "percent_of", label: "نسبة % من رقم" },
+                { value: "what_percent", label: "رقم يمثل كم % من رقم آخر" },
+                { value: "change", label: "نسبة التغيير بين رقمين" },
+              ] },
+              { name: "value1", type: "number", label: "الرقم الأول", required: true },
+              { name: "value2", type: "number", label: "الرقم الثاني", required: true },
+            ],
+          },
+          {
+            key: "tax-calculator", group: "quick", icon: "🧾", color: "#c9a24d", title: "حاسبة الضريبة",
+            desc: "احسب ضريبة القيمة المضافة إضافة أو استخراجًا", endpoint: "/api/tools/tax-calculator", resultType: "json",
+            formatResult: function (data) { return data.label; },
+            fields: [
+              { name: "amount", type: "number", label: "المبلغ", required: true },
+              { name: "tax_rate", type: "number", label: "نسبة الضريبة %", value: "15" },
+              { name: "mode", type: "select", label: "نوع الحساب", options: [
+                { value: "add_tax", label: "إضافة الضريبة على المبلغ" },
+                { value: "extract_tax", label: "استخراج الضريبة من مبلغ شامل" },
+              ] },
+            ],
+          },
+          {
+            key: "currency-converter", group: "quick", icon: "💱", color: "#3fcf8e", title: "محول العملات",
+            desc: "حوّل بين العملات بأسعار تقريبية ثابتة", endpoint: "/api/tools/currency-converter", resultType: "json",
+            formatResult: function (data) { return data.label + "\n" + (data.disclaimer || ""); },
+            fields: [
+              { name: "amount", type: "number", label: "المبلغ", required: true },
+              { name: "from_currency", type: "select", label: "من عملة", options: [
+                { value: "USD", label: "دولار أمريكي (USD)" }, { value: "SAR", label: "ريال سعودي (SAR)" },
+                { value: "AED", label: "درهم إماراتي (AED)" }, { value: "EGP", label: "جنيه مصري (EGP)" },
+                { value: "KWD", label: "دينار كويتي (KWD)" }, { value: "EUR", label: "يورو (EUR)" },
+                { value: "GBP", label: "جنيه إسترليني (GBP)" }, { value: "QAR", label: "ريال قطري (QAR)" },
+                { value: "BHD", label: "دينار بحريني (BHD)" }, { value: "OMR", label: "ريال عماني (OMR)" },
+              ] },
+              { name: "to_currency", type: "select", label: "إلى عملة", options: [
+                { value: "SAR", label: "ريال سعودي (SAR)" }, { value: "USD", label: "دولار أمريكي (USD)" },
+                { value: "AED", label: "درهم إماراتي (AED)" }, { value: "EGP", label: "جنيه مصري (EGP)" },
+                { value: "KWD", label: "دينار كويتي (KWD)" }, { value: "EUR", label: "يورو (EUR)" },
+                { value: "GBP", label: "جنيه إسترليني (GBP)" }, { value: "QAR", label: "ريال قطري (QAR)" },
+                { value: "BHD", label: "دينار بحريني (BHD)" }, { value: "OMR", label: "ريال عماني (OMR)" },
+              ] },
+            ],
+          },
+          {
+            key: "pdf-extract-images", group: "files", icon: "🖼️", color: "#f76a4f", title: "استخراج الصور من PDF",
+            desc: "استخرج كل الصور الموجودة داخل ملف PDF كملف مضغوط", endpoint: "/api/tools/pdf-extract-images", resultType: "file",
+            fields: [
+              { name: "file", type: "file", accept: ".pdf", label: "ملف PDF", required: true },
+            ],
+          },
+          {
+            key: "word-pdf-convert", group: "files", icon: "🔁", color: "#4fa3f7", title: "تحويل Word ⇄ PDF",
+            desc: "حوّل مستند Word إلى PDF أو العكس", endpoint: "/api/tools/word-pdf-convert", resultType: "file",
+            fields: [
+              { name: "file", type: "file", accept: ".docx,.pdf", label: "اختر الملف", required: true },
+              { name: "direction", type: "select", label: "اتجاه التحويل", options: [
+                { value: "word2pdf", label: "Word ← إلى PDF" },
+                { value: "pdf2word", label: "PDF ← إلى Word" },
+              ] },
+            ],
+          },
+          {
+            key: "excel-dedup", group: "excel", icon: "🧹", color: "#3fcf8e", title: "إزالة التكرارات من Excel",
+            desc: "احذف الصفوف المكررة بالكامل من ملف Excel أو CSV", endpoint: "/api/tools/excel-dedup", resultType: "file",
+            fields: [
+              { name: "file", type: "file", accept: ".xlsx,.xls,.csv", label: "ملف Excel أو CSV", required: true },
+            ],
+          },
+          {
+            key: "excel-merge", group: "excel", icon: "🔗", color: "#4fa3f7", title: "دمج ملفات Excel",
+            desc: "ادمج ملفي Excel أو أكثر في ملف واحد", endpoint: "/api/tools/excel-merge", resultType: "file",
+            fields: [
+              { name: "files", type: "file", multiple: true, accept: ".xlsx,.xls,.csv", label: "اختر ملفين أو أكثر", required: true },
+            ],
+          },
+          {
+            key: "excel-compare", group: "excel", icon: "🔍", color: "#8a6adf", title: "مقارنة ملفي Excel",
+            desc: "قارن بين ملفين واعرف الفروقات والمشترك بينهما", endpoint: "/api/tools/excel-compare", resultType: "file",
+            fields: [
+              { name: "file1", type: "file", accept: ".xlsx,.xls,.csv", label: "الملف الأول", required: true },
+              { name: "file2", type: "file", accept: ".xlsx,.xls,.csv", label: "الملف الثاني", required: true },
+            ],
+          },
+          {
+            key: "excel-detect-errors", group: "excel", icon: "⚠️", color: "#ef4444", title: "اكتشاف أخطاء Excel",
+            desc: "افحص الملف بحثًا عن تكرارات وخلايا فارغة وقيم سالبة", endpoint: "/api/tools/excel-detect-errors", resultType: "json",
+            formatResult: function (data) { return data.ok ? "لا توجد مشاكل ✔️" : (data.issues || []).join("\n"); },
+            fields: [
+              { name: "file", type: "file", accept: ".xlsx,.xls,.csv", label: "ملف Excel أو CSV", required: true },
+            ],
+          },
+          {
+            key: "translate", group: "ai", icon: "🌐", color: "#4fa3f7", title: "ترجمة نص بالذكاء الاصطناعي",
+            desc: "ترجم أي نص إلى اللغة التي تريدها فورًا", endpoint: "/api/tools/translate", resultType: "json",
+            formatResult: function (data) { return data.result; },
+            fields: [
+              { name: "text", type: "textarea", label: "النص المراد ترجمته", required: true },
+              { name: "target_language", type: "text", label: "اللغة الهدف", value: "English" },
+            ],
+          },
+          {
+            key: "rephrase", group: "ai", icon: "✍️", color: "#8a6adf", title: "إعادة صياغة النصوص",
+            desc: "أعد صياغة نص بأسلوب رسمي أو ودّي أو موجز", endpoint: "/api/tools/rephrase", resultType: "json",
+            formatResult: function (data) { return data.result; },
+            fields: [
+              { name: "text", type: "textarea", label: "النص المراد إعادة صياغته", required: true },
+              { name: "style", type: "select", label: "الأسلوب", options: [
+                { value: "formal", label: "رسمي" }, { value: "casual", label: "بسيط وودود" },
+                { value: "concise", label: "موجز" }, { value: "expand", label: "أكثر تفصيلاً" },
+              ] },
+            ],
+          },
+          {
+            key: "email-writer", group: "ai", icon: "📧", color: "#c9a24d", title: "إنشاء رسائل بريد إلكتروني",
+            desc: "اكتب رسالة بريد إلكتروني احترافية بالذكاء الاصطناعي", endpoint: "/api/tools/email-writer", resultType: "json",
+            formatResult: function (data) { return data.result; },
+            fields: [
+              { name: "topic", type: "text", label: "موضوع الرسالة", required: true },
+              { name: "tone", type: "select", label: "نبرة الرسالة", options: [
+                { value: "formal", label: "رسمي" }, { value: "friendly", label: "ودّي" }, { value: "urgent", label: "عاجل ومباشر" },
+              ] },
+              { name: "recipient_context", type: "textarea", label: "سياق عن المستلم (اختياري)" },
+            ],
+          },
+          {
+            key: "excel-ai-analyze", group: "ai", icon: "🧠", color: "#3fcf8e", title: "تحليل Excel بالذكاء الاصطناعي",
+            desc: "احصل على تحليل ذكي لبيانات ملف Excel أو CSV", endpoint: "/api/tools/excel-ai-analyze", resultType: "json",
+            formatResult: function (data) { return data.result; },
+            fields: [
+              { name: "file", type: "file", accept: ".xlsx,.xls,.csv", label: "ملف Excel أو CSV", required: true },
+            ],
+          },
+          {
+            key: "pdf-summarize", group: "ai", icon: "📄", color: "#4f9fc9", title: "تلخيص ملفات PDF",
+            desc: "لخّص محتوى أي ملف PDF في صفحة واحدة بالذكاء الاصطناعي", endpoint: "/api/tools/pdf-summarize", resultType: "json",
+            formatResult: function (data) { return data.result; },
+            fields: [
+              { name: "file", type: "file", accept: ".pdf", label: "ملف PDF", required: true },
             ],
           },
         ];
@@ -653,7 +848,7 @@
         if (grid) {
           var cardsHtml = TOOLS.map(function (t) {
             return (
-              '<div class="op-module-card" data-tool-key="' + t.key + '" style="cursor:pointer;">' +
+              '<div class="op-module-card" data-tool-key="' + t.key + '" data-group="' + t.group + '" style="cursor:pointer;">' +
               '<div class="op-module-icon" style="background:' + t.color + '22;color:' + t.color + ';">' + t.icon + "</div>" +
               '<div class="op-module-title">' + t.title + "</div>" +
               '<div class="op-module-desc">' + t.desc + "</div>" +
@@ -663,6 +858,34 @@
           }).join("");
           grid.insertAdjacentHTML("beforeend", cardsHtml);
         }
+
+        (function setupToolsCountAndFilters() {
+          var allCards = document.querySelectorAll("#toolsGrid .op-module-card");
+          var counts = { all: allCards.length, files: 0, excel: 0, ai: 0, quick: 0 };
+          allCards.forEach(function (c) {
+            var g = c.getAttribute("data-group");
+            if (g && counts.hasOwnProperty(g)) counts[g]++;
+          });
+          var countLabel = document.getElementById("toolsCountLabel");
+          if (countLabel) {
+            countLabel.textContent =
+              counts.all + " أداة / " + counts.ai + " أدوات AI / " +
+              counts.files + " أدوات ملفات / " + counts.excel + " أدوات Excel / " +
+              counts.quick + " أدوات سريعة";
+          }
+          var filterBtns = document.querySelectorAll("#toolFilters [data-filter]");
+          filterBtns.forEach(function (btn) {
+            btn.addEventListener("click", function () {
+              filterBtns.forEach(function (b) { b.classList.remove("active"); });
+              btn.classList.add("active");
+              var filter = btn.getAttribute("data-filter");
+              document.querySelectorAll("#toolsGrid .op-module-card").forEach(function (c) {
+                var g = c.getAttribute("data-group");
+                c.style.display = filter === "all" || g === filter ? "" : "none";
+              });
+            });
+          });
+        })();
 
         var overlay = document.getElementById("toolModalOverlay");
         var modalIcon = document.getElementById("toolModalIcon");
@@ -686,6 +909,14 @@
             var multi = f.multiple ? " multiple" : "";
             var accept = f.accept ? ' accept="' + f.accept + '"' : "";
             return '<input type="file" id="' + id + '"' + multi + accept + " />";
+          }
+          if (f.type === "textarea") {
+            var placeholderTa = f.placeholder ? ' placeholder="' + f.placeholder + '"' : "";
+            return '<textarea id="' + id + '" rows="4"' + placeholderTa + "></textarea>";
+          }
+          if (f.type === "checkbox") {
+            var checkedAttr = f.value ? " checked" : "";
+            return '<input type="checkbox" id="' + id + '"' + checkedAttr + ' style="width:auto;" />';
           }
           var val = f.value !== undefined ? ' value="' + f.value + '"' : "";
           var placeholder = f.placeholder ? ' placeholder="' + f.placeholder + '"' : "";
@@ -762,6 +993,8 @@
                 }
                 if (el.files && el.files.length) fd.append(f.name, el.files[0]);
               }
+            } else if (f.type === "checkbox") {
+              fd.append(f.name, el.checked ? "true" : "false");
             } else {
               var v = el.value || "";
               if (f.required && !v.trim()) {

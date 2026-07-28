@@ -25,3 +25,4 @@ qrcode
 python-barcode
 hijridate
 Pillow
+python-docx

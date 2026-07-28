@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import io
 import json
 import zipfile
@@ -11,6 +12,7 @@ from fastapi.responses import Response
 
 from ..auth_core import require_csrf, require_user, user_can_access_page_key
 from ..db import SessionLocal
+from ..services.ai_text_tools import ai_text_enabled, generate_text
 from ..services.ocr_vision import extract_text_from_image, ocr_enabled
 
 router = APIRouter(prefix="/api/tools", tags=["toolbox"])
@@ -519,3 +521,653 @@ async def ocr_extract(request: Request, file: UploadFile = File(...)):
     except RuntimeError as e:
         raise HTTPException(400, str(e))
     return {"text": text}
+
+
+# =========================================================== أدوات سريعة
+_CURRENCY_RATES_USD = {
+    "USD": 1.0, "SAR": 3.75, "AED": 3.6725, "EGP": 49.0, "KWD": 0.307,
+    "EUR": 0.92, "GBP": 0.78, "QAR": 3.64, "BHD": 0.376, "OMR": 0.385,
+}
+
+
+@router.post("/sku-generator")
+async def sku_generator(
+    request: Request,
+    prefix: str = Form("SKU"),
+    category: str = Form(""),
+    start_number: int = Form(1),
+    count: int = Form(10),
+    digits: int = Form(5),
+):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    n = max(1, min(int(count or 10), 500))
+    dg = max(3, min(int(digits or 5), 10))
+    start = max(0, int(start_number or 1))
+    pre = (prefix or "SKU").strip().upper()[:12] or "SKU"
+    cat = (category or "").strip().upper()[:8]
+    codes = []
+    for i in range(n):
+        num = str(start + i).zfill(dg)
+        code = f"{pre}-{cat}-{num}" if cat else f"{pre}-{num}"
+        codes.append(code)
+    return {"items": codes, "count": len(codes)}
+
+
+@router.post("/item-number-generator")
+async def item_number_generator(
+    request: Request,
+    prefix: str = Form("ITM"),
+    start_number: int = Form(1),
+    count: int = Form(10),
+    digits: int = Form(6),
+    use_date: bool = Form(False),
+):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    n = max(1, min(int(count or 10), 500))
+    dg = max(3, min(int(digits or 6), 10))
+    start = max(0, int(start_number or 1))
+    pre = (prefix or "ITM").strip().upper()[:12] or "ITM"
+    date_part = ""
+    if use_date:
+        date_part = dt.datetime.utcnow().strftime("%Y%m%d") + "-"
+    codes = [f"{pre}-{date_part}{str(start + i).zfill(dg)}" for i in range(n)]
+    return {"items": codes, "count": len(codes)}
+
+
+@router.post("/password-generator")
+async def password_generator(
+    request: Request,
+    length: int = Form(16),
+    count: int = Form(5),
+    include_symbols: bool = Form(True),
+    include_numbers: bool = Form(True),
+    include_uppercase: bool = Form(True),
+):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    import secrets as _secrets
+    import string as _string
+
+    ln = max(6, min(int(length or 16), 128))
+    cnt = max(1, min(int(count or 5), 50))
+    alphabet = _string.ascii_lowercase
+    if include_uppercase:
+        alphabet += _string.ascii_uppercase
+    if include_numbers:
+        alphabet += _string.digits
+    if include_symbols:
+        alphabet += "!@#$%^&*()-_=+"
+    if not alphabet:
+        raise HTTPException(400, "يجب اختيار نوع واحد على الأقل من الأحرف")
+    passwords = ["".join(_secrets.choice(alphabet) for _ in range(ln)) for _ in range(cnt)]
+    return {"items": passwords, "count": len(passwords)}
+
+
+@router.post("/percentage-calculator")
+async def percentage_calculator(
+    request: Request,
+    mode: str = Form("percent_of"),
+    value1: float = Form(...),
+    value2: float = Form(...),
+):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    m = (mode or "percent_of").strip().lower()
+    if m == "percent_of":
+        result = (value1 / 100.0) * value2
+        label = f"{value1}% من {value2} = {result:.2f}"
+    elif m == "what_percent":
+        if value2 == 0:
+            raise HTTPException(400, "لا يمكن القسمة على صفر")
+        result = (value1 / value2) * 100.0
+        label = f"{value1} تمثل {result:.2f}% من {value2}"
+    elif m == "change":
+        if value1 == 0:
+            raise HTTPException(400, "لا يمكن القسمة على صفر")
+        result = ((value2 - value1) / value1) * 100.0
+        direction = "زيادة" if result >= 0 else "نقصان"
+        label = f"نسبة التغيير من {value1} إلى {value2}: {abs(result):.2f}% ({direction})"
+    else:
+        raise HTTPException(400, "نوع الحساب غير مدعوم")
+    return {"result": round(result, 4), "label": label}
+
+
+@router.post("/tax-calculator")
+async def tax_calculator(
+    request: Request,
+    amount: float = Form(...),
+    tax_rate: float = Form(15.0),
+    mode: str = Form("add_tax"),
+):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    rate = max(0.0, min(float(tax_rate or 15.0), 100.0))
+    m = (mode or "add_tax").strip().lower()
+    if m == "add_tax":
+        tax_amount = amount * rate / 100.0
+        total = amount + tax_amount
+        label = f"المبلغ قبل الضريبة: {amount:.2f} | الضريبة ({rate}%): {tax_amount:.2f} | الإجمالي: {total:.2f}"
+    elif m == "extract_tax":
+        base = amount / (1 + rate / 100.0)
+        tax_amount = amount - base
+        total = amount
+        label = f"المبلغ شامل الضريبة: {amount:.2f} | الأساسي: {base:.2f} | الضريبة ({rate}%): {tax_amount:.2f}"
+    else:
+        raise HTTPException(400, "نوع الحساب غير مدعوم")
+    return {
+        "base_amount": round(amount if m == "add_tax" else base, 2),
+        "tax_amount": round(tax_amount, 2),
+        "total": round(total, 2),
+        "label": label,
+    }
+
+
+@router.post("/currency-converter")
+async def currency_converter(
+    request: Request,
+    amount: float = Form(...),
+    from_currency: str = Form("USD"),
+    to_currency: str = Form("SAR"),
+):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    fc = (from_currency or "USD").strip().upper()
+    tc = (to_currency or "SAR").strip().upper()
+    if fc not in _CURRENCY_RATES_USD or tc not in _CURRENCY_RATES_USD:
+        raise HTTPException(400, f"العملة غير مدعومة. العملات المتاحة: {', '.join(_CURRENCY_RATES_USD.keys())}")
+    usd_amount = amount / _CURRENCY_RATES_USD[fc]
+    result = usd_amount * _CURRENCY_RATES_USD[tc]
+    return {
+        "result": round(result, 4),
+        "label": f"{amount} {fc} = {result:.2f} {tc}",
+        "disclaimer": "أسعار تقريبية وثابتة لأغراض الحساب السريع، وقد تختلف عن السعر اللحظي في السوق.",
+    }
+
+
+# ==================================================================== ملفات
+@router.post("/pdf-extract-images")
+async def pdf_extract_images(request: Request, file: UploadFile = File(...)):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    name = (file.filename or "").lower()
+    if not name.endswith(".pdf"):
+        raise HTTPException(400, "الملف يجب أن يكون PDF")
+    content = await file.read()
+    from pypdf import PdfReader
+
+    try:
+        reader = PdfReader(io.BytesIO(content))
+    except Exception as e:
+        raise HTTPException(400, f"تعذر قراءة الملف: {str(e)}")
+
+    zip_buf = io.BytesIO()
+    count = 0
+    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for p_idx, page in enumerate(reader.pages, start=1):
+            try:
+                for img in page.images:
+                    count += 1
+                    ext = ""
+                    try:
+                        ext = "." + (img.name.split(".")[-1] if "." in img.name else "png")
+                    except Exception:
+                        ext = ".png"
+                    zf.writestr(f"page{p_idx}_image{count}{ext}", img.data)
+            except Exception:
+                continue
+    if count == 0:
+        raise HTTPException(400, "لم يتم العثور على صور داخل ملف PDF")
+    return _attachment(zip_buf.getvalue(), "extracted_images.zip", "application/zip")
+
+
+@router.post("/word-pdf-convert")
+async def word_pdf_convert(request: Request, file: UploadFile = File(...), direction: str = Form("word2pdf")):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    name = (file.filename or "").lower()
+    content = await file.read()
+    dirn = (direction or "word2pdf").strip().lower()
+
+    if dirn == "word2pdf":
+        if not name.endswith(".docx"):
+            raise HTTPException(400, "الملف يجب أن يكون Word بصيغة .docx")
+        from docx import Document as DocxDoc
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet
+
+        try:
+            doc = DocxDoc(io.BytesIO(content))
+        except Exception as e:
+            raise HTTPException(400, f"تعذر قراءة ملف Word: {str(e)}")
+        styles = getSampleStyleSheet()
+        out = io.BytesIO()
+        pdf_doc = SimpleDocTemplate(out, pagesize=A4, topMargin=2 * cm, bottomMargin=2 * cm)
+        elements = []
+        for para in doc.paragraphs:
+            txt = (para.text or "").strip()
+            if not txt:
+                elements.append(Spacer(1, 8))
+                continue
+            safe = txt.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            elements.append(Paragraph(safe, styles["Normal"]))
+            elements.append(Spacer(1, 4))
+        if not elements:
+            raise HTTPException(400, "ملف Word لا يحتوي على نص قابل للتحويل")
+        pdf_doc.build(elements)
+        return _attachment(out.getvalue(), "converted.pdf", "application/pdf")
+
+    elif dirn == "pdf2word":
+        if not name.endswith(".pdf"):
+            raise HTTPException(400, "الملف يجب أن يكون PDF")
+        import pdfplumber
+        from docx import Document as DocxDoc
+
+        try:
+            texts = []
+            with pdfplumber.open(io.BytesIO(content)) as pdf:
+                for page in pdf.pages[:200]:
+                    txt = page.extract_text() or ""
+                    if txt:
+                        texts.append(txt)
+        except Exception as e:
+            raise HTTPException(400, f"تعذر قراءة ملف PDF: {str(e)}")
+        if not texts:
+            raise HTTPException(400, "لم يتم العثور على نص قابل للاستخراج في ملف PDF")
+        docx_doc = DocxDoc()
+        for page_text in texts:
+            for line in page_text.split("\n"):
+                docx_doc.add_paragraph(line)
+            docx_doc.add_page_break()
+        out = io.BytesIO()
+        docx_doc.save(out)
+        return _attachment(
+            out.getvalue(), "converted.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+    else:
+        raise HTTPException(400, "اتجاه التحويل غير مدعوم")
+
+
+# ==================================================================== Excel
+def _read_tabular(name: str, content: bytes):
+    import pandas as pd
+
+    if name.endswith(".csv"):
+        return pd.read_csv(io.BytesIO(content))
+    return pd.read_excel(io.BytesIO(content))
+
+
+@router.post("/excel-dedup")
+async def excel_dedup(request: Request, file: UploadFile = File(...)):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    name = (file.filename or "").lower()
+    if not (name.endswith(".xlsx") or name.endswith(".xls") or name.endswith(".csv")):
+        raise HTTPException(400, "الملف يجب أن يكون Excel أو CSV")
+    content = await file.read()
+    import pandas as pd
+
+    try:
+        df = _read_tabular(name, content)
+    except Exception as e:
+        raise HTTPException(400, f"تعذر قراءة الملف: {str(e)}")
+    before = len(df)
+    df2 = df.drop_duplicates()
+    removed = before - len(df2)
+    out = io.BytesIO()
+    with pd.ExcelWriter(out, engine="openpyxl") as writer:
+        df2.to_excel(writer, index=False, sheet_name="بدون تكرار")
+    resp = _attachment(
+        out.getvalue(), "deduped.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    resp.headers["X-Removed-Rows"] = str(removed)
+    return resp
+
+
+@router.post("/excel-merge")
+async def excel_merge(request: Request, files: List[UploadFile] = File(...)):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    if len(files) < 2:
+        raise HTTPException(400, "الرجاء اختيار ملفين على الأقل للدمج")
+    import pandas as pd
+
+    frames = []
+    for f in files:
+        name = (f.filename or "").lower()
+        if not (name.endswith(".xlsx") or name.endswith(".xls") or name.endswith(".csv")):
+            raise HTTPException(400, f"الملف {f.filename} يجب أن يكون Excel أو CSV")
+        content = await f.read()
+        try:
+            df = _read_tabular(name, content)
+        except Exception as e:
+            raise HTTPException(400, f"تعذر قراءة الملف {f.filename}: {str(e)}")
+        df["__المصدر__"] = f.filename or "ملف"
+        frames.append(df)
+    merged = pd.concat(frames, ignore_index=True, sort=False)
+    out = io.BytesIO()
+    with pd.ExcelWriter(out, engine="openpyxl") as writer:
+        merged.to_excel(writer, index=False, sheet_name="مدمج")
+    return _attachment(
+        out.getvalue(), "merged.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+
+@router.post("/excel-compare")
+async def excel_compare(request: Request, file1: UploadFile = File(...), file2: UploadFile = File(...)):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    import pandas as pd
+
+    name1 = (file1.filename or "").lower()
+    name2 = (file2.filename or "").lower()
+    for nm, f in ((name1, file1), (name2, file2)):
+        if not (nm.endswith(".xlsx") or nm.endswith(".xls") or nm.endswith(".csv")):
+            raise HTTPException(400, f"الملف {f.filename} يجب أن يكون Excel أو CSV")
+    c1 = await file1.read()
+    c2 = await file2.read()
+    try:
+        df1 = _read_tabular(name1, c1)
+        df2 = _read_tabular(name2, c2)
+    except Exception as e:
+        raise HTTPException(400, f"تعذر قراءة أحد الملفين: {str(e)}")
+
+    common_cols = [c for c in df1.columns if c in df2.columns]
+    if not common_cols:
+        raise HTTPException(400, "لا توجد أعمدة مشتركة بين الملفين للمقارنة")
+    d1 = df1[common_cols].astype(str)
+    d2 = df2[common_cols].astype(str)
+    merged = d1.merge(d2, how="outer", indicator=True)
+    only_1 = merged[merged["_merge"] == "left_only"].drop(columns=["_merge"])
+    only_2 = merged[merged["_merge"] == "right_only"].drop(columns=["_merge"])
+    common = merged[merged["_merge"] == "both"].drop(columns=["_merge"])
+
+    out = io.BytesIO()
+    with pd.ExcelWriter(out, engine="openpyxl") as writer:
+        only_1.to_excel(writer, index=False, sheet_name="فقط في الملف الأول")
+        only_2.to_excel(writer, index=False, sheet_name="فقط في الملف الثاني")
+        common.to_excel(writer, index=False, sheet_name="مشترك بين الملفين")
+    resp = _attachment(
+        out.getvalue(), "compare_result.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    resp.headers["X-Only-File1"] = str(len(only_1))
+    resp.headers["X-Only-File2"] = str(len(only_2))
+    resp.headers["X-Common"] = str(len(common))
+    return resp
+
+
+@router.post("/excel-detect-errors")
+async def excel_detect_errors(request: Request, file: UploadFile = File(...)):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    name = (file.filename or "").lower()
+    if not (name.endswith(".xlsx") or name.endswith(".xls") or name.endswith(".csv")):
+        raise HTTPException(400, "الملف يجب أن يكون Excel أو CSV")
+    content = await file.read()
+    import pandas as pd
+
+    try:
+        df = _read_tabular(name, content)
+    except Exception as e:
+        raise HTTPException(400, f"تعذر قراءة الملف: {str(e)}")
+
+    issues = []
+    total_rows = len(df)
+    dup_count = int(df.duplicated().sum())
+    if dup_count:
+        issues.append(f"يوجد {dup_count} صف مكرر بالكامل")
+
+    empty_cells_by_col = {}
+    for col in df.columns:
+        n_empty = int(df[col].isna().sum())
+        if n_empty:
+            empty_cells_by_col[str(col)] = n_empty
+    for col, n_empty in list(empty_cells_by_col.items())[:15]:
+        pct = (n_empty / total_rows * 100) if total_rows else 0
+        issues.append(f"العمود «{col}»: {n_empty} خلية فارغة ({pct:.0f}%)")
+
+    negative_cols = []
+    for col in df.columns:
+        if pd.api.types.is_numeric_dtype(df[col]):
+            n_neg = int((df[col] < 0).sum())
+            if n_neg:
+                negative_cols.append(f"العمود «{col}»: {n_neg} قيمة سالبة")
+    issues.extend(negative_cols[:10])
+
+    return {
+        "total_rows": total_rows,
+        "total_columns": len(df.columns),
+        "duplicate_rows": dup_count,
+        "issues": issues,
+        "ok": len(issues) == 0,
+    }
+
+
+# ================================================================ أدوات AI
+@router.post("/translate")
+async def translate_text(request: Request, text: str = Form(...), target_language: str = Form("English")):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    txt = (text or "").strip()
+    if not txt:
+        raise HTTPException(400, "الرجاء إدخال نص للترجمة")
+    if not ai_text_enabled():
+        raise HTTPException(400, "خدمة الترجمة الذكية غير مفعّلة حالياً")
+    lang = (target_language or "English").strip()
+    system_prompt = (
+        f"You are a professional translator. Translate the user's text into {lang}. "
+        "Return ONLY the translated text, with no explanations, no quotes, and no markdown."
+    )
+    try:
+        result = generate_text(system_prompt, txt)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    return {"result": result}
+
+
+@router.post("/rephrase")
+async def rephrase_text(request: Request, text: str = Form(...), style: str = Form("formal")):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    txt = (text or "").strip()
+    if not txt:
+        raise HTTPException(400, "الرجاء إدخال نص لإعادة الصياغة")
+    if not ai_text_enabled():
+        raise HTTPException(400, "خدمة إعادة الصياغة غير مفعّلة حالياً")
+    style_map = {
+        "formal": "أعد صياغة النص التالي بأسلوب رسمي واحترافي، بنفس اللغة الأصلية للنص.",
+        "casual": "أعد صياغة النص التالي بأسلوب بسيط وودود، بنفس اللغة الأصلية للنص.",
+        "concise": "أعد صياغة النص التالي بإيجاز شديد مع الحفاظ على المعنى، بنفس اللغة الأصلية للنص.",
+        "expand": "أعد صياغة النص التالي وأضف تفاصيل توضيحية أكثر، بنفس اللغة الأصلية للنص.",
+    }
+    st = (style or "formal").strip().lower()
+    instruction = style_map.get(st, style_map["formal"])
+    system_prompt = f"{instruction} أعد النص المعاد صياغته فقط بدون أي شرح أو علامات اقتباس."
+    try:
+        result = generate_text(system_prompt, txt)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    return {"result": result}
+
+
+@router.post("/email-writer")
+async def email_writer(
+    request: Request,
+    topic: str = Form(...),
+    tone: str = Form("formal"),
+    recipient_context: str = Form(""),
+):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    tp = (topic or "").strip()
+    if not tp:
+        raise HTTPException(400, "الرجاء إدخال موضوع الرسالة")
+    if not ai_text_enabled():
+        raise HTTPException(400, "خدمة إنشاء الرسائل غير مفعّلة حالياً")
+    tn = (tone or "formal").strip().lower()
+    tone_ar = {"formal": "رسمي", "friendly": "ودّي", "urgent": "عاجل ومباشر"}.get(tn, "رسمي")
+    ctx = (recipient_context or "").strip()
+    system_prompt = (
+        f"اكتب رسالة بريد إلكتروني احترافية باللغة العربية بأسلوب {tone_ar}، "
+        "تتضمن عنوانًا مناسبًا وتحية وخاتمة، حول الموضوع المذكور من المستخدم"
+        + (f"، مع مراعاة السياق التالي عن المستلم: {ctx}" if ctx else "")
+        + ". أعد نص الرسالة كاملاً فقط بدون أي شرح إضافي."
+    )
+    try:
+        result = generate_text(system_prompt, tp)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    return {"result": result}
+
+
+@router.post("/excel-ai-analyze")
+async def excel_ai_analyze(request: Request, file: UploadFile = File(...)):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    name = (file.filename or "").lower()
+    if not (name.endswith(".xlsx") or name.endswith(".xls") or name.endswith(".csv")):
+        raise HTTPException(400, "الملف يجب أن يكون Excel أو CSV")
+    if not ai_text_enabled():
+        raise HTTPException(400, "خدمة التحليل الذكي غير مفعّلة حالياً")
+    content = await file.read()
+    import pandas as pd
+
+    try:
+        df = _read_tabular(name, content)
+    except Exception as e:
+        raise HTTPException(400, f"تعذر قراءة الملف: {str(e)}")
+    if df.empty:
+        raise HTTPException(400, "الملف لا يحتوي على بيانات")
+
+    numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+    summary = {
+        "rows": len(df),
+        "columns": list(map(str, df.columns))[:30],
+        "numeric_summary": {
+            str(c): {
+                "sum": float(df[c].sum()),
+                "mean": float(df[c].mean()),
+                "min": float(df[c].min()),
+                "max": float(df[c].max()),
+            }
+            for c in numeric_cols[:10]
+        },
+        "sample_rows": json.loads(df.head(10).to_json(orient="records", force_ascii=False)),
+    }
+    system_prompt = (
+        "أنت محلل بيانات مالي. لديك ملخص إحصائي وعينة بيانات من ملف Excel. "
+        "اكتب تحليلاً عمليًا وموجزًا بالعربية (فقرة أو نقاط قصيرة) يبرز أهم الاتجاهات والانحرافات والملاحظات "
+        "القابلة للتنفيذ، بأسلوب مباشر (مثال: مبيعات الفرع الرابع منخفضة 28%). لا تخترع أرقامًا غير موجودة في البيانات."
+    )
+    try:
+        result = generate_text(system_prompt, json.dumps(summary, ensure_ascii=False)[:12000])
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    return {"result": result}
+
+
+@router.post("/pdf-summarize")
+async def pdf_summarize(request: Request, file: UploadFile = File(...)):
+    db = SessionLocal()
+    try:
+        _require_tool_access(db, request)
+        require_csrf(request)
+    finally:
+        db.close()
+    name = (file.filename or "").lower()
+    if not name.endswith(".pdf"):
+        raise HTTPException(400, "الملف يجب أن يكون PDF")
+    if not ai_text_enabled():
+        raise HTTPException(400, "خدمة التلخيص الذكي غير مفعّلة حالياً")
+    content = await file.read()
+    import pdfplumber
+
+    try:
+        parts = []
+        with pdfplumber.open(io.BytesIO(content)) as pdf:
+            for page in pdf.pages[:150]:
+                txt = page.extract_text() or ""
+                if txt:
+                    parts.append(txt)
+        full_text = "\n".join(parts)
+    except Exception as e:
+        raise HTTPException(400, f"تعذر قراءة ملف PDF: {str(e)}")
+    if not full_text.strip():
+        raise HTTPException(400, "لم يتم العثور على نص قابل للاستخراج في ملف PDF (قد يكون ممسوحًا ضوئيًا)")
+
+    system_prompt = (
+        "لخّص النص التالي المستخرج من ملف PDF في صفحة واحدة كحد أقصى بالعربية، "
+        "مع الحفاظ على أهم النقاط والأرقام والاستنتاجات الرئيسية بشكل مركز وواضح."
+    )
+    try:
+        result = generate_text(system_prompt, full_text, max_chars=40000)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    return {"result": result}
