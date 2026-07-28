@@ -175,6 +175,21 @@ def _require_login_page(
         db.close()
 
 
+def _require_admin_page(request: Request, html_path: Path) -> FileResponse | RedirectResponse:
+    """صفحات لوحة المدير: للمدير فقط دائمًا، بلا علاقة بنظام صلاحيات مشاهدة الصفحات القابل للمنح."""
+    db = _SessionLocal()
+    try:
+        u = require_user(db, request)
+        if int(getattr(u, "is_admin", 0) or 0) != 1:
+            return RedirectResponse(url="/?denied=1", status_code=302)
+        return FileResponse(str(html_path), headers=dict(_HTML_NO_CACHE))
+    except HTTPException as e:
+        reason = quote(str(getattr(e, "detail", "") or "يرجى تسجيل الدخول أولاً"))
+        return RedirectResponse(url=f"/login?reason={reason}", status_code=302)
+    finally:
+        db.close()
+
+
 @app.get("/", response_class=HTMLResponse)
 def ui_home(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "index.html", "op-home")
@@ -308,6 +323,11 @@ def ui_trade_transfers(request: Request):
 @app.get("/settings", response_class=HTMLResponse)
 def ui_settings(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "settings.html", "op-settings")
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def ui_admin_dashboard(request: Request):
+    return _require_admin_page(request, FRONTEND_DIR / "admin_dashboard.html")
 
 
 @app.get("/help", response_class=HTMLResponse)

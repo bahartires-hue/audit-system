@@ -15,6 +15,7 @@ from .models import AuditLog, User, UserSession
 
 SESSION_COOKIE = "auditflow_session"
 CSRF_COOKIE = "auditflow_csrf"
+IMPERSONATOR_COOKIE = "auditflow_impersonator"
 SESSION_DAYS = int(os.environ.get("AUDITFLOW_SESSION_DAYS", "14"))
 LOCK_MINUTES = 15
 COOKIE_PATH = "/"

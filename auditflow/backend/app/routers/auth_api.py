@@ -15,6 +15,7 @@ from sqlalchemy import func
 from ..auth_core import (
     COOKIE_PATH,
     CSRF_COOKIE,
+    IMPERSONATOR_COOKIE,
     LOCK_MINUTES,
     PAGE_KEYS,
     SESSION_COOKIE,
@@ -33,7 +34,7 @@ from ..auth_core import (
 )
 from ..db import SessionLocal
 from ..mailer import send_password_reset_email, send_plain_email, send_smtp_test_email, smtp_status
-from ..models import AnalysisReport, AppSetting, AuditLog, InviteCode, PasswordResetToken, User, UserSession
+from ..models import AnalysisReport, AppSetting, AuditLog, Document, InviteCode, PasswordResetToken, User, UserSession
 from ..rate_limit import limiter
 
 router = APIRouter(tags=["auth"])
@@ -185,6 +186,7 @@ def auth_me(request: Request):
                     "plan_name": plan_name,
                     "subscription_expires_at": exp.isoformat() + "Z" if exp else None,
                     "allowed_pages": (u.allowed_pages or []) if u else [],
+                    "impersonated": bool(request.cookies.get(IMPERSONATOR_COOKIE)),
                     "roles": {
                         "user": bool(u),
                         "support": _has_role(u, "support") if u else False,
@@ -539,6 +541,49 @@ def admin_summary(request: Request):
             )
             .count()
         )
+        deactivated_count = db.query(User).filter(User.is_active == 0).count()
+        documents_total = db.query(Document).count()
+        reports_total = db.query(AnalysisReport).count()
+        today_start = dt.datetime(now.year, now.month, now.day)
+        ops_today = db.query(AuditLog).filter(AuditLog.created_at >= today_start).count()
+
+        last_backup = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "admin.backup.downloaded")
+            .order_by(AuditLog.created_at.desc())
+            .first()
+        )
+        days_since_backup = None
+        if last_backup and last_backup.created_at:
+            days_since_backup = max(0, (now - last_backup.created_at).days)
+
+        # سلسلة آخر 30 يومًا: مستخدمون جدد واشتراكات مدفوعة جديدة لكل يوم.
+        chart_days = 30
+        start_day = today_start - dt.timedelta(days=chart_days - 1)
+        new_users_rows = (
+            db.query(func.date(User.created_at), func.count(User.id))
+            .filter(User.created_at >= start_day)
+            .group_by(func.date(User.created_at))
+            .all()
+        )
+        new_paid_rows = (
+            db.query(func.date(User.created_at), func.count(User.id))
+            .filter(User.created_at >= start_day, User.plan_name != "free")
+            .group_by(func.date(User.created_at))
+            .all()
+        )
+        new_users_map = {str(d): int(c) for d, c in new_users_rows}
+        new_paid_map = {str(d): int(c) for d, c in new_paid_rows}
+        labels = []
+        new_users_series = []
+        new_paid_series = []
+        for i in range(chart_days):
+            day = start_day + dt.timedelta(days=i)
+            key = day.strftime("%Y-%m-%d")
+            labels.append(day.strftime("%m-%d"))
+            new_users_series.append(new_users_map.get(key, 0))
+            new_paid_series.append(new_paid_map.get(key, 0))
+
         return {
             "total_users": total_users,
             "active_users": active_users,
@@ -547,6 +592,16 @@ def admin_summary(request: Request):
             "invite_used": invite_used,
             "invite_active": invite_active_count,
             "expiring_7d": expiring_7d,
+            "deactivated_count": deactivated_count,
+            "documents_total": documents_total,
+            "reports_total": reports_total,
+            "ops_today": ops_today,
+            "days_since_backup": days_since_backup,
+            "chart_30d": {
+                "labels": labels,
+                "new_users": new_users_series,
+                "new_paid": new_paid_series,
+            },
         }
     finally:
         db.close()
@@ -660,6 +715,7 @@ def admin_backup(request: Request):
         buff.seek(0)
         ts = dt.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
         headers = {"Content-Disposition": f'attachment; filename="auditflow-backup-{ts}.json.gz"'}
+        log_event(db, "admin.backup.downloaded", admin.id, {"users_count": len(users), "reports_count": len(reports)})
         return StreamingResponse(buff, media_type="application/gzip", headers=headers)
     finally:
         db.close()
@@ -896,6 +952,279 @@ async def admin_update_user(request: Request):
             },
         )
         return {"ok": True}
+    finally:
+        db.close()
+
+
+@router.post("/admin/users/create")
+async def admin_create_user(request: Request):
+    payload = await request.json()
+    username = str((payload or {}).get("username", "")).strip()
+    email = str((payload or {}).get("email", "")).strip().lower()
+    password = str((payload or {}).get("password", "")).strip()
+    plan_name = str((payload or {}).get("plan_name", "free")).strip().lower() or "free"
+    is_active = 1 if bool((payload or {}).get("is_active", True)) else 0
+    if len(username) < 3:
+        raise HTTPException(400, "اسم المستخدم قصير")
+    if "@" not in email or "." not in email:
+        raise HTTPException(400, "البريد الإلكتروني غير صالح")
+    if len(password) < 4:
+        raise HTTPException(400, "كلمة المرور قصيرة")
+    db = SessionLocal()
+    try:
+        admin = _require_admin_user(db, request)
+        require_csrf(request)
+        exists = db.query(User).filter(func.lower(User.username) == username.lower()).first()
+        if exists:
+            raise HTTPException(400, "اسم المستخدم موجود بالفعل")
+        exists_email = db.query(User).filter(User.email == email).first()
+        if exists_email:
+            raise HTTPException(400, "البريد الإلكتروني مستخدم بالفعل")
+        user = User(
+            id=uuid.uuid4().hex,
+            username=username,
+            email=email,
+            is_admin=0,
+            role_name="user",
+            is_active=is_active,
+            plan_name=plan_name,
+            subscription_expires_at=None,
+            password_hash=hash_password(password),
+            preferences_json={},
+        )
+        db.add(user)
+        db.commit()
+        log_event(db, "admin.user.created", admin.id, {"target_user_id": user.id, "username": username, "email": email})
+        return {"ok": True, "id": user.id, "username": user.username}
+    finally:
+        db.close()
+
+
+@router.delete("/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, request: Request):
+    db = SessionLocal()
+    try:
+        admin = _require_admin_user(db, request)
+        require_csrf(request)
+        target = db.query(User).filter(User.id == user_id).first()
+        if not target:
+            raise HTTPException(404, "المستخدم غير موجود")
+        if target.id == admin.id:
+            raise HTTPException(400, "لا يمكنك حذف حسابك الخاص")
+        if int(target.is_admin or 0) == 1:
+            raise HTTPException(400, "لا يمكن حذف حساب مدير آخر")
+        reports_count = db.query(AnalysisReport).filter(AnalysisReport.user_id == target.id).count()
+        docs_count = db.query(Document).filter(Document.user_id == target.id).count()
+        if reports_count or docs_count:
+            raise HTTPException(
+                400,
+                f"لا يمكن حذف هذا المستخدم لوجود {reports_count} تقرير و{docs_count} مستند مرتبطين به — عطّليه بدلاً من ذلك",
+            )
+        db.query(UserSession).filter(UserSession.user_id == target.id).delete()
+        username_snapshot = target.username
+        db.delete(target)
+        db.commit()
+        log_event(db, "admin.user.deleted", admin.id, {"target_user_id": user_id, "username": username_snapshot})
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(400, "تعذر حذف المستخدم (قد تكون له بيانات مرتبطة أخرى)")
+    finally:
+        db.close()
+
+
+@router.post("/admin/users/reset-password")
+async def admin_reset_password(request: Request):
+    payload = await request.json()
+    user_id = str((payload or {}).get("user_id", "")).strip()
+    if not user_id:
+        raise HTTPException(400, "user_id مطلوب")
+    db = SessionLocal()
+    try:
+        admin = _require_admin_user(db, request)
+        require_csrf(request)
+        target = db.query(User).filter(User.id == user_id).first()
+        if not target:
+            raise HTTPException(404, "المستخدم غير موجود")
+        new_password = secrets.token_urlsafe(9)
+        target.password_hash = hash_password(new_password)
+        target.failed_attempts = 0
+        target.locked_until = None
+        db.commit()
+        log_event(db, "admin.user.password_reset", admin.id, {"target_user_id": user_id, "username": target.username})
+        return {"ok": True, "new_password": new_password, "username": target.username}
+    finally:
+        db.close()
+
+
+@router.post("/admin/notify-all")
+async def admin_notify_all(request: Request):
+    payload = await request.json()
+    subject = str((payload or {}).get("subject", "")).strip()
+    body = str((payload or {}).get("body", "")).strip()
+    only_active = bool((payload or {}).get("only_active", True))
+    if not subject or not body:
+        raise HTTPException(400, "العنوان والنص مطلوبان")
+    db = SessionLocal()
+    try:
+        admin = _require_admin_user(db, request)
+        require_csrf(request)
+        query = db.query(User).filter(User.email.isnot(None))
+        if only_active:
+            query = query.filter(User.is_active == 1)
+        rows = query.all()
+        sent = 0
+        failed = 0
+        for u in rows:
+            try:
+                send_plain_email(to_email=str(u.email), subject=subject, body=body)
+                sent += 1
+            except Exception:
+                failed += 1
+        log_event(
+            db,
+            "admin.notify.broadcast",
+            admin.id,
+            {"subject": subject, "targets": len(rows), "sent": sent, "failed": failed, "only_active": only_active},
+        )
+        return {"ok": True, "targets": len(rows), "sent": sent, "failed": failed}
+    finally:
+        db.close()
+
+
+@router.post("/admin/impersonate")
+async def admin_impersonate(request: Request):
+    payload = await request.json()
+    user_id = str((payload or {}).get("user_id", "")).strip()
+    if not user_id:
+        raise HTTPException(400, "user_id مطلوب")
+    db = SessionLocal()
+    try:
+        admin = _require_admin_user(db, request)
+        require_csrf(request)
+        target = db.query(User).filter(User.id == user_id).first()
+        if not target:
+            raise HTTPException(404, "المستخدم غير موجود")
+        if target.id == admin.id:
+            raise HTTPException(400, "لا يمكنك انتحال حسابك الخاص")
+        if int(target.is_admin or 0) == 1:
+            raise HTTPException(400, "لا يمكن تسجيل الدخول كمدير آخر")
+        original_token = request.cookies.get(SESSION_COOKIE, "")
+        if not original_token:
+            raise HTTPException(400, "تعذر تحديد جلسة المدير الحالية")
+        new_token = create_session(db, target.id)
+        csrf = issue_csrf_token()
+        log_event(
+            db, "admin.impersonate.start", admin.id, {"target_user_id": target.id, "target_username": target.username}
+        )
+        res = Response(content=json.dumps({"ok": True, "target_username": target.username}), media_type="application/json")
+        res.set_cookie(
+            key=SESSION_COOKIE, value=new_token, path=COOKIE_PATH, httponly=True,
+            samesite="lax", secure=cookie_secure(), max_age=session_max_age_seconds(),
+        )
+        res.set_cookie(
+            key=CSRF_COOKIE, value=csrf, path=COOKIE_PATH, httponly=False,
+            samesite="lax", secure=cookie_secure(), max_age=session_max_age_seconds(),
+        )
+        res.set_cookie(
+            key=IMPERSONATOR_COOKIE, value=original_token, path=COOKIE_PATH, httponly=True,
+            samesite="lax", secure=cookie_secure(), max_age=session_max_age_seconds(),
+        )
+        return res
+    finally:
+        db.close()
+
+
+@router.post("/admin/impersonate/stop")
+async def admin_impersonate_stop(request: Request):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        original_token = request.cookies.get(IMPERSONATOR_COOKIE, "")
+        if not original_token:
+            raise HTTPException(400, "لا توجد جلسة إدارية للعودة إليها")
+        sess = db.query(UserSession).filter(UserSession.token == original_token).first()
+        if not sess or sess.expires_at < dt.datetime.utcnow():
+            raise HTTPException(400, "انتهت صلاحية جلسة المدير الأصلية، يرجى تسجيل الدخول من جديد")
+        admin_user = db.query(User).filter(User.id == sess.user_id).first()
+        if not admin_user or int(admin_user.is_admin or 0) != 1:
+            raise HTTPException(400, "الجلسة الأصلية لم تعد جلسة مدير صالحة")
+        current_user = current_user_from_request(db, request)
+        csrf = issue_csrf_token()
+        log_event(
+            db,
+            "admin.impersonate.stop",
+            admin_user.id,
+            {"was_impersonating_user_id": current_user.id if current_user else None},
+        )
+        res = Response(content='{"ok":true}', media_type="application/json")
+        res.set_cookie(
+            key=SESSION_COOKIE, value=original_token, path=COOKIE_PATH, httponly=True,
+            samesite="lax", secure=cookie_secure(), max_age=session_max_age_seconds(),
+        )
+        res.set_cookie(
+            key=CSRF_COOKIE, value=csrf, path=COOKIE_PATH, httponly=False,
+            samesite="lax", secure=cookie_secure(), max_age=session_max_age_seconds(),
+        )
+        res.delete_cookie(IMPERSONATOR_COOKIE, path=COOKIE_PATH)
+        return res
+    finally:
+        db.close()
+
+
+@router.post("/admin/backup/restore")
+async def admin_backup_restore(request: Request, backup_file: UploadFile = File(...)):
+    db = SessionLocal()
+    try:
+        admin = _require_admin_user(db, request)
+        require_csrf(request)
+        raw = await backup_file.read()
+        try:
+            if backup_file.filename and backup_file.filename.lower().endswith(".gz"):
+                raw = gzip.decompress(raw)
+            parsed = json.loads(raw.decode("utf-8"))
+        except Exception:
+            raise HTTPException(400, "ملف النسخة الاحتياطية غير صالح")
+        users = parsed.get("users")
+        if not isinstance(users, list):
+            raise HTTPException(400, "بنية النسخة الاحتياطية غير صحيحة")
+        matched = 0
+        updated = 0
+        for u in users:
+            uid = str(u.get("id") or "").strip()
+            email = str(u.get("email") or "").strip().lower()
+            target = None
+            if uid:
+                target = db.query(User).filter(User.id == uid).first()
+            if not target and email:
+                target = db.query(User).filter(User.email == email).first()
+            if not target:
+                continue
+            matched += 1
+            if int(target.is_admin or 0) == 1:
+                continue
+            if "plan_name" in u:
+                target.plan_name = str(u.get("plan_name") or "free")
+            if "is_active" in u:
+                target.is_active = 1 if int(u.get("is_active") or 0) else 0
+            if u.get("subscription_expires_at"):
+                try:
+                    target.subscription_expires_at = dt.datetime.fromisoformat(
+                        str(u["subscription_expires_at"]).replace("Z", "")
+                    )
+                except Exception:
+                    pass
+            updated += 1
+        db.commit()
+        log_event(
+            db,
+            "admin.backup.restored",
+            admin.id,
+            {"users_in_file": len(users), "matched": matched, "updated": updated, "filename": backup_file.filename or "backup"},
+        )
+        return {"ok": True, "users_in_file": len(users), "matched": matched, "updated": updated}
     finally:
         db.close()
 

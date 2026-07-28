@@ -1005,11 +1005,12 @@ async function applyPagePermissionsUI() {
 
   // يشمل روابط الشريط الجانبي (a[data-nav]) وأيضًا بطاقات "الأنظمة المتاحة" في الرئيسية (div.op-module-card[data-nav]).
   const navEls = document.querySelectorAll('[data-nav^="op-"]');
-  if (!navEls.length) return;
   try {
     const me = await apiGet("/auth/me");
     if (!me || !me.username) return;
+    if (me.impersonated) showImpersonationBanner(me.username);
     if (me.is_admin) return; // المدير يرى كل شيء دائمًا
+    if (!navEls.length) return;
     const allowed = new Set(me.allowed_pages || []);
     navEls.forEach((el) => {
       const key = el.getAttribute("data-nav");
@@ -1017,6 +1018,30 @@ async function applyPagePermissionsUI() {
       if (!allowed.has(key)) el.style.display = "none";
     });
   } catch (e) {}
+}
+
+function showImpersonationBanner(username) {
+  if (document.getElementById("impersonationBanner")) return;
+  const bar = document.createElement("div");
+  bar.id = "impersonationBanner";
+  bar.style.cssText =
+    "position:fixed;top:0;inset-inline:0;z-index:9999;background:#ef4444;color:#fff;" +
+    "display:flex;align-items:center;justify-content:center;gap:0.75rem;padding:0.5rem 1rem;" +
+    "font-weight:800;font-size:0.85rem;box-shadow:0 2px 8px rgba(0,0,0,0.15);";
+  bar.innerHTML =
+    `<span>🎭 أنت تتصفح الآن كـ «${username}» نيابة عن المستخدم</span>` +
+    `<button type="button" id="endImpersonationBtn" style="background:#fff;color:#ef4444;border:none;` +
+    `border-radius:8px;padding:0.3rem 0.9rem;font-weight:800;cursor:pointer;">العودة لحساب المدير</button>`;
+  document.body.prepend(bar);
+  document.body.style.paddingTop = (document.body.style.paddingTop ? parseInt(document.body.style.paddingTop) : 0) + 40 + "px";
+  document.getElementById("endImpersonationBtn").addEventListener("click", async () => {
+    try {
+      await apiPostJson("/admin/impersonate/stop", {});
+      window.location.href = "/admin";
+    } catch (e) {
+      showToast(e.message || "تعذّرت العودة لحساب المدير", "#ef4444");
+    }
+  });
 }
 document.addEventListener("DOMContentLoaded", applyPagePermissionsUI);
 
