@@ -132,9 +132,12 @@ function setLoading(btn, loading, text) {
 }
 
 function renderReportRow(item) {
+  const isCompanies = (document.body.dataset.reportType || "branches") === "companies";
+  const viewHref = isCompanies ? `/companies/report?id=${item.id}` : `/report?id=${item.id}`;
   const li = document.createElement("div");
   li.className =
-    "bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-4 flex flex-col gap-2 shadow-sm";
+    "bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-4 flex flex-col gap-2 shadow-sm" +
+    (isCompanies ? " report-card--premium" : "");
   const tags = Array.isArray(item.tags) ? item.tags : [];
   const tagsHtml = tags.length
     ? `<div class="flex flex-wrap gap-1 mt-2">${tags.map((t) => `<span class="text-[0.65rem] font-extrabold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">${String(t)}</span>`).join("")}</div>`
@@ -151,7 +154,7 @@ function renderReportRow(item) {
         </div>
         ${tagsHtml}
       </div>
-      <a class="px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold shrink-0" href="/report?id=${item.id}">عرض</a>
+      <a class="px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold shrink-0" href="${viewHref}">عرض</a>
     </div>
     <div class="flex gap-3 flex-wrap">
       <div class="text-sm text-slate-700 dark:text-slate-300"><span class="font-extrabold">متطابق:</span> ${item.stats.matched_ops}</div>

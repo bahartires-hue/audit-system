@@ -187,6 +187,11 @@ def ui_companies_reports(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "company_reports.html")
 
 
+@app.get("/companies/report", response_class=HTMLResponse)
+def ui_companies_report(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "company_report.html")
+
+
 @app.get("/convert", response_class=HTMLResponse)
 def ui_convert(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "convert.html")

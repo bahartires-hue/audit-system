@@ -22,6 +22,215 @@
     <link rel="stylesheet" href="/static/dark.css?v=12" />
     <style>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+
+      /* ============================================================
+         مطابقة الشركات — هوية بصرية "فخمة" (كحلي داكن + ذهبي) مستقلة
+         تماماً عن مطابقة الفروع. كل قاعدة هنا مقيّدة بالمحدد
+         body[data-report-type="companies"] فلا تؤثر إطلاقاً على صفحات
+         الفروع حتى لو أُدرجت هذه الورقة هناك بالخطأ مستقبلاً.
+         ============================================================ */
+      body[data-report-type="companies"] {
+        --gold: #c9a24d;
+        --gold-soft: #e8cd85;
+        --gold-dim: rgba(201, 162, 77, 0.32);
+        --navy-0: #070b16;
+        --navy-1: #0d1424;
+        --navy-2: #131b30;
+      }
+      body[data-report-type="companies"] .erp-content {
+        background: var(--navy-0) !important;
+      }
+      body[data-report-type="companies"] .erp-topbar {
+        background: rgba(10, 14, 26, 0.92) !important;
+        border-bottom-color: var(--gold-dim) !important;
+      }
+      body[data-report-type="companies"] .erp-topbar__title {
+        color: var(--gold-soft) !important;
+      }
+      body[data-report-type="companies"] .erp-search input {
+        background: var(--navy-1) !important;
+        border-color: var(--gold-dim) !important;
+        color: #f1e9d2 !important;
+      }
+      body[data-report-type="companies"] .erp-main {
+        background:
+          radial-gradient(900px 420px at 12% -10%, rgba(201, 162, 77, 0.12), transparent 60%),
+          radial-gradient(700px 380px at 100% 0%, rgba(201, 162, 77, 0.07), transparent 55%);
+      }
+      body[data-report-type="companies"] .erp-main .rounded-3xl.bg-white,
+      body[data-report-type="companies"] .erp-main .rounded-3xl.dark\:bg-slate-900 {
+        background: linear-gradient(175deg, var(--navy-2), var(--navy-1)) !important;
+        border: 1px solid var(--gold-dim) !important;
+        box-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(201, 162, 77, 0.05) inset !important;
+        position: relative;
+        overflow: hidden;
+      }
+      body[data-report-type="companies"] .erp-main .rounded-3xl.bg-white::before,
+      body[data-report-type="companies"] .erp-main .rounded-3xl.dark\:bg-slate-900::before {
+        content: "";
+        position: absolute;
+        inset: 0 0 auto 0;
+        height: 3px;
+        background: linear-gradient(90deg, transparent, var(--gold-soft), var(--gold), var(--gold-soft), transparent);
+        opacity: 0.9;
+      }
+      body[data-report-type="companies"] .erp-main h1,
+      body[data-report-type="companies"] .erp-main h2 {
+        color: #f4e9cf !important;
+        letter-spacing: 0.015em;
+      }
+      body[data-report-type="companies"] .erp-main p,
+      body[data-report-type="companies"] .erp-main label,
+      body[data-report-type="companies"] .erp-main span,
+      body[data-report-type="companies"] .erp-main div,
+      body[data-report-type="companies"] .erp-main .text-slate-600,
+      body[data-report-type="companies"] .erp-main .text-slate-700,
+      body[data-report-type="companies"] .erp-main .text-slate-900,
+      body[data-report-type="companies"] .erp-main .dark\:text-slate-50,
+      body[data-report-type="companies"] .erp-main .dark\:text-slate-100,
+      body[data-report-type="companies"] .erp-main .dark\:text-slate-300,
+      body[data-report-type="companies"] .erp-main .dark\:text-slate-400 {
+        color: #c3cbdd;
+      }
+      body[data-report-type="companies"] .erp-main h1,
+      body[data-report-type="companies"] .erp-main h1 * {
+        color: #f4e9cf !important;
+      }
+      body[data-report-type="companies"] .erp-main .bg-slate-50,
+      body[data-report-type="companies"] .erp-main .dark\:bg-slate-800\/40,
+      body[data-report-type="companies"] .erp-main .dark\:bg-slate-800\/50,
+      body[data-report-type="companies"] .erp-main .dark\:bg-slate-800\/60 {
+        background: rgba(255, 255, 255, 0.025) !important;
+        border-color: var(--gold-dim) !important;
+      }
+      body[data-report-type="companies"] .erp-main input,
+      body[data-report-type="companies"] .erp-main select,
+      body[data-report-type="companies"] .erp-main textarea,
+      body[data-report-type="companies"] .erp-main .dark\:bg-slate-950 {
+        background: var(--navy-0) !important;
+        border-color: rgba(201, 162, 77, 0.28) !important;
+        color: #f1e9d2 !important;
+      }
+      body[data-report-type="companies"] .erp-main input::placeholder,
+      body[data-report-type="companies"] .erp-main textarea::placeholder {
+        color: #5b6478 !important;
+      }
+      body[data-report-type="companies"] .erp-main input:focus,
+      body[data-report-type="companies"] .erp-main select:focus,
+      body[data-report-type="companies"] .erp-main textarea:focus {
+        box-shadow: 0 0 0 3px var(--gold-dim) !important;
+      }
+      body[data-report-type="companies"] .erp-main .dropzone {
+        background: var(--navy-0) !important;
+        border-color: rgba(201, 162, 77, 0.35) !important;
+      }
+      body[data-report-type="companies"] .erp-main .dropzone:hover {
+        border-color: var(--gold) !important;
+        background: rgba(201, 162, 77, 0.07) !important;
+      }
+      body[data-report-type="companies"] .btn-primary-analyze,
+      body[data-report-type="companies"] .audit-cta-link {
+        background: linear-gradient(270deg, #8a6a1f 0%, var(--gold) 45%, var(--gold-soft) 100%) !important;
+        color: #1a1406 !important;
+        box-shadow: 0 8px 22px rgba(201, 162, 77, 0.3) !important;
+      }
+      body[data-report-type="companies"] .btn-primary-analyze:hover:not(:disabled),
+      body[data-report-type="companies"] .audit-cta-link:hover {
+        filter: brightness(1.08);
+      }
+      body[data-report-type="companies"] .erp-sidebar a.nav-link--active {
+        background: linear-gradient(135deg, rgba(201, 162, 77, 0.24), rgba(201, 162, 77, 0.08)) !important;
+        border: 1px solid var(--gold-dim) !important;
+        color: var(--gold-soft) !important;
+        box-shadow: 0 0 20px rgba(201, 162, 77, 0.18) !important;
+      }
+      body[data-report-type="companies"] .erp-side-link:hover {
+        background: rgba(201, 162, 77, 0.14) !important;
+        color: var(--gold-soft) !important;
+      }
+      body[data-report-type="companies"] .erp-main .bg-emerald-50,
+      body[data-report-type="companies"] .erp-main .dark\:bg-emerald-950\/40 {
+        background: rgba(16, 185, 129, 0.1) !important;
+        border-color: rgba(16, 185, 129, 0.35) !important;
+      }
+      body[data-report-type="companies"] .erp-main .bg-rose-50,
+      body[data-report-type="companies"] .erp-main .dark\:bg-rose-950\/40 {
+        background: rgba(244, 63, 94, 0.1) !important;
+        border-color: rgba(244, 63, 94, 0.35) !important;
+      }
+      body[data-report-type="companies"] .erp-main .bg-amber-50,
+      body[data-report-type="companies"] .erp-main .dark\:bg-amber-950\/40 {
+        background: rgba(245, 158, 11, 0.1) !important;
+        border-color: rgba(245, 158, 11, 0.35) !important;
+      }
+      body[data-report-type="companies"] .erp-main .bg-indigo-50\/60,
+      body[data-report-type="companies"] .erp-main .dark\:bg-indigo-950\/30 {
+        background: rgba(201, 162, 77, 0.08) !important;
+        border-color: var(--gold-dim) !important;
+      }
+      body[data-report-type="companies"] .erp-main .border-indigo-200,
+      body[data-report-type="companies"] .erp-main .dark\:border-indigo-800 {
+        border-color: var(--gold-dim) !important;
+      }
+      body[data-report-type="companies"] .erp-main .text-indigo-900,
+      body[data-report-type="companies"] .erp-main .dark\:text-indigo-200 {
+        color: var(--gold-soft) !important;
+      }
+      body[data-report-type="companies"] .erp-main .bg-indigo-600 {
+        background: linear-gradient(270deg, #8a6a1f 0%, var(--gold) 100%) !important;
+        color: #1a1406 !important;
+      }
+      body[data-report-type="companies"] .erp-main .text-emerald-700,
+      body[data-report-type="companies"] .erp-main .text-emerald-800,
+      body[data-report-type="companies"] .erp-main .dark\:text-emerald-300,
+      body[data-report-type="companies"] .erp-main .dark\:text-emerald-400 {
+        color: #6ee7b7 !important;
+      }
+      body[data-report-type="companies"] .erp-main .text-rose-700,
+      body[data-report-type="companies"] .erp-main .text-rose-800,
+      body[data-report-type="companies"] .erp-main .dark\:text-rose-300,
+      body[data-report-type="companies"] .erp-main .dark\:text-rose-400 {
+        color: #fda4af !important;
+      }
+      body[data-report-type="companies"] .erp-main .text-amber-700,
+      body[data-report-type="companies"] .erp-main .text-amber-800,
+      body[data-report-type="companies"] .erp-main .dark\:text-amber-300,
+      body[data-report-type="companies"] .erp-main .dark\:text-amber-400 {
+        color: #fcd34d !important;
+      }
+      body[data-report-type="companies"] .erp-main #statTotal {
+        color: var(--gold-soft) !important;
+      }
+      body[data-report-type="companies"] .erp-main button.bg-slate-900,
+      body[data-report-type="companies"] .erp-main .dark\:bg-white {
+        background: linear-gradient(270deg, #8a6a1f 0%, var(--gold) 100%) !important;
+        color: #1a1406 !important;
+      }
+      body[data-report-type="companies"] .report-card--premium {
+        background: linear-gradient(175deg, var(--navy-2), var(--navy-1)) !important;
+        border: 1px solid var(--gold-dim) !important;
+        box-shadow: 0 14px 30px -14px rgba(0, 0, 0, 0.55) !important;
+        position: relative;
+      }
+      body[data-report-type="companies"] .report-card--premium::before {
+        content: "";
+        position: absolute;
+        inset: 0 0 auto 0;
+        height: 2px;
+        border-radius: 0.75rem 0.75rem 0 0;
+        background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      }
+      body[data-report-type="companies"] .report-card--premium,
+      body[data-report-type="companies"] .report-card--premium * {
+        color: #d8dde8;
+      }
+      body[data-report-type="companies"] .report-card--premium .font-extrabold {
+        color: #f0e6c8;
+      }
+      body[data-report-type="companies"] .gem-badge {
+        color: var(--gold);
+        flex-shrink: 0;
+      }
     </style>
   </head>
   <body class="erp-shell bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen" data-report-type="companies">
@@ -102,7 +311,7 @@
       <main class="erp-main">
         <div class="max-w-6xl mx-auto w-full px-4 py-6 md:px-6">
       <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 md:p-8 shadow-sm">
-        <h1 class="text-2xl md:text-3xl font-extrabold text-center">مطابقة الشركات</h1>
+        <h1 class="text-2xl md:text-3xl font-extrabold text-center flex items-center justify-center gap-2"><svg class="gem-badge" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3h12l3 5-9 13L3 8l3-5z" stroke-linejoin="round"/><path d="M3 8h18M9 3l3 5-3 13M15 3l-3 5 3 13" stroke-linejoin="round"/></svg>مطابقة الشركات<svg class="gem-badge" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3h12l3 5-9 13L3 8l3-5z" stroke-linejoin="round"/><path d="M3 8h18M9 3l3 5-3 13M15 3l-3 5 3 13" stroke-linejoin="round"/></svg></h1>
         <p class="text-center text-slate-600 dark:text-slate-400 mt-2">ارفع كشف حساب الشركة الأولى والشركة الثانية (Excel أو PDF أو CSV) ثم اضغط «ابدأ التحليل».</p>
         <p class="text-center text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-xl mx-auto">
           الحد المعتاد لحجم كل ملف حوالي <span class="font-extrabold text-slate-600 dark:text-slate-300">15 ميجابايت</span>؛ إن احتجت حداً أعلى يضبطه مسؤول النظام على الخادم.
