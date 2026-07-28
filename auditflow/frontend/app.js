@@ -820,7 +820,9 @@ function updateThemeToggleUi() {
   const btn = document.getElementById("themeToggle");
   if (!btn) return;
   const isDark = document.documentElement.classList.contains("dark");
-  btn.textContent = isDark ? "☀️ نهار" : "🌙 ليل";
+  btn.innerHTML = isDark
+    ? '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m8-9h1M3 12H2m15.4 6.4l.7.7M5.9 5.9l.7.7m11.3-.7l-.7.7M5.9 18.1l.7-.7M17 12a5 5 0 11-10 0 5 5 0 0110 0z"/></svg>'
+    : '<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>';
   btn.title = isDark ? "التبديل إلى الوضع النهاري" : "التبديل إلى الوضع الليلي";
   btn.setAttribute("aria-label", isDark ? "التبديل إلى الوضع النهاري" : "التبديل إلى الوضع الليلي");
 }
@@ -837,13 +839,13 @@ function initNavAndTheme() {
   else if (path.startsWith("/inventory-management")) key = "op-inventory";
   else if (path.startsWith("/suppliers")) key = "op-suppliers";
   else if (path.startsWith("/analytics")) key = "op-analytics";
-  else if (path.startsWith("/analyze")) key = "analyze";
-  else if (path.startsWith("/convert")) key = "convert";
-  else if (path.startsWith("/importer")) key = "importer";
-  else if (path.startsWith("/reports")) key = "reports";
-  else if (path.startsWith("/report")) key = "reports";
-  else if (path.startsWith("/settings")) key = "settings";
-  else if (path.startsWith("/help")) key = "help";
+  else if (path.startsWith("/analyze")) key = "op-matching";
+  else if (path.startsWith("/convert")) key = "op-convert";
+  else if (path.startsWith("/importer")) key = "op-finance";
+  else if (path.startsWith("/reports")) key = "op-analytics";
+  else if (path.startsWith("/report")) key = "op-analytics";
+  else if (path.startsWith("/settings")) key = "op-settings";
+  else if (path.startsWith("/help")) key = "op-home";
   else if (path.startsWith("/about")) key = "about";
   else if (path.startsWith("/contact")) key = "contact";
   else if (path.startsWith("/social")) key = "social";
