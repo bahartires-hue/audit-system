@@ -299,6 +299,11 @@
     <script src="/static/app.js?v=15"></script>
     <script>
       (function () {
+        // Ensure the CSRF cookie exists for a fresh/anonymous visitor before any
+        // login/register submission — /auth/me always issues+sets it, even for
+        // anonymous users, and mirrors it into localStorage via apiGet().
+        try { if (typeof apiGet === "function") apiGet("/auth/me").catch(function () {}); } catch (e) {}
+
         var AUDITFLOW_REMEMBER_USER_KEY = "auditflow_remember_username";
         var AUDITFLOW_LAST_USERNAME_KEY = "auditflow_last_username";
 
