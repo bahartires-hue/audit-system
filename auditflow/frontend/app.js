@@ -829,6 +829,14 @@ function initNavAndTheme() {
   const path = window.location.pathname || "";
   let key = "home";
   if (path.startsWith("/companies")) key = "companies";
+  else if (path === "/" ) key = "op-home";
+  else if (path.startsWith("/matching")) key = "op-matching";
+  else if (path.startsWith("/branches-management")) key = "op-branches";
+  else if (path.startsWith("/hr")) key = "op-hr";
+  else if (path.startsWith("/finance")) key = "op-finance";
+  else if (path.startsWith("/inventory-management")) key = "op-inventory";
+  else if (path.startsWith("/suppliers")) key = "op-suppliers";
+  else if (path.startsWith("/analytics")) key = "op-analytics";
   else if (path.startsWith("/analyze")) key = "analyze";
   else if (path.startsWith("/convert")) key = "convert";
   else if (path.startsWith("/importer")) key = "importer";

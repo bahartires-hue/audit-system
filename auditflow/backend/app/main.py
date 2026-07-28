@@ -192,6 +192,41 @@ def ui_companies_report(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "company_report.html")
 
 
+@app.get("/matching", response_class=HTMLResponse)
+def ui_matching_hub(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "matching_hub.html")
+
+
+@app.get("/branches-management", response_class=HTMLResponse)
+def ui_branches_management(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "branches_management.html")
+
+
+@app.get("/hr", response_class=HTMLResponse)
+def ui_hr(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "hr.html")
+
+
+@app.get("/finance", response_class=HTMLResponse)
+def ui_finance(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "finance.html")
+
+
+@app.get("/inventory-management", response_class=HTMLResponse)
+def ui_inventory_management(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "inventory_management.html")
+
+
+@app.get("/suppliers", response_class=HTMLResponse)
+def ui_suppliers(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "suppliers.html")
+
+
+@app.get("/analytics", response_class=HTMLResponse)
+def ui_analytics(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "analytics.html")
+
+
 @app.get("/convert", response_class=HTMLResponse)
 def ui_convert(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "convert.html")
