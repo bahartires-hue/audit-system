@@ -206,8 +206,8 @@
               <div class="lv-input-wrap"><input id="rvEmail" type="email" placeholder="بريدك الإلكتروني" autocomplete="email" /></div>
             </div>
             <div class="lv-field">
-              <label for="rvInvite">كود الدعوة (إن وجد)</label>
-              <div class="lv-input-wrap"><input id="rvInvite" type="text" placeholder="اختياري" /></div>
+              <label for="rvInvite">كود الدعوة <span style="color:#ef4444">*</span></label>
+              <div class="lv-input-wrap"><input id="rvInvite" type="text" placeholder="أدخلي كود الدعوة" required /></div>
             </div>
             <div class="lv-field">
               <label for="rvPlan">الخطة</label>
@@ -296,7 +296,7 @@
       </aside>
     </div>
 
-    <script src="/static/app.js?v=15"></script>
+    <script src="/static/app.js?v=16"></script>
     <script>
       (function () {
         // Ensure the CSRF cookie exists for a fresh/anonymous visitor before any
@@ -386,6 +386,7 @@
           var legalOk = document.getElementById("rvAcceptLegal").checked;
           if (!username || !password) { showToast("أدخل اسم المستخدم وكلمة المرور", "#ef4444"); return; }
           if (!email) { showToast("أدخل البريد الإلكتروني", "#ef4444"); return; }
+          if (!invite_code) { showToast("كود الدعوة مطلوب لإنشاء حساب جديد", "#ef4444"); return; }
           if (!legalOk) { showToast("يجب الموافقة على الشروط والسياسات لإكمال التسجيل", "#ef4444"); return; }
           try {
             await apiPostJson("/auth/register", {

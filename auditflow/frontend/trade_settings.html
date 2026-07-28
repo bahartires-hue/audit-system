@@ -25,7 +25,7 @@
 <button id="saveSettingsBtn" class="rounded-xl border font-extrabold px-4 py-2">حفظ الإعدادات</button>
 </section>
 </div>
-<script src="/static/app.js?v=15"></script>
+<script src="/static/app.js?v=16"></script>
 <script>
 (async function(){await initAuthUI();
 async function loadSettings(){const d=await apiGet("/api/cashierko/settings");const s=d.settings||{};document.getElementById("shopName").value=s.shop_name||"";document.getElementById("shopPhone").value=s.phone||"";document.getElementById("shopAddress").value=s.address||"";document.getElementById("taxNumber").value=s.tax_number||"";document.getElementById("commercialRegister").value=s.commercial_register||"";document.getElementById("postalCode").value=s.postal_code||"";document.getElementById("country").value=s.country||"";document.getElementById("city").value=s.city||"";document.getElementById("currency").value=s.currency||"SAR";document.getElementById("taxRate").value=s.tax_rate||0;document.getElementById("invoicePrefix").value=s.invoice_prefix||"INV";document.getElementById("printSize").value=s.print_size||"A4";document.getElementById("thermalHeader").value=s.thermal_header||"";}

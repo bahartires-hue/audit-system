@@ -16,6 +16,7 @@ from ..auth_core import (
     COOKIE_PATH,
     CSRF_COOKIE,
     LOCK_MINUTES,
+    PAGE_KEYS,
     SESSION_COOKIE,
     cookie_secure,
     create_session,
@@ -183,6 +184,7 @@ def auth_me(request: Request):
                     "is_active": is_active,
                     "plan_name": plan_name,
                     "subscription_expires_at": exp.isoformat() + "Z" if exp else None,
+                    "allowed_pages": (u.allowed_pages or []) if u else [],
                     "roles": {
                         "user": bool(u),
                         "support": _has_role(u, "support") if u else False,
@@ -795,6 +797,7 @@ def admin_users(request: Request, limit: int = 200):
                     "plan_name": u.plan_name or "free",
                     "subscription_expires_at": u.subscription_expires_at.isoformat() + "Z" if u.subscription_expires_at else None,
                     "created_at": u.created_at.isoformat() + "Z" if u.created_at else None,
+                    "allowed_pages": u.allowed_pages or [],
                 }
                 for u in rows
             ]
@@ -831,6 +834,16 @@ async def admin_update_user(request: Request):
             target.role_name = role
             if role == "admin":
                 target.is_admin = 1
+        if "allowed_pages" in payload:
+            raw_pages = payload.get("allowed_pages") or []
+            if not isinstance(raw_pages, list):
+                raise HTTPException(400, "allowed_pages يجب أن تكون قائمة")
+            cleaned = []
+            for p in raw_pages:
+                p = str(p or "").strip()
+                if p in PAGE_KEYS and p not in cleaned:
+                    cleaned.append(p)
+            target.allowed_pages = cleaned
         if "subscription_months" in payload:
             m = int(payload.get("subscription_months") or 0)
             if m > 0:

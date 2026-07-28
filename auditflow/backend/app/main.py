@@ -17,7 +17,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from .auth_core import log_event, require_csrf, require_user
+from .auth_core import log_event, require_csrf, require_user, user_can_access_page_key
 from .db import SessionLocal as _SessionLocal
 from .models import AnalysisReport, User, init_db
 from .rate_limit import limiter
@@ -155,10 +155,14 @@ def _attachment_content_disposition(download_name: str) -> str:
     return f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quote(raw, safe='')}"
 
 
-def _require_login_page(request: Request, html_path: Path) -> FileResponse | RedirectResponse:
+def _require_login_page(
+    request: Request, html_path: Path, page_key: str | None = None
+) -> FileResponse | RedirectResponse:
     db = _SessionLocal()
     try:
-        require_user(db, request)
+        u = require_user(db, request)
+        if not user_can_access_page_key(u, page_key):
+            return RedirectResponse(url="/?denied=1", status_code=302)
         return FileResponse(str(html_path), headers=dict(_HTML_NO_CACHE))
     except HTTPException as e:
         reason = quote(str(getattr(e, "detail", "") or "يرجى تسجيل الدخول أولاً"))
@@ -169,72 +173,72 @@ def _require_login_page(request: Request, html_path: Path) -> FileResponse | Red
 
 @app.get("/", response_class=HTMLResponse)
 def ui_home(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "index.html")
+    return _require_login_page(request, FRONTEND_DIR / "index.html", "op-home")
 
 
 @app.get("/analyze", response_class=HTMLResponse)
 def ui_analyze(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "analyze.html")
+    return _require_login_page(request, FRONTEND_DIR / "analyze.html", "op-matching")
 
 
 @app.get("/companies/analyze", response_class=HTMLResponse)
 def ui_companies_analyze(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "company_analyze.html")
+    return _require_login_page(request, FRONTEND_DIR / "company_analyze.html", "op-matching")
 
 
 @app.get("/companies/reports", response_class=HTMLResponse)
 def ui_companies_reports(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "company_reports.html")
+    return _require_login_page(request, FRONTEND_DIR / "company_reports.html", "op-matching")
 
 
 @app.get("/companies/report", response_class=HTMLResponse)
 def ui_companies_report(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "company_report.html")
+    return _require_login_page(request, FRONTEND_DIR / "company_report.html", "op-matching")
 
 
 @app.get("/matching", response_class=HTMLResponse)
 def ui_matching_hub(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "matching_hub.html")
+    return _require_login_page(request, FRONTEND_DIR / "matching_hub.html", "op-matching")
 
 
 @app.get("/branches-management", response_class=HTMLResponse)
 def ui_branches_management(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "branches_management.html")
+    return _require_login_page(request, FRONTEND_DIR / "branches_management.html", "op-branches")
 
 
 @app.get("/hr", response_class=HTMLResponse)
 def ui_hr(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "hr.html")
+    return _require_login_page(request, FRONTEND_DIR / "hr.html", "op-hr")
 
 
 @app.get("/finance", response_class=HTMLResponse)
 def ui_finance(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "finance.html")
+    return _require_login_page(request, FRONTEND_DIR / "finance.html", "op-finance")
 
 
 @app.get("/inventory-management", response_class=HTMLResponse)
 def ui_inventory_management(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "inventory_management.html")
+    return _require_login_page(request, FRONTEND_DIR / "inventory_management.html", "op-inventory")
 
 
 @app.get("/suppliers", response_class=HTMLResponse)
 def ui_suppliers(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "suppliers.html")
+    return _require_login_page(request, FRONTEND_DIR / "suppliers.html", "op-suppliers")
 
 
 @app.get("/analytics", response_class=HTMLResponse)
 def ui_analytics(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "analytics.html")
+    return _require_login_page(request, FRONTEND_DIR / "analytics.html", "op-analytics")
 
 
 @app.get("/convert", response_class=HTMLResponse)
 def ui_convert(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "convert.html")
+    return _require_login_page(request, FRONTEND_DIR / "convert.html", "op-convert")
 
 
 @app.get("/importer", response_class=HTMLResponse)
 def ui_importer(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "importer.html")
+    return _require_login_page(request, FRONTEND_DIR / "importer.html", "op-finance")
 
 
 @app.get("/brand-scan", response_class=HTMLResponse)
@@ -299,7 +303,7 @@ def ui_trade_transfers(request: Request):
 
 @app.get("/settings", response_class=HTMLResponse)
 def ui_settings(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "settings.html")
+    return _require_login_page(request, FRONTEND_DIR / "settings.html", "op-settings")
 
 
 @app.get("/help", response_class=HTMLResponse)
@@ -549,7 +553,7 @@ def list_reports(
     report_type: str = Query("branches"),
 ):
     if _wants_html(request):
-        return _require_login_page(request, FRONTEND_DIR / "reports.html")
+        return _require_login_page(request, FRONTEND_DIR / "reports.html", "op-analytics")
 
     report_type = _normalize_report_type(report_type)
 
@@ -605,7 +609,7 @@ def list_reports(
 @app.get("/report")
 def get_report(request: Request, id: str = Query(...)):
     if _wants_html(request):
-        return _require_login_page(request, FRONTEND_DIR / "report.html")
+        return _require_login_page(request, FRONTEND_DIR / "report.html", "op-analytics")
 
     db = _SessionLocal()
     try:

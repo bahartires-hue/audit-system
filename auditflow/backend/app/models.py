@@ -23,6 +23,7 @@ class User(Base):
     locked_until = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
     preferences_json = Column(JSON, nullable=False, default=lambda: {})
+    allowed_pages = Column(JSON, nullable=True)
 
 
 class Role(Base):

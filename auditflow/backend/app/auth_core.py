@@ -118,6 +118,40 @@ def require_user(db: Session, request: Request) -> User:
     return u
 
 
+# صلاحيات مشاهدة الصفحات لكل مستخدم (لا علاقة لها بخوارزميات مطابقة الشركات/الفروع نفسها،
+# فقط تتحكم في إمكانية الوصول لصفحة الواجهة).
+PAGE_KEYS = [
+    "op-home",
+    "op-matching",
+    "op-branches",
+    "op-hr",
+    "op-finance",
+    "op-inventory",
+    "op-suppliers",
+    "op-analytics",
+    "op-convert",
+    "op-settings",
+]
+# الصفحة الرئيسية متاحة دائمًا لكل مستخدم مسجّل حتى بدون صلاحية صريحة.
+ALWAYS_ALLOWED_PAGE_KEYS = {"op-home"}
+
+
+def user_can_access_page_key(user: Optional[User], page_key: Optional[str]) -> bool:
+    """صفحة بدون page_key (مثل صفحات المساعدة/القانونية) متاحة للجميع.
+    المدير (is_admin) يرى كل شيء دائمًا. غير ذلك: القائمة البيضاء allowed_pages فقط
+    (افتراضيًا فارغة = لا يرى شيء غير الرئيسية إلى أن يحدد المدير صلاحياته)."""
+    if not page_key:
+        return True
+    if not user:
+        return False
+    if int(getattr(user, "is_admin", 0) or 0) == 1:
+        return True
+    if page_key in ALWAYS_ALLOWED_PAGE_KEYS:
+        return True
+    allowed = getattr(user, "allowed_pages", None) or []
+    return page_key in allowed
+
+
 def log_event(db: Session, action: str, user_id: Optional[str] = None, meta: Optional[Dict[str, Any]] = None) -> None:
     db.add(
         AuditLog(

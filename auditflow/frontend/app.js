@@ -991,6 +991,34 @@ function initNavAndTheme() {
 
 document.addEventListener("DOMContentLoaded", initNavAndTheme);
 
+async function applyPagePermissionsUI() {
+  // إظهار تنبيه إن كانت إعادة التوجيه بسبب صلاحية صفحة مرفوضة.
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("denied") === "1") {
+      showToast("ليس لديك صلاحية للوصول لهذه الصفحة", "#ef4444");
+      params.delete("denied");
+      const qs = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+    }
+  } catch (e) {}
+
+  const navLinks = document.querySelectorAll('a[data-nav^="op-"]');
+  if (!navLinks.length) return;
+  try {
+    const me = await apiGet("/auth/me");
+    if (!me || !me.username) return;
+    if (me.is_admin) return; // المدير يرى كل شيء دائمًا
+    const allowed = new Set(me.allowed_pages || []);
+    navLinks.forEach((a) => {
+      const key = a.getAttribute("data-nav");
+      if (key === "op-home") return; // الرئيسية متاحة دائمًا
+      if (!allowed.has(key)) a.style.display = "none";
+    });
+  } catch (e) {}
+}
+document.addEventListener("DOMContentLoaded", applyPagePermissionsUI);
+
 // deleteReport is global for inline onclick usage
 window.deleteReport = deleteReport;
 window.toggleReportArchive = toggleReportArchive;
