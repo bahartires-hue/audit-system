@@ -222,6 +222,46 @@
       }
       body.op-dashboard .op-shell-card p { color: var(--text-muted); font-weight: 700; max-width: 480px; margin: 0 auto 1.5rem; line-height: 1.7; }
 
+      /* --- تحسين لوحة المدير (جدول المستخدمين + الإحصائيات) لتتوافق مع الهوية الفخمة --- */
+      body.op-dashboard .op-panel-head { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem; }
+      body.op-dashboard .op-panel-icon {
+        width: 42px; height: 42px; border-radius: 12px; flex-shrink: 0;
+        background: linear-gradient(135deg, var(--gold-soft), var(--gold));
+        color: #1a1406; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;
+      }
+      body.op-dashboard .op-admin-table thead {
+        background: linear-gradient(90deg, rgba(180, 140, 60, 0.16), rgba(180, 140, 60, 0.04));
+      }
+      body.op-dashboard .op-admin-table th {
+        color: var(--gold-soft) !important; font-weight: 800; font-size: 0.72rem;
+        text-transform: uppercase; letter-spacing: 0.02em; white-space: nowrap;
+      }
+      body.op-dashboard .op-admin-table td { font-size: 0.82rem; }
+      body.op-dashboard .op-admin-table tbody tr { transition: background 0.15s ease; }
+      body.op-dashboard .op-admin-table tbody tr:hover { background: var(--surface-soft); }
+      body.op-dashboard .op-admin-table td, body.op-dashboard .op-admin-table th { border-color: var(--gold-dim) !important; }
+      body.op-dashboard .op-user-avatar {
+        width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+        background: linear-gradient(135deg, var(--gold-soft), var(--gold)); color: #1a1406;
+        font-weight: 800; font-size: 0.82rem; flex-shrink: 0;
+      }
+      body.op-dashboard .op-user-cell { display: flex; align-items: center; gap: 0.55rem; }
+      body.op-dashboard .op-btn-chip {
+        padding: 0.32rem 0.65rem; border-radius: 8px; font-size: 0.68rem; font-weight: 800;
+        border: 1px solid var(--gold-dim); cursor: pointer; background: transparent; color: var(--text-body);
+      }
+      body.op-dashboard .op-btn-chip:hover { filter: brightness(1.05); background: var(--surface-soft); }
+      body.op-dashboard .op-btn-chip--danger { color: #dc2626; border-color: rgba(220, 38, 38, 0.35); }
+      body.op-dashboard .op-btn-chip--danger:hover { background: rgba(220, 38, 38, 0.08); }
+      body.op-dashboard .op-btn-chip--success { color: #16a34a; border-color: rgba(22, 163, 74, 0.35); }
+      body.op-dashboard .op-btn-chip--success:hover { background: rgba(22, 163, 74, 0.08); }
+      body.op-dashboard .op-btn-chip--gold {
+        background: linear-gradient(270deg, #8a6a1f 0%, var(--gold) 45%, var(--gold-soft) 100%);
+        color: #1a1406; border: none;
+      }
+      body.op-dashboard .op-activity-cell { font-size: 0.72rem; color: var(--text-muted); line-height: 1.5; white-space: nowrap; }
+      body.op-dashboard .op-activity-cell b { color: var(--text-body); font-weight: 800; }
+
       /* --- إعادة تلوين محتوى منقول من صفحات قديمة (مثل الإعدادات) بنفس أسلوب Tailwind
          القديم، لتتوافق مع الهوية الجديدة تلقائيًا في الوضعين الليلي والنهاري --- */
       body.op-dashboard .op-main h1,
@@ -391,7 +431,7 @@
         <details id="activityPanel" class="group">
           <summary class="cursor-pointer list-none flex items-center justify-between gap-3">
             <span>
-              <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50 inline">سجل النشاط الأخير</h2>
+              <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50 inline">📋 سجل النشاط الأخير</h2>
               <p class="text-slate-600 dark:text-slate-400 text-sm mt-1">آخر العمليات المسجّلة لحسابك (دخول، تقارير، تحديثات).</p>
             </span>
             <span class="text-xs font-extrabold text-slate-500 dark:text-slate-400 group-open:hidden">إظهار</span>
@@ -402,7 +442,7 @@
       </div>
 
       <div id="inviteCard" class="hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 shadow-sm">
-        <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">دعوة عميل جديد (مدير فقط)</h2>
+        <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">🎟️ دعوة عميل جديد (مدير فقط)</h2>
         <p class="text-slate-600 dark:text-slate-400 text-sm mt-1">الدعوة افتراضيًا لمستخدم واحد وتنتهي بعد أسبوع.</p>
         <div class="mt-4 flex flex-wrap items-center gap-3">
           <input
@@ -424,7 +464,7 @@
       </div>
 
       <div id="adminConfigCard" class="hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 shadow-sm">
-        <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">إعدادات عامة (مدير)</h2>
+        <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">⚙️ إعدادات عامة (مدير)</h2>
         <p class="text-slate-600 dark:text-slate-400 text-sm mt-1">تحديث بيانات التواصل واسم المؤسسة بدون تعديل الكود.</p>
         <div class="grid md:grid-cols-2 gap-3 mt-4">
           <input id="cfgCompanyName" placeholder="اسم المؤسسة" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100" />
@@ -437,7 +477,7 @@
           <button id="downloadBackupBtn" class="px-4 py-2 rounded-xl border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-extrabold hover:bg-emerald-50 dark:hover:bg-emerald-950/40">تنزيل نسخة احتياطية</button>
         </div>
         <div class="mt-4 border-t border-slate-200 dark:border-slate-700 pt-4">
-          <h3 class="font-extrabold text-slate-900 dark:text-slate-50 text-sm">فحص SMTP</h3>
+          <h3 class="font-extrabold text-slate-900 dark:text-slate-50 text-sm">📧 فحص SMTP</h3>
           <p id="smtpStatusTxt" class="text-xs text-slate-500 dark:text-slate-400 mt-1">جاري الفحص...</p>
           <div class="mt-2 flex flex-wrap gap-2">
             <input id="smtpTestEmail" type="email" placeholder="بريد لاختبار الإرسال" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100" />
@@ -447,35 +487,46 @@
       </div>
 
       <div id="adminPanel" class="hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 shadow-sm">
-        <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">لوحة المدير</h2>
-        <p class="text-slate-600 dark:text-slate-400 text-sm mt-1">هنا تتحكم بالحسابات، الخطط، وفترات الاشتراك.</p>
-        <div class="grid sm:grid-cols-3 gap-3 mt-4">
-          <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-3">
-            <div class="text-xs text-slate-500 dark:text-slate-400 font-extrabold">المستخدمون</div>
-            <div id="sumUsers" class="text-2xl font-extrabold">0</div>
+        <div class="op-panel-head">
+          <div class="op-panel-icon">🛡️</div>
+          <div>
+            <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">لوحة المدير</h2>
+            <p class="text-slate-600 dark:text-slate-400 text-sm">هنا تتحكم بالحسابات، الخطط، وفترات الاشتراك، وتتابعين نشاط كل مستخدم.</p>
           </div>
-          <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-3">
-            <div class="text-xs text-slate-500 dark:text-slate-400 font-extrabold">الدعوات الفعالة</div>
-            <div id="sumInvites" class="text-2xl font-extrabold">0</div>
+        </div>
+        <div class="op-stats" style="margin-top:1.25rem; margin-bottom:0;">
+          <div class="op-stat-card">
+            <div class="op-stat-icon">👥</div>
+            <div id="sumUsers" class="op-stat-value">0</div>
+            <div class="op-stat-label">المستخدمون</div>
           </div>
-          <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-3">
-            <div class="text-xs text-slate-500 dark:text-slate-400 font-extrabold">المشتركون المدفوعون</div>
-            <div id="sumPaid" class="text-2xl font-extrabold">0</div>
+          <div class="op-stat-card">
+            <div class="op-stat-icon">🎟️</div>
+            <div id="sumInvites" class="op-stat-value">0</div>
+            <div class="op-stat-label">الدعوات الفعالة</div>
           </div>
-          <div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-3">
-            <div class="text-xs text-slate-500 dark:text-slate-400 font-extrabold">ينتهون خلال 7 أيام</div>
-            <div id="sumExpiring" class="text-2xl font-extrabold text-amber-600 dark:text-amber-400">0</div>
+          <div class="op-stat-card">
+            <div class="op-stat-icon">💳</div>
+            <div id="sumPaid" class="op-stat-value">0</div>
+            <div class="op-stat-label">المشتركون المدفوعون</div>
+          </div>
+          <div class="op-stat-card">
+            <div class="op-stat-icon">⏰</div>
+            <div id="sumExpiring" class="op-stat-value" style="color:#d97706;">0</div>
+            <div class="op-stat-label">ينتهون خلال 7 أيام</div>
           </div>
         </div>
         <div class="mt-4 overflow-auto rounded-2xl border border-slate-200 dark:border-slate-700">
-          <table class="w-full text-right text-sm">
-            <thead class="bg-slate-50 dark:bg-slate-800/80">
+          <table class="op-admin-table w-full text-right text-sm">
+            <thead>
               <tr>
-                <th class="px-3 py-2 font-extrabold">المستخدم</th>
-                <th class="px-3 py-2 font-extrabold">الخطة</th>
-                <th class="px-3 py-2 font-extrabold">الانتهاء</th>
-                <th class="px-3 py-2 font-extrabold">الحالة</th>
-                <th class="px-3 py-2 font-extrabold">إجراء</th>
+                <th class="px-3 py-2">المستخدم</th>
+                <th class="px-3 py-2">الخطة</th>
+                <th class="px-3 py-2">الانتهاء</th>
+                <th class="px-3 py-2">الحالة</th>
+                <th class="px-3 py-2">آخر دخول / خروج</th>
+                <th class="px-3 py-2">التقارير</th>
+                <th class="px-3 py-2">إجراء</th>
               </tr>
             </thead>
             <tbody id="adminUsersHost"></tbody>
@@ -682,7 +733,7 @@
         modal.innerHTML = `
           <div class="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-5">
             <div class="flex items-center justify-between mb-3">
-              <h3 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">صلاحيات مشاهدة الصفحات</h3>
+              <h3 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">🔐 صلاحيات مشاهدة الصفحات</h3>
               <button type="button" id="permsCloseBtn" class="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300">✕</button>
             </div>
             <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">حددي الصفحات التي يمكن لهذا المستخدم رؤيتها. صفحة "الرئيسية" متاحة دائمًا لكل مستخدم.</p>
@@ -755,8 +806,12 @@
           const items = u.items || [];
           usersHost.innerHTML = "";
           if (!items.length) {
-            usersHost.innerHTML = '<tr><td colspan="5" class="px-3 py-4 text-center text-slate-500">لا يوجد مستخدمون</td></tr>';
+            usersHost.innerHTML = '<tr><td colspan="7" class="px-3 py-4 text-center text-slate-500">لا يوجد مستخدمون</td></tr>';
             return;
+          }
+          function fmtActivityDT(v) {
+            if (!v) return "-";
+            try { return new Date(v).toLocaleString("ar-EG", { dateStyle: "short", timeStyle: "short" }); } catch (e) { return "-"; }
           }
           items.forEach((x) => {
             const tr = document.createElement("tr");
@@ -764,23 +819,39 @@
             const exp = x.subscription_expires_at || "-";
             const activeTxt = x.is_active ? "نشط" : "موقوف";
             const permsTxt = x.is_admin ? "كل الصفحات (مدير)" : `مسموح: ${(x.allowed_pages || []).length} من ${PAGE_PERMISSION_ITEMS.length}`;
+            const initial = (x.username || "؟").trim().charAt(0).toUpperCase();
             tr.innerHTML = `
-              <td class="px-3 py-2"><div class="font-extrabold">${x.username}</div><div class="text-xs text-slate-500" dir="ltr">${x.email || "-"}</div></td>
+              <td class="px-3 py-2">
+                <div class="op-user-cell">
+                  <div class="op-user-avatar">${initial}</div>
+                  <div>
+                    <div class="font-extrabold">${x.username}</div>
+                    <div class="text-xs text-slate-500" dir="ltr">${x.email || "-"}</div>
+                  </div>
+                </div>
+              </td>
               <td class="px-3 py-2"><span class="font-extrabold">${x.plan_name || "free"}</span></td>
               <td class="px-3 py-2" dir="ltr">${exp}</td>
               <td class="px-3 py-2">${activeTxt}${x.is_admin ? " · مدير" : ""}</td>
               <td class="px-3 py-2">
+                <div class="op-activity-cell">
+                  <div>دخول: <b>${fmtActivityDT(x.last_login_at)}</b></div>
+                  <div>خروج: <b>${fmtActivityDT(x.last_logout_at)}</b></div>
+                </div>
+              </td>
+              <td class="px-3 py-2"><span class="font-extrabold">${x.reports_count || 0}</span></td>
+              <td class="px-3 py-2">
                 <div class="text-[11px] text-slate-500 dark:text-slate-400 mb-1">${permsTxt}</div>
                 <div class="flex flex-wrap gap-1">
-                  <button class="px-2 py-1 rounded border text-xs font-extrabold" data-a="toggle">${x.is_active ? "إيقاف" : "تفعيل"}</button>
-                  <button class="px-2 py-1 rounded border text-xs font-extrabold" data-a="m1">1ش</button>
-                  <button class="px-2 py-1 rounded border text-xs font-extrabold" data-a="m3">3ش</button>
-                  <button class="px-2 py-1 rounded border text-xs font-extrabold" data-a="m6">6ش</button>
-                  <button class="px-2 py-1 rounded border text-xs font-extrabold" data-a="m12">1س</button>
-                  <button class="px-2 py-1 rounded border text-xs font-extrabold" data-a="m60">5س</button>
-                  <button class="px-2 py-1 rounded border text-xs font-extrabold" data-a="free">مجاني</button>
-                  <button class="px-2 py-1 rounded border text-xs font-extrabold" data-a="perms">الصلاحيات</button>
-                  <button class="px-2 py-1 rounded border text-xs font-extrabold" data-a="permsAll" title="منح كل الصفحات لهذا المستخدم دفعة واحدة">منح الكل</button>
+                  <button class="op-btn-chip ${x.is_active ? "op-btn-chip--danger" : "op-btn-chip--success"}" data-a="toggle">${x.is_active ? "إيقاف" : "تفعيل"}</button>
+                  <button class="op-btn-chip" data-a="m1">1ش</button>
+                  <button class="op-btn-chip" data-a="m3">3ش</button>
+                  <button class="op-btn-chip" data-a="m6">6ش</button>
+                  <button class="op-btn-chip" data-a="m12">1س</button>
+                  <button class="op-btn-chip" data-a="m60">5س</button>
+                  <button class="op-btn-chip" data-a="free">مجاني</button>
+                  <button class="op-btn-chip op-btn-chip--gold" data-a="perms">الصلاحيات</button>
+                  <button class="op-btn-chip op-btn-chip--gold" data-a="permsAll" title="منح كل الصفحات لهذا المستخدم دفعة واحدة">منح الكل</button>
                 </div>
               </td>
             `;

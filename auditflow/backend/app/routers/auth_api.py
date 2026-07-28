@@ -785,6 +785,29 @@ def admin_users(request: Request, limit: int = 200):
     try:
         _ = _require_admin_user(db, request)
         rows = db.query(User).order_by(User.created_at.desc()).limit(lim).all()
+        user_ids = [u.id for u in rows]
+        last_login_map = {}
+        last_logout_map = {}
+        reports_count_map = {}
+        if user_ids:
+            last_login_map = dict(
+                db.query(AuditLog.user_id, func.max(AuditLog.created_at))
+                .filter(AuditLog.action == "auth.login", AuditLog.user_id.in_(user_ids))
+                .group_by(AuditLog.user_id)
+                .all()
+            )
+            last_logout_map = dict(
+                db.query(AuditLog.user_id, func.max(AuditLog.created_at))
+                .filter(AuditLog.action == "auth.logout", AuditLog.user_id.in_(user_ids))
+                .group_by(AuditLog.user_id)
+                .all()
+            )
+            reports_count_map = dict(
+                db.query(AnalysisReport.user_id, func.count(AnalysisReport.id))
+                .filter(AnalysisReport.user_id.in_(user_ids))
+                .group_by(AnalysisReport.user_id)
+                .all()
+            )
         return {
             "items": [
                 {
@@ -798,6 +821,9 @@ def admin_users(request: Request, limit: int = 200):
                     "subscription_expires_at": u.subscription_expires_at.isoformat() + "Z" if u.subscription_expires_at else None,
                     "created_at": u.created_at.isoformat() + "Z" if u.created_at else None,
                     "allowed_pages": u.allowed_pages or [],
+                    "last_login_at": (last_login_map.get(u.id).isoformat() + "Z") if last_login_map.get(u.id) else None,
+                    "last_logout_at": (last_logout_map.get(u.id).isoformat() + "Z") if last_logout_map.get(u.id) else None,
+                    "reports_count": int(reports_count_map.get(u.id, 0) or 0),
                 }
                 for u in rows
             ]
