@@ -66,7 +66,7 @@
       }
 
       /* --- الهيكل: نعتمد على ترتيب flex الموجود أصلًا في .erp-shell/.erp-content
-         (وليس position:fixed) حتى يظهر الشريط الجانبي يمين الصفحة تلقائيًا مع RTL،
+         (وليس position:fixed) حتى يظهر الشريط الجانبي يمين الصفحة تلقائياً مع RTL،
          بنفس طريقة عمل .erp-sidebar الأصلية في باقي الموقع. --- */
       body.op-dashboard.erp-shell { align-items: stretch; }
       body.op-dashboard .op-sidebar {
@@ -451,7 +451,7 @@
       <main class="op-main">
         <div class="op-tabs-switch">
           <button type="button" class="op-tab-btn op-tab-btn--active" id="opTabBtnSimple" data-tab="simple">📦 المخزون البسيط</button>
-          <button type="button" class="op-tab-btn" id="opTabBtnLegacy" data-tab="legacy">🛒 نقاط البيع (قريبًا)</button>
+          <button type="button" class="op-tab-btn" id="opTabBtnLegacy" data-tab="legacy">🛒 نقاط البيع</button>
           <button type="button" class="op-tab-btn" id="opTabBtnCompany" data-tab="company">🏢 بيانات الشركة</button>
         </div>
 
@@ -695,12 +695,54 @@
 
         <div id="opTabPanelLegacy" class="op-tab-panel">
 
-        <div class="op-shell-card">
-          <div class="op-shell-icon">🛒</div>
-          <div class="op-shell-badge">قيد التطوير 🚧</div>
-          <h1>نقاط البيع (POS)</h1>
-          <p>الأصناف، المشتريات، المبيعات، الفواتير، الأرباح، التقارير، وإعدادات المتجر — سيتم تفعيل هذا القسم وبرمجته بالكامل قريبًا.</p>
-          <a href="/" class="op-module-btn">العودة للرئيسية ←</a>
+        <div class="op-hero" style="margin-bottom:1.25rem;">
+          <h1>🛒 <b>نقاط البيع (POS)</b></h1>
+          <p>نظام نقاط بيع متكامل بالأصناف والمشتريات والمبيعات والفواتير والتقارير — اختاري القسم الذي تريدين الدخول إليه.</p>
+        </div>
+
+        <div class="op-modules-grid">
+          <div class="op-module-card">
+            <div class="op-module-icon" style="background: #4fa3f722; color: #4fa3f7;">📦</div>
+            <div class="op-module-title">الأصناف</div>
+            <div class="op-module-desc">إدارة الأصناف والمنتجات: الأكواد، الأسعار، والمخزون.</div>
+            <a href="/trade/items" class="op-module-btn">دخول النظام ←</a>
+          </div>
+          <div class="op-module-card">
+            <div class="op-module-icon" style="background: #f5c45122; color: #f5c451;">🛒</div>
+            <div class="op-module-title">المشتريات</div>
+            <div class="op-module-desc">تسجيل فواتير الشراء من الموردين ومتابعتها.</div>
+            <a href="/trade/purchases" class="op-module-btn">دخول النظام ←</a>
+          </div>
+          <div class="op-module-card">
+            <div class="op-module-icon" style="background: #4fbf7822; color: #4fbf78;">💰</div>
+            <div class="op-module-title">المبيعات</div>
+            <div class="op-module-desc">نظام كاشير كامل للبيع السريع وإصدار الفواتير فورًا.</div>
+            <a href="/trade/sales" class="op-module-btn">دخول النظام ←</a>
+          </div>
+          <div class="op-module-card">
+            <div class="op-module-icon" style="background: #e06bb022; color: #e06bb0;">🧾</div>
+            <div class="op-module-title">الفواتير</div>
+            <div class="op-module-desc">عرض فواتير المبيعات السابقة وطباعتها.</div>
+            <a href="/trade/sales" class="op-module-btn">دخول النظام ←</a>
+          </div>
+          <div class="op-module-card">
+            <div class="op-module-icon" style="background: #f59e4222; color: #f59e42;">📊</div>
+            <div class="op-module-title">الأرباح</div>
+            <div class="op-module-desc">تقارير الأرباح وحركة الأصناف والمصروفات.</div>
+            <a href="/trade/reports" class="op-module-btn">دخول النظام ←</a>
+          </div>
+          <div class="op-module-card">
+            <div class="op-module-icon" style="background: #8a6a1f22; color: #b48c3c;">📁</div>
+            <div class="op-module-title">التقارير</div>
+            <div class="op-module-desc">المرتجعات، كشوف حسابات العملاء والموردين، والإقرار الضريبي.</div>
+            <a href="/trade/reports" class="op-module-btn">دخول النظام ←</a>
+          </div>
+          <div class="op-module-card">
+            <div class="op-module-icon" style="background: #8888ee22; color: #8888ee;">⚙️</div>
+            <div class="op-module-title">إعدادات المتجر</div>
+            <div class="op-module-desc">إعدادات النظام والفروع والمستخدمين والصلاحيات.</div>
+            <a href="/trade/settings" class="op-module-btn">دخول النظام ←</a>
+          </div>
         </div>
 
         </div>
@@ -1046,7 +1088,7 @@
             resultEl.style.display = "block";
             resultEl.innerHTML =
               'تم تسجيل البيع بنجاح (الربح: ' + fmtMoney(r.profit) + ') &nbsp; ' +
-              '<button type="button" class="op-btn-chip op-btn-chip--gold" style="margin-inline-start:8px;" onclick="window.open(\'/api/simple-inventory/sales/' + r.sale_id + '/invoice\', \'_blank\')">🖨️ طباعة فاتورة</button>';
+              '<button type="button" class="op-btn-chip op-btn-chip--gold" style="margin-inline-start:8px;" onclick="window.open(\'/api/simple-inventory/sales/' + r.sale_id + '/invoice\', \'_blank\')">🖶️ طباعة فاتورة</button>';
             await Promise.all([loadProducts(""), loadDashboard()]);
           } catch (e) {
             resultEl.style.display = "block";
@@ -1072,7 +1114,7 @@
               .map(function (m) {
                 var typeLabel = m.type === "purchase" ? "📥 شراء" : "🧾 بيع";
                 var actionCell = m.type === "sale" && m.id
-                  ? '<button type="button" class="op-btn-chip" style="padding:4px 10px;font-size:0.72rem;" onclick="window.open(\'/api/simple-inventory/sales/' + m.id + '/invoice\', \'_blank\')">🖨️ طباعة</button>'
+                  ? '<button type="button" class="op-btn-chip" style="padding:4px 10px;font-size:0.72rem;" onclick="window.open(\'/api/simple-inventory/sales/' + m.id + '/invoice\', \'_blank\')">🖶️ طباعة</button>'
                   : "";
                 return (
                   "<tr><td class=\"p-2\">" + typeLabel + "</td><td class=\"p-2\">" + m.quantity + "</td><td class=\"p-2\">" +
