@@ -275,7 +275,93 @@
       body.op-dashboard .op-main .text-rose-600 { color: #c0435a !important; }
       body.op-dashboard .op-main details summary { color: var(--text-heading); }
 
-    </style>
+    
+
+    
+      body.op-dashboard .op-tool-modal-overlay {
+        position: fixed; inset: 0; background: rgba(20, 16, 6, 0.55); backdrop-filter: blur(2px);
+        display: flex; align-items: center; justify-content: center; z-index: 200; padding: 1rem;
+      }
+      body.op-dashboard .op-tool-modal {
+        background: linear-gradient(175deg, var(--bg-2), var(--bg-1)); border: 1px solid var(--gold-dim);
+        border-radius: 20px; padding: 1.5rem; width: 100%; max-width: 520px; max-height: 88vh; overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+      }
+      body.op-dashboard .op-tool-modal-head { display: flex; align-items: flex-start; gap: 0.85rem; margin-bottom: 1.1rem; }
+      body.op-dashboard .op-tool-modal-head h3 { color: var(--text-heading); font-weight: 800; font-size: 1.05rem; margin-bottom: 0.2rem; }
+      body.op-dashboard .op-tool-modal-head p { color: var(--text-muted); font-size: 0.78rem; font-weight: 700; margin: 0; }
+      body.op-dashboard .op-tool-modal-head button {
+        margin-inline-start: auto; background: transparent; border: none; color: var(--text-muted);
+        font-size: 1.1rem; cursor: pointer; line-height: 1;
+      }
+      body.op-dashboard .op-tool-modal-head button:hover { color: var(--text-heading); }
+      body.op-dashboard .op-tool-field { margin-bottom: 0.9rem; }
+      body.op-dashboard .op-tool-field label {
+        display: block; color: var(--text-heading); font-weight: 800; font-size: 0.8rem; margin-bottom: 0.35rem;
+      }
+      body.op-dashboard .op-tool-field input[type="text"],
+      body.op-dashboard .op-tool-field input[type="number"],
+      body.op-dashboard .op-tool-field input[type="date"],
+      body.op-dashboard .op-tool-field textarea,
+      body.op-dashboard .op-tool-field select {
+        width: 100%; padding: 0.6rem 0.75rem; border-radius: 10px; border: 1px solid var(--input-border);
+        background: var(--input-bg); color: var(--input-text); font-size: 0.85rem; font-weight: 600; font-family: inherit;
+      }
+      body.op-dashboard .op-tool-modal-result {
+        margin-top: 0.5rem; margin-bottom: 1rem; padding: 0.85rem; border-radius: 12px;
+        background: var(--surface-soft); border: 1px solid var(--gold-dim); font-size: 0.8rem;
+        color: var(--text-body); white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow-y: auto;
+      }
+      body.op-dashboard .op-tool-modal-actions { display: flex; gap: 0.6rem; justify-content: flex-end; }
+      body.op-dashboard .op-tool-modal-actions button { border: none; cursor: pointer; font-family: inherit; }
+      body.op-dashboard .op-tool-btn-secondary {
+        padding: 0.55rem 1rem; border-radius: 10px; background: var(--surface-soft);
+        border: 1px solid var(--gold-dim) !important; color: var(--text-body); font-weight: 800; font-size: 0.8rem;
+      }
+      body.op-dashboard .op-admin-table thead {
+        background: linear-gradient(90deg, rgba(180, 140, 60, 0.16), rgba(180, 140, 60, 0.04));
+      }
+      body.op-dashboard .op-admin-table th {
+        color: var(--gold-soft) !important; font-weight: 800; font-size: 0.72rem;
+        text-transform: uppercase; letter-spacing: 0.02em; white-space: nowrap;
+      }
+      body.op-dashboard .op-admin-table td { font-size: 0.82rem; }
+      body.op-dashboard .op-admin-table tbody tr { transition: background 0.15s ease; }
+      body.op-dashboard .op-admin-table tbody tr:hover { background: var(--surface-soft); }
+      body.op-dashboard .op-admin-table td, body.op-dashboard .op-admin-table th { border-color: var(--gold-dim) !important; }
+      body.op-dashboard .op-btn-chip {
+        border: 1px solid var(--gold-dim); background: var(--bg-2); color: var(--text-heading);
+        border-radius: 999px; padding: 6px 14px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: all 0.15s ease;
+      }
+      body.op-dashboard .op-btn-chip:hover { filter: brightness(1.05); }
+      body.op-dashboard .op-btn-chip--danger { color: #dc2626; border-color: rgba(220, 38, 38, 0.35); }
+      body.op-dashboard .op-btn-chip--danger:hover { background: rgba(220, 38, 38, 0.08); }
+      body.op-dashboard .op-btn-chip--gold { background: var(--gold); color: #1a1200 !important; border-color: var(--gold); }
+      body.op-dashboard .simple-inv-oos-badge {
+        display: inline-block; background: rgba(220, 38, 38, 0.12); color: #dc2626; font-weight: 800;
+        font-size: 0.68rem; padding: 2px 8px; border-radius: 999px; margin-inline-start: 6px;
+      }
+
+      @media (max-width: 900px) {
+        body.op-dashboard .simple-inv-grid-2col { grid-template-columns: 1fr !important; }
+        body.op-dashboard .op-stats { grid-template-columns: repeat(2, 1fr) !important; }
+      }
+
+      body.op-dashboard .op-tabs-switch {
+        display: flex; gap: 0.6rem; margin-bottom: 1.25rem; flex-wrap: wrap;
+      }
+      body.op-dashboard .op-tab-btn {
+        padding: 0.65rem 1.4rem; border-radius: 12px; border: 1px solid var(--gold-dim);
+        background: var(--bg-2); color: var(--text-muted); font-weight: 800; font-size: 0.9rem;
+        cursor: pointer; transition: all 0.2s ease;
+      }
+      body.op-dashboard .op-tab-btn:hover { color: var(--text-heading); }
+      body.op-dashboard .op-tab-btn--active {
+        background: var(--gold); color: #1a1200; border-color: var(--gold);
+      }
+      body.op-dashboard .op-tab-panel { display: none; }
+      body.op-dashboard .op-tab-panel--active { display: block; }
+</style>
   </head>
   <body class="op-dashboard erp-shell min-h-screen" data-report-type="dashboard">
     <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
@@ -293,7 +379,6 @@
         <a href="/hr" class="op-side-link nav-link nav-link--idle" data-nav="op-hr" title="الموارد البشرية"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-4-4"/></svg></a>
         <a href="/finance" class="op-side-link nav-link nav-link--idle" data-nav="op-finance" title="مركز الأدوات الذكية"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 8h6m-5 4h4m-6 4h8M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg></a>
         <a href="/inventory-management" class="op-side-link nav-link nav-link--active" data-nav="op-inventory" title="إدارة المخزون"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg></a>
-        <a href="/simple-inventory" class="op-side-link nav-link nav-link--idle" data-nav="op-simpleinv" title="المخزون البسيط"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M21 8l-9-5-9 5 9 5 9-5zm0 0v8l-9 5m9-13l-9 5m0 8l-9-5m9 5v-8M3 8v8l9 5"/></svg></a>
         <a href="/suppliers" class="op-side-link nav-link nav-link--idle" data-nav="op-suppliers" title="إدارة المستندات"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13h1l2 7h11l2-7h1M8 13V7a4 4 0 118 0v6m-9 0h10"/></svg></a>
         <a href="/analytics" class="op-side-link nav-link nav-link--idle" data-nav="op-analytics" title="التقارير والتحليلات"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg></a>
         <a href="/convert" class="op-side-link nav-link nav-link--idle" data-nav="op-convert" title="تحويل الملفات"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4M16 17H4m0 0l4 4m-4-4l4-4"/></svg></a>
@@ -319,7 +404,6 @@
         <a href="/hr" data-nav="op-hr" class="nav-link nav-link--idle">الموارد البشرية</a>
         <a href="/finance" data-nav="op-finance" class="nav-link nav-link--idle">مركز الأدوات الذكية</a>
         <a href="/inventory-management" data-nav="op-inventory" class="nav-link nav-link--active">إدارة المخزون</a>
-        <a href="/simple-inventory" data-nav="op-simpleinv" class="nav-link nav-link--idle">المخزون البسيط</a>
         <a href="/suppliers" data-nav="op-suppliers" class="nav-link nav-link--idle">إدارة المستندات</a>
         <a href="/analytics" data-nav="op-analytics" class="nav-link nav-link--idle">التقارير والتحليلات</a>
         <a href="/convert" data-nav="op-convert" class="nav-link nav-link--idle">تحويل الملفات</a>
@@ -365,6 +449,174 @@
       </header>
 
       <main class="op-main">
+        <div class="op-tabs-switch">
+          <button type="button" class="op-tab-btn op-tab-btn--active" id="opTabBtnSimple" data-tab="simple">📦 المخزون البسيط</button>
+          <button type="button" class="op-tab-btn" id="opTabBtnLegacy" data-tab="legacy">⚙️ قسم متقدم (قريبًا)</button>
+        </div>
+
+        <div id="opTabPanelSimple" class="op-tab-panel op-tab-panel--active">
+
+        <div class="op-hero" style="margin-bottom:1.25rem;">
+          <h1>📦 <b>المخزون البسيط</b></h1>
+          <p>نظام بسيط لتسجيل الشراء والبيع ومتابعة الأرباح، دون أي تعقيد محاسبي.</p>
+        </div>
+
+        <div class="op-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.25rem;">
+          <div class="op-stat-card">
+            <div class="op-stat-icon"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 8l-9-5-9 5 9 5 9-5zm0 0v8l-9 5m9-13l-9 5m0 8l-9-5m9 5v-8M3 8v8l9 5"/></svg></div>
+            <div class="op-stat-value" id="simpleInvItemsCount">0</div>
+            <div class="op-stat-label">📦 عدد الأصناف</div>
+          </div>
+          <div class="op-stat-card">
+            <div class="op-stat-icon"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 17l6-6 4 4 8-8m0 0h-5m5 0v5"/></svg></div>
+            <div class="op-stat-value" id="simpleInvTotalQty">0</div>
+            <div class="op-stat-label">📈 إجمالي الكمية الموجودة</div>
+          </div>
+          <div class="op-stat-card">
+            <div class="op-stat-icon"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12V7H5a2 2 0 010-4h14v4M3 5v14a2 2 0 002 2h16v-5M18 12a2 2 0 100 4 2 2 0 000-4z"/></svg></div>
+            <div class="op-stat-value" id="simpleInvProfitToday">0</div>
+            <div class="op-stat-label">💰 أرباح اليوم</div>
+          </div>
+          <div class="op-stat-card">
+            <div class="op-stat-icon"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 006 17h12M9 21a1 1 0 100-2 1 1 0 000 2zm8 0a1 1 0 100-2 1 1 0 000 2z"/></svg></div>
+            <div class="op-stat-value" id="simpleInvSalesToday">0</div>
+            <div class="op-stat-label">🛒 مبيعات اليوم</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:1rem;margin-bottom:1.25rem;" class="simple-inv-grid-2col">
+          <div class="op-shell-card" style="text-align:start;">
+            <h2 style="color:var(--text-heading);font-weight:800;font-size:1.05rem;margin-bottom:0.75rem;">📊 المبيعات خلال آخر 30 يومًا</h2>
+            <div id="simpleInvChartHost" style="width:100%;overflow-x:auto;"></div>
+          </div>
+          <div class="op-shell-card" style="text-align:start;">
+            <h2 style="color:var(--text-heading);font-weight:800;font-size:1.05rem;margin-bottom:0.75rem;">حساب الأرباح</h2>
+            <div style="display:flex;flex-direction:column;gap:0.6rem;font-size:0.85rem;font-weight:700;">
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">إجمالي المبيعات</span><span id="simpleInvAllSales" style="color:var(--text-heading);">0</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">إجمالي المشتريات</span><span id="simpleInvAllPurchases" style="color:var(--text-heading);">0</span></div>
+              <div style="display:flex;justify-content:space-between;border-top:1px solid var(--gold-dim);padding-top:0.6rem;"><span style="color:var(--text-muted);">إجمالي الأرباح</span><span id="simpleInvAllProfit" style="color:var(--gold-soft);font-weight:800;">0</span></div>
+            </div>
+            <div id="simpleInvAlertsHost" style="margin-top:1rem;display:flex;flex-direction:column;gap:0.4rem;"></div>
+          </div>
+        </div>
+
+        <div class="op-shell-card" style="text-align:start;margin-bottom:1.25rem;">
+          <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;">
+            <button type="button" id="simpleInvAddProductBtn" class="op-btn-chip op-btn-chip--gold" style="display:flex;align-items:center;gap:6px;"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg> إضافة صنف</button>
+            <button type="button" id="simpleInvAddPurchaseBtn" class="op-btn-chip">📥 تسجيل شراء</button>
+            <button type="button" id="simpleInvAddSaleBtn" class="op-btn-chip">🧾 تسجيل بيع</button>
+            <div style="margin-inline-start:auto;position:relative;">
+              <input id="simpleInvSearchInp" placeholder="ابحث باسم الصنف..." style="padding:0.5rem 0.75rem 0.5rem 2rem;border-radius:10px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);font-size:0.82rem;font-weight:600;min-width:220px;" />
+            </div>
+          </div>
+        </div>
+
+        <div class="op-shell-card" style="text-align:start;">
+          <h2 style="color:var(--text-heading);font-weight:800;font-size:1.05rem;margin-bottom:0.9rem;">الأصناف</h2>
+          <div class="mt-2 overflow-auto rounded-2xl" style="border:1px solid var(--gold-dim);border-radius:16px;">
+            <table class="op-admin-table w-full text-right text-sm">
+              <thead>
+                <tr>
+                  <th class="p-2">الصنف</th>
+                  <th class="p-2">سعر الشراء</th>
+                  <th class="p-2">سعر البيع</th>
+                  <th class="p-2">الكمية</th>
+                  <th class="p-2">ملاحظات</th>
+                  <th class="p-2">إجراءات</th>
+                </tr>
+              </thead>
+              <tbody id="simpleInvProductsHost"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- نافذة إضافة/تعديل صنف -->
+        <div id="simpleInvProductModalOverlay" class="op-tool-modal-overlay" style="display:none;">
+          <div class="op-tool-modal">
+            <div class="op-tool-modal-head">
+              <div>
+                <h3 id="simpleInvProductModalTitle">إضافة صنف جديد</h3>
+                <p>أدخلي بيانات الصنف.</p>
+              </div>
+              <button type="button" id="simpleInvProductModalClose">✕</button>
+            </div>
+            <div class="op-tool-field"><label>اسم الصنف</label><input type="text" id="simpleInvPName" /></div>
+            <div class="op-tool-field"><label>سعر الشراء</label><input type="number" id="simpleInvPPurchasePrice" value="0" /></div>
+            <div class="op-tool-field"><label>سعر البيع</label><input type="number" id="simpleInvPSalePrice" value="0" /></div>
+            <div class="op-tool-field" id="simpleInvPQtyField"><label>الكمية</label><input type="number" id="simpleInvPQty" value="0" /></div>
+            <div class="op-tool-field"><label>ملاحظات (اختياري)</label><textarea id="simpleInvPNotes" rows="2"></textarea></div>
+            <div id="simpleInvProductModalResult" class="op-tool-modal-result" style="display:none;"></div>
+            <div class="op-tool-modal-actions">
+              <button type="button" class="op-tool-btn-secondary" id="simpleInvProductModalCancel">إلغاء</button>
+              <button type="button" class="op-btn-chip op-btn-chip--gold" id="simpleInvProductModalSubmit">حفظ</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- نافذة تسجيل شراء -->
+        <div id="simpleInvPurchaseModalOverlay" class="op-tool-modal-overlay" style="display:none;">
+          <div class="op-tool-modal">
+            <div class="op-tool-modal-head">
+              <div><h3>📥 تسجيل شراء</h3><p>زيادة الكمية وتحديث تكلفة الصنف تلقائيًا.</p></div>
+              <button type="button" id="simpleInvPurchaseModalClose">✕</button>
+            </div>
+            <div class="op-tool-field"><label>الصنف</label><select id="simpleInvPurProduct"></select></div>
+            <div class="op-tool-field"><label>الكمية</label><input type="number" id="simpleInvPurQty" value="1" /></div>
+            <div class="op-tool-field"><label>سعر الشراء</label><input type="number" id="simpleInvPurPrice" value="0" /></div>
+            <div class="op-tool-field"><label>التاريخ</label><input type="date" id="simpleInvPurDate" /></div>
+            <div id="simpleInvPurchaseModalResult" class="op-tool-modal-result" style="display:none;"></div>
+            <div class="op-tool-modal-actions">
+              <button type="button" class="op-tool-btn-secondary" id="simpleInvPurchaseModalCancel">إلغاء</button>
+              <button type="button" class="op-btn-chip op-btn-chip--gold" id="simpleInvPurchaseModalSubmit">حفظ</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- نافذة تسجيل بيع -->
+        <div id="simpleInvSaleModalOverlay" class="op-tool-modal-overlay" style="display:none;">
+          <div class="op-tool-modal">
+            <div class="op-tool-modal-head">
+              <div><h3>🧾 تسجيل بيع</h3><p>العميل الافتراضي «نقدي». تُخصم الكمية ويُحسب الربح تلقائيًا.</p></div>
+              <button type="button" id="simpleInvSaleModalClose">✕</button>
+            </div>
+            <div class="op-tool-field"><label>الصنف</label><select id="simpleInvSaleProduct"></select></div>
+            <div class="op-tool-field"><label>الكمية</label><input type="number" id="simpleInvSaleQty" value="1" /></div>
+            <div class="op-tool-field"><label>سعر البيع</label><input type="number" id="simpleInvSalePrice" value="0" /></div>
+            <div class="op-tool-field"><label>التاريخ</label><input type="date" id="simpleInvSaleDate" /></div>
+            <div id="simpleInvSaleModalResult" class="op-tool-modal-result" style="display:none;"></div>
+            <div class="op-tool-modal-actions">
+              <button type="button" class="op-tool-btn-secondary" id="simpleInvSaleModalCancel">إلغاء</button>
+              <button type="button" class="op-btn-chip op-btn-chip--gold" id="simpleInvSaleModalSubmit">حفظ</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- نافذة حركة المخزون -->
+        <div id="simpleInvMovementsModalOverlay" class="op-tool-modal-overlay" style="display:none;">
+          <div class="op-tool-modal" style="max-width:640px;">
+            <div class="op-tool-modal-head">
+              <div><h3 id="simpleInvMovementsTitle">حركة المخزون</h3><p>كل عمليات الشراء والبيع لهذا الصنف.</p></div>
+              <button type="button" id="simpleInvMovementsModalClose">✕</button>
+            </div>
+            <div class="mt-2 overflow-auto rounded-2xl" style="border:1px solid var(--gold-dim);border-radius:16px;max-height:50vh;">
+              <table class="op-admin-table w-full text-right text-sm">
+                <thead>
+                  <tr><th class="p-2">النوع</th><th class="p-2">الكمية</th><th class="p-2">السعر</th><th class="p-2">الإجمالي</th><th class="p-2">التاريخ</th></tr>
+                </thead>
+                <tbody id="simpleInvMovementsHost"></tbody>
+              </table>
+            </div>
+            <div class="op-tool-modal-actions" style="margin-top:1rem;">
+              <button type="button" class="op-tool-btn-secondary" id="simpleInvMovementsCloseBtn">إغلاق</button>
+            </div>
+          </div>
+        </div>
+
+      
+        </div>
+
+        <div id="opTabPanelLegacy" class="op-tab-panel">
+
         <div class="op-shell-card">
           <div class="op-shell-icon">📦</div>
           <div class="op-shell-badge">قيد التطوير 🚧</div>
@@ -373,6 +625,8 @@
           <a href="/" class="op-module-btn">العودة للرئيسية ←</a>
         </div>
 
+      
+        </div>
       </main>
     </div>
 
@@ -418,5 +672,326 @@
       })();
       
     </script>
-  </body>
+  
+    <script>
+      (function () {
+        var productsCache = [];
+        var editingProductId = null;
+
+        function fmtMoney(v) {
+          var n = Number(v || 0);
+          return n.toLocaleString("ar", { maximumFractionDigits: 2 });
+        }
+
+        function todayStr() {
+          var d = new Date();
+          var m = String(d.getMonth() + 1).padStart(2, "0");
+          var day = String(d.getDate()).padStart(2, "0");
+          return d.getFullYear() + "-" + m + "-" + day;
+        }
+
+        function renderSimpleInvChart(chart) {
+          var host = document.getElementById("simpleInvChartHost");
+          if (!host || !chart) return;
+          var labels = chart.labels || [];
+          var a = chart.sales || [];
+          var w = Math.max(560, labels.length * 18);
+          var h = 170;
+          var padL = 34, padB = 20, padT = 10;
+          var maxV = Math.max(1, Math.max.apply(null, a.length ? a : [0]));
+          var stepX = (w - padL - 10) / Math.max(1, labels.length - 1);
+          var scaleY = (h - padT - padB) / maxV;
+          function pathFor(series) {
+            return series
+              .map(function (v, i) {
+                return (i === 0 ? "M" : "L") + (padL + i * stepX).toFixed(1) + "," + (h - padB - v * scaleY).toFixed(1);
+              })
+              .join(" ");
+          }
+          var gridLines = [0, 0.25, 0.5, 0.75, 1]
+            .map(function (f) {
+              var y = (h - padB - f * (h - padT - padB)).toFixed(1);
+              return '<line x1="' + padL + '" y1="' + y + '" x2="' + (w - 5) + '" y2="' + y + '" stroke="currentColor" stroke-opacity="0.08" />';
+            })
+            .join("");
+          host.innerHTML =
+            '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + " " + h + '" style="color:var(--text-muted);">' +
+            gridLines +
+            '<path d="' + pathFor(a) + '" fill="none" stroke="var(--gold)" stroke-width="2.5" />' +
+            "</svg>";
+        }
+
+        async function loadDashboard() {
+          try {
+            var s = await apiGet("/api/simple-inventory/dashboard-summary");
+            document.getElementById("simpleInvItemsCount").textContent = s.items_count;
+            document.getElementById("simpleInvTotalQty").textContent = s.total_quantity;
+            document.getElementById("simpleInvProfitToday").textContent = fmtMoney(s.today_profit_total);
+            document.getElementById("simpleInvSalesToday").textContent = fmtMoney(s.today_sales_total);
+            document.getElementById("simpleInvAllSales").textContent = fmtMoney(s.all_time_sales_total);
+            document.getElementById("simpleInvAllPurchases").textContent = fmtMoney(s.all_time_purchases_total);
+            document.getElementById("simpleInvAllProfit").textContent = fmtMoney(s.all_time_profit_total);
+            renderSimpleInvChart(s.chart_30d);
+            var alertsHost = document.getElementById("simpleInvAlertsHost");
+            if (alertsHost) {
+              var oos = s.out_of_stock || [];
+              if (!oos.length) {
+                alertsHost.innerHTML = "";
+              } else {
+                alertsHost.innerHTML = oos
+                  .map(function (p) {
+                    return (
+                      '<div style="font-size:0.78rem;font-weight:700;color:#dc2626;background:rgba(220,38,38,0.08);border-radius:10px;padding:0.5rem 0.75rem;">' +
+                      "⚠️ صنف «" + p.name + "» نفد من المخزون." +
+                      "</div>"
+                    );
+                  })
+                  .join("");
+              }
+            }
+          } catch (e) {
+            showToast(e.message || "تعذر تحميل لوحة التحكم", "#ef4444");
+          }
+        }
+
+        function productRowHtml(p) {
+          var oosBadge = p.out_of_stock ? '<span class="simple-inv-oos-badge">⚠️ نفد المخزون</span>' : "";
+          return (
+            '<tr data-id="' + p.id + '">' +
+            '<td class="p-2 font-extrabold">' + p.name + oosBadge + "</td>" +
+            '<td class="p-2">' + fmtMoney(p.purchase_price) + "</td>" +
+            '<td class="p-2">' + fmtMoney(p.sale_price) + "</td>" +
+            '<td class="p-2">' + p.quantity + "</td>" +
+            '<td class="p-2" style="color:var(--text-muted);font-size:0.75rem;">' + (p.notes || "—") + "</td>" +
+            '<td class="p-2" style="white-space:nowrap;">' +
+            '<button class="op-btn-chip" data-a="movements" style="margin-inline-end:4px;">الحركة</button>' +
+            '<button class="op-btn-chip" data-a="edit" style="margin-inline-end:4px;">تعديل</button>' +
+            '<button class="op-btn-chip op-btn-chip--danger" data-a="delete">حذف</button>' +
+            "</td>" +
+            "</tr>"
+          );
+        }
+
+        async function loadProducts(q) {
+          var host = document.getElementById("simpleInvProductsHost");
+          if (!host) return;
+          try {
+            var data = await apiGet("/api/simple-inventory/products" + (q ? "?q=" + encodeURIComponent(q) : ""));
+            productsCache = data.items || [];
+            if (!productsCache.length) {
+              host.innerHTML = '<tr><td colspan="6" class="p-3 text-center" style="color:var(--text-muted);">لا توجد أصناف بعد.</td></tr>';
+            } else {
+              host.innerHTML = productsCache.map(productRowHtml).join("");
+            }
+            host.querySelectorAll("tr[data-id]").forEach(function (tr) {
+              var id = tr.getAttribute("data-id");
+              var p = productsCache.find(function (x) { return x.id === id; });
+              tr.querySelector('[data-a="movements"]')?.addEventListener("click", function () { openMovementsModal(p); });
+              tr.querySelector('[data-a="edit"]')?.addEventListener("click", function () { openProductModal(p); });
+              tr.querySelector('[data-a="delete"]')?.addEventListener("click", async function () {
+                if (!confirm('حذف صنف "' + p.name + '"؟')) return;
+                try {
+                  await apiDelete("/api/simple-inventory/products/" + p.id);
+                  showToast("تم الحذف ✔️", "#10b981");
+                  await Promise.all([loadProducts(document.getElementById("simpleInvSearchInp").value.trim()), loadDashboard()]);
+                } catch (e) {
+                  showToast(e.message || "تعذر حذف الصنف", "#ef4444");
+                }
+              });
+            });
+            refreshProductSelects();
+          } catch (e) {
+            host.innerHTML = '<tr><td colspan="6" class="p-3" style="color:#dc2626;">' + (e.message || "تعذر تحميل الأصناف") + "</td></tr>";
+          }
+        }
+
+        function refreshProductSelects() {
+          [document.getElementById("simpleInvPurProduct"), document.getElementById("simpleInvSaleProduct")].forEach(function (sel) {
+            if (!sel) return;
+            var current = sel.value;
+            sel.innerHTML = productsCache
+              .map(function (p) { return '<option value="' + p.id + '">' + p.name + " (متاح: " + p.quantity + ")</option>"; })
+              .join("");
+            if (current) sel.value = current;
+          });
+        }
+
+        // ---------- نافذة الصنف (إضافة/تعديل) ----------
+        var productOverlay = document.getElementById("simpleInvProductModalOverlay");
+        var productTitle = document.getElementById("simpleInvProductModalTitle");
+        var productResult = document.getElementById("simpleInvProductModalResult");
+        var pQtyField = document.getElementById("simpleInvPQtyField");
+
+        function openProductModal(p) {
+          editingProductId = p ? p.id : null;
+          productTitle.textContent = p ? "تعديل صنف" : "إضافة صنف جديد";
+          document.getElementById("simpleInvPName").value = p ? p.name : "";
+          document.getElementById("simpleInvPPurchasePrice").value = p ? p.purchase_price : 0;
+          document.getElementById("simpleInvPSalePrice").value = p ? p.sale_price : 0;
+          document.getElementById("simpleInvPQty").value = p ? p.quantity : 0;
+          document.getElementById("simpleInvPNotes").value = p ? p.notes || "" : "";
+          document.getElementById("simpleInvPPurchasePrice").disabled = !!p;
+          pQtyField.style.display = p ? "none" : "";
+          productResult.style.display = "none";
+          productOverlay.style.display = "flex";
+        }
+        function closeProductModal() { productOverlay.style.display = "none"; }
+        document.getElementById("simpleInvAddProductBtn")?.addEventListener("click", function () { openProductModal(null); });
+        document.getElementById("simpleInvProductModalClose")?.addEventListener("click", closeProductModal);
+        document.getElementById("simpleInvProductModalCancel")?.addEventListener("click", closeProductModal);
+        productOverlay?.addEventListener("click", function (e) { if (e.target === productOverlay) closeProductModal(); });
+        document.getElementById("simpleInvProductModalSubmit")?.addEventListener("click", async function () {
+          var name = document.getElementById("simpleInvPName").value.trim();
+          if (!name) { showToast("الرجاء إدخال اسم الصنف", "#ef4444"); return; }
+          var payload = {
+            name: name,
+            sale_price: Number(document.getElementById("simpleInvPSalePrice").value || 0),
+            notes: document.getElementById("simpleInvPNotes").value.trim(),
+          };
+          try {
+            if (editingProductId) {
+              await apiPatchJson("/api/simple-inventory/products/" + editingProductId, payload);
+            } else {
+              payload.purchase_price = Number(document.getElementById("simpleInvPPurchasePrice").value || 0);
+              payload.quantity = Number(document.getElementById("simpleInvPQty").value || 0);
+              await apiPostJson("/api/simple-inventory/products", payload);
+            }
+            showToast("تم الحفظ ✔️", "#10b981");
+            closeProductModal();
+            await Promise.all([loadProducts(""), loadDashboard()]);
+          } catch (e) {
+            productResult.style.display = "block";
+            productResult.textContent = e.message || "تعذر حفظ الصنف";
+          }
+        });
+
+        // ---------- نافذة الشراء ----------
+        var purchaseOverlay = document.getElementById("simpleInvPurchaseModalOverlay");
+        document.getElementById("simpleInvAddPurchaseBtn")?.addEventListener("click", function () {
+          document.getElementById("simpleInvPurQty").value = 1;
+          document.getElementById("simpleInvPurPrice").value = 0;
+          document.getElementById("simpleInvPurDate").value = todayStr();
+          document.getElementById("simpleInvPurchaseModalResult").style.display = "none";
+          refreshProductSelects();
+          purchaseOverlay.style.display = "flex";
+        });
+        document.getElementById("simpleInvPurchaseModalClose")?.addEventListener("click", function () { purchaseOverlay.style.display = "none"; });
+        document.getElementById("simpleInvPurchaseModalCancel")?.addEventListener("click", function () { purchaseOverlay.style.display = "none"; });
+        purchaseOverlay?.addEventListener("click", function (e) { if (e.target === purchaseOverlay) purchaseOverlay.style.display = "none"; });
+        document.getElementById("simpleInvPurchaseModalSubmit")?.addEventListener("click", async function () {
+          var resultEl = document.getElementById("simpleInvPurchaseModalResult");
+          var productId = document.getElementById("simpleInvPurProduct").value;
+          if (!productId) { showToast("الرجاء اختيار الصنف", "#ef4444"); return; }
+          try {
+            await apiPostJson("/api/simple-inventory/purchases", {
+              product_id: productId,
+              quantity: Number(document.getElementById("simpleInvPurQty").value || 0),
+              purchase_price: Number(document.getElementById("simpleInvPurPrice").value || 0),
+              date: document.getElementById("simpleInvPurDate").value || undefined,
+            });
+            showToast("تم تسجيل الشراء ✔️", "#10b981");
+            purchaseOverlay.style.display = "none";
+            await Promise.all([loadProducts(""), loadDashboard()]);
+          } catch (e) {
+            resultEl.style.display = "block";
+            resultEl.textContent = e.message || "تعذر تسجيل الشراء";
+          }
+        });
+
+        // ---------- نافذة البيع ----------
+        var saleOverlay = document.getElementById("simpleInvSaleModalOverlay");
+        document.getElementById("simpleInvAddSaleBtn")?.addEventListener("click", function () {
+          document.getElementById("simpleInvSaleQty").value = 1;
+          document.getElementById("simpleInvSalePrice").value = 0;
+          document.getElementById("simpleInvSaleDate").value = todayStr();
+          document.getElementById("simpleInvSaleModalResult").style.display = "none";
+          refreshProductSelects();
+          saleOverlay.style.display = "flex";
+        });
+        document.getElementById("simpleInvSaleModalClose")?.addEventListener("click", function () { saleOverlay.style.display = "none"; });
+        document.getElementById("simpleInvSaleModalCancel")?.addEventListener("click", function () { saleOverlay.style.display = "none"; });
+        saleOverlay?.addEventListener("click", function (e) { if (e.target === saleOverlay) saleOverlay.style.display = "none"; });
+        document.getElementById("simpleInvSaleModalSubmit")?.addEventListener("click", async function () {
+          var resultEl = document.getElementById("simpleInvSaleModalResult");
+          var productId = document.getElementById("simpleInvSaleProduct").value;
+          if (!productId) { showToast("الرجاء اختيار الصنف", "#ef4444"); return; }
+          try {
+            var r = await apiPostJson("/api/simple-inventory/sales", {
+              product_id: productId,
+              quantity: Number(document.getElementById("simpleInvSaleQty").value || 0),
+              sale_price: Number(document.getElementById("simpleInvSalePrice").value || 0),
+              date: document.getElementById("simpleInvSaleDate").value || undefined,
+            });
+            showToast("تم تسجيل البيع ✔️ (الربح: " + fmtMoney(r.profit) + ")", "#10b981");
+            saleOverlay.style.display = "none";
+            await Promise.all([loadProducts(""), loadDashboard()]);
+          } catch (e) {
+            resultEl.style.display = "block";
+            resultEl.textContent = e.message || "تعذر تسجيل البيع";
+          }
+        });
+
+        // ---------- نافذة حركة المخزون ----------
+        var movementsOverlay = document.getElementById("simpleInvMovementsModalOverlay");
+        async function openMovementsModal(p) {
+          document.getElementById("simpleInvMovementsTitle").textContent = "حركة المخزون — " + p.name;
+          var host = document.getElementById("simpleInvMovementsHost");
+          host.innerHTML = '<tr><td colspan="5" class="p-3 text-center">جارٍ التحميل...</td></tr>';
+          movementsOverlay.style.display = "flex";
+          try {
+            var data = await apiGet("/api/simple-inventory/products/" + p.id + "/movements");
+            var items = data.items || [];
+            if (!items.length) {
+              host.innerHTML = '<tr><td colspan="5" class="p-3 text-center" style="color:var(--text-muted);">لا توجد حركات بعد.</td></tr>';
+              return;
+            }
+            host.innerHTML = items
+              .map(function (m) {
+                var typeLabel = m.type === "purchase" ? "📥 شراء" : "🧾 بيع";
+                return (
+                  "<tr><td class=\"p-2\">" + typeLabel + "</td><td class=\"p-2\">" + m.quantity + "</td><td class=\"p-2\">" +
+                  fmtMoney(m.price) + "</td><td class=\"p-2\">" + fmtMoney(m.total) + "</td><td class=\"p-2\" dir=\"ltr\" style=\"font-size:0.72rem;\">" +
+                  (m.created_at || "") + "</td></tr>"
+                );
+              })
+              .join("");
+          } catch (e) {
+            host.innerHTML = '<tr><td colspan="5" class="p-3" style="color:#dc2626;">' + (e.message || "تعذر تحميل الحركات") + "</td></tr>";
+          }
+        }
+        document.getElementById("simpleInvMovementsModalClose")?.addEventListener("click", function () { movementsOverlay.style.display = "none"; });
+        document.getElementById("simpleInvMovementsCloseBtn")?.addEventListener("click", function () { movementsOverlay.style.display = "none"; });
+        movementsOverlay?.addEventListener("click", function (e) { if (e.target === movementsOverlay) movementsOverlay.style.display = "none"; });
+
+        // ---------- البحث ----------
+        var searchTimer = null;
+        document.getElementById("simpleInvSearchInp")?.addEventListener("input", function (e) {
+          clearTimeout(searchTimer);
+          var val = e.target.value;
+          searchTimer = setTimeout(function () { loadProducts(val.trim()); }, 300);
+        });
+
+        loadDashboard();
+        loadProducts("");
+      })();
+    </script>
+
+    <script>
+      (function () {
+        var btnSimple = document.getElementById("opTabBtnSimple");
+        var btnLegacy = document.getElementById("opTabBtnLegacy");
+        var panelSimple = document.getElementById("opTabPanelSimple");
+        var panelLegacy = document.getElementById("opTabPanelLegacy");
+        function activate(tab) {
+          var simpleActive = tab === "simple";
+          if (btnSimple) btnSimple.classList.toggle("op-tab-btn--active", simpleActive);
+          if (btnLegacy) btnLegacy.classList.toggle("op-tab-btn--active", !simpleActive);
+          if (panelSimple) panelSimple.classList.toggle("op-tab-panel--active", simpleActive);
+          if (panelLegacy) panelLegacy.classList.toggle("op-tab-panel--active", !simpleActive);
+        }
+        if (btnSimple) btnSimple.addEventListener("click", function () { activate("simple"); });
+        if (btnLegacy) btnLegacy.addEventListener("click", function () { activate("legacy"); });
+      })();
+    </script>
+</body>
 </html>

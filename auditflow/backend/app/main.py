@@ -242,9 +242,9 @@ def ui_inventory_management(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "inventory_management.html", "op-inventory")
 
 
-@app.get("/simple-inventory", response_class=HTMLResponse)
-def ui_simple_inventory(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "simple_inventory.html", "op-simpleinv")
+@app.get("/simple-inventory")
+def ui_simple_inventory_redirect(request: Request):
+    return RedirectResponse(url="/inventory-management", status_code=307)
 
 
 @app.get("/suppliers", response_class=HTMLResponse)

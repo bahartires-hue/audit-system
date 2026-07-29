@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/simple-inventory", tags=["simple-inventory"])
 
 def _require_simple_inventory_access(db, request: Request):
     user = require_user(db, request)
-    if not user_can_access_page_key(user, "op-simpleinv"):
+    if not user_can_access_page_key(user, "op-inventory"):
         raise HTTPException(403, "ليس لديك صلاحية لاستخدام نظام المخزون البسيط")
     return user
 
