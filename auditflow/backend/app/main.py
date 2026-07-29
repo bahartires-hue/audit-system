@@ -276,22 +276,22 @@ def ui_brand_scan_redirect():
 
 @app.get("/trade", response_class=HTMLResponse)
 def ui_trade_dashboard(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_sales.html")
+    return _require_login_page(request, FRONTEND_DIR / "trade_sales.html", "op-inventory")
 
 
 @app.get("/trade/items", response_class=HTMLResponse)
 def ui_trade_items(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_items.html")
+    return _require_login_page(request, FRONTEND_DIR / "trade_items.html", "op-inventory")
 
 
 @app.get("/trade/purchases", response_class=HTMLResponse)
 def ui_trade_purchases(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_purchases.html")
+    return _require_login_page(request, FRONTEND_DIR / "trade_purchases.html", "op-inventory")
 
 
 @app.get("/trade/sales", response_class=HTMLResponse)
 def ui_trade_sales(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_sales.html")
+    return _require_login_page(request, FRONTEND_DIR / "trade_sales.html", "op-inventory")
 
 
 @app.get("/trade/pos", response_class=HTMLResponse)
@@ -301,32 +301,32 @@ def ui_trade_pos(request: Request):
 
 @app.get("/trade/inventory", response_class=HTMLResponse)
 def ui_trade_inventory(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_inventory.html")
+    return _require_login_page(request, FRONTEND_DIR / "trade_inventory.html", "op-inventory")
 
 
 @app.get("/trade/reports", response_class=HTMLResponse)
 def ui_trade_reports(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_reports.html")
+    return _require_login_page(request, FRONTEND_DIR / "trade_reports.html", "op-inventory")
 
 
 @app.get("/trade/master-data", response_class=HTMLResponse)
 def ui_trade_master_data(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_master_data.html")
+    return _require_login_page(request, FRONTEND_DIR / "trade_master_data.html", "op-inventory")
 
 
 @app.get("/trade/settings", response_class=HTMLResponse)
 def ui_trade_settings(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_settings.html")
+    return _require_login_page(request, FRONTEND_DIR / "trade_settings.html", "op-inventory")
 
 
 @app.get("/trade/users", response_class=HTMLResponse)
 def ui_trade_users(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_users.html")
+    return _require_login_page(request, FRONTEND_DIR / "trade_users.html", "op-inventory")
 
 
 @app.get("/trade/transfers", response_class=HTMLResponse)
 def ui_trade_transfers(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_transfers.html")
+    return _require_login_page(request, FRONTEND_DIR / "trade_transfers.html", "op-inventory")
 
 
 @app.get("/settings", response_class=HTMLResponse)
