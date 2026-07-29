@@ -138,6 +138,13 @@ def _require_admin_user(db, request: Request) -> User:
     return user
 
 
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 def _has_role(user: User, required: str) -> bool:
     req = (required or "").strip().lower()
     role = (getattr(user, "role_name", "") or "user").strip().lower()
@@ -788,6 +795,144 @@ def admin_audit(
         db.close()
 
 
+# ============================================================ الأمان (لوحة المدير)
+@router.get("/admin/security/summary")
+def admin_security_summary(request: Request):
+    db = SessionLocal()
+    try:
+        _require_admin_user(db, request)
+        now = dt.datetime.utcnow()
+        locked_accounts = db.query(User).filter(User.locked_until.isnot(None), User.locked_until > now).count()
+        active_sessions = db.query(UserSession).filter(UserSession.expires_at > now).count()
+        since_today = dt.datetime(now.year, now.month, now.day)
+        failed_today = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "auth.login.failed", AuditLog.created_at >= since_today)
+            .count()
+        )
+        since_7d = now - dt.timedelta(days=7)
+        failed_7d = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "auth.login.failed", AuditLog.created_at >= since_7d)
+            .count()
+        )
+        return {
+            "locked_accounts": locked_accounts,
+            "active_sessions": active_sessions,
+            "failed_logins_today": failed_today,
+            "failed_logins_7d": failed_7d,
+        }
+    finally:
+        db.close()
+
+
+@router.get("/admin/security/failed-logins")
+def admin_security_failed_logins(request: Request, limit: int = 50):
+    lim = max(1, min(int(limit or 50), 500))
+    db = SessionLocal()
+    try:
+        _require_admin_user(db, request)
+        rows = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "auth.login.failed")
+            .order_by(AuditLog.created_at.desc())
+            .limit(lim)
+            .all()
+        )
+        items = []
+        for x in rows:
+            meta = x.meta_json if isinstance(x.meta_json, dict) else {}
+            items.append(
+                {
+                    "username": meta.get("username", ""),
+                    "ip": meta.get("ip", ""),
+                    "locked": bool(meta.get("locked", False)),
+                    "created_at": x.created_at.isoformat() + "Z" if x.created_at else None,
+                }
+            )
+        return {"items": items}
+    finally:
+        db.close()
+
+
+@router.get("/admin/security/sessions")
+def admin_security_sessions(request: Request, limit: int = 100):
+    lim = max(1, min(int(limit or 100), 500))
+    db = SessionLocal()
+    try:
+        _require_admin_user(db, request)
+        now = dt.datetime.utcnow()
+        rows = (
+            db.query(UserSession)
+            .filter(UserSession.expires_at > now)
+            .order_by(UserSession.created_at.desc())
+            .limit(lim)
+            .all()
+        )
+        user_ids = list({r.user_id for r in rows})
+        users = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+        items = []
+        for r in rows:
+            u = users.get(r.user_id)
+            items.append(
+                {
+                    "token_id": r.token[:8] + "…" if r.token else "",
+                    "token_full": r.token,
+                    "user_id": r.user_id,
+                    "username": u.username if u else "(محذوف)",
+                    "created_at": r.created_at.isoformat() + "Z" if r.created_at else None,
+                    "expires_at": r.expires_at.isoformat() + "Z" if r.expires_at else None,
+                }
+            )
+        return {"items": items}
+    finally:
+        db.close()
+
+
+@router.post("/admin/security/sessions/revoke")
+async def admin_security_revoke_session(request: Request):
+    payload = await request.json()
+    token = str((payload or {}).get("token", "")).strip()
+    if not token:
+        raise HTTPException(400, "token مطلوب")
+    db = SessionLocal()
+    try:
+        admin = _require_admin_user(db, request)
+        require_csrf(request)
+        sess = db.query(UserSession).filter(UserSession.token == token).first()
+        if not sess:
+            raise HTTPException(404, "الجلسة غير موجودة أو منتهية بالفعل")
+        target_user_id = sess.user_id
+        db.delete(sess)
+        db.commit()
+        log_event(db, "admin.security.session_revoked", admin.id, {"target_user_id": target_user_id})
+        return {"ok": True}
+    finally:
+        db.close()
+
+
+@router.post("/admin/security/unlock")
+async def admin_security_unlock(request: Request):
+    payload = await request.json()
+    user_id = str((payload or {}).get("user_id", "")).strip()
+    if not user_id:
+        raise HTTPException(400, "user_id مطلوب")
+    db = SessionLocal()
+    try:
+        admin = _require_admin_user(db, request)
+        require_csrf(request)
+        target = db.query(User).filter(User.id == user_id).first()
+        if not target:
+            raise HTTPException(404, "المستخدم غير موجود")
+        target.failed_attempts = 0
+        target.locked_until = None
+        db.commit()
+        log_event(db, "admin.security.unlock", admin.id, {"target_user_id": user_id, "username": target.username})
+        return {"ok": True, "username": target.username}
+    finally:
+        db.close()
+
+
 @router.post("/admin/notify-expiring")
 async def admin_notify_expiring(request: Request):
     payload = await request.json()
@@ -877,6 +1022,7 @@ def admin_users(request: Request, limit: int = 200):
                     "subscription_expires_at": u.subscription_expires_at.isoformat() + "Z" if u.subscription_expires_at else None,
                     "created_at": u.created_at.isoformat() + "Z" if u.created_at else None,
                     "allowed_pages": u.allowed_pages or [],
+                    "locked_until": u.locked_until.isoformat() + "Z" if u.locked_until else None,
                     "last_login_at": (last_login_map.get(u.id).isoformat() + "Z") if last_login_map.get(u.id) else None,
                     "last_logout_at": (last_logout_map.get(u.id).isoformat() + "Z") if last_logout_map.get(u.id) else None,
                     "reports_count": int(reports_count_map.get(u.id, 0) or 0),
@@ -1278,12 +1424,18 @@ async def auth_login(request: Request):
         password_ok = verify_password(password, user.password_hash if user else _DUMMY_PASSWORD_HASH)
 
         if not user or not password_ok:
+            ip = _client_ip(request)
             if user:
                 user.failed_attempts = int(user.failed_attempts or 0) + 1
+                locked_now = False
                 if user.failed_attempts >= 5:
                     user.locked_until = dt.datetime.utcnow() + dt.timedelta(minutes=LOCK_MINUTES)
                     user.failed_attempts = 0
+                    locked_now = True
                 db.commit()
+                log_event(db, "auth.login.failed", user.id, {"username": username, "ip": ip, "locked": locked_now})
+            else:
+                log_event(db, "auth.login.failed", None, {"username": username, "ip": ip, "locked": False})
             raise HTTPException(401, "بيانات الدخول غير صحيحة")
 
         # كلمة المرور صحيحة — الآن فقط نكشف حالة الحساب (هذا مقبول لأن الطالب
@@ -1305,7 +1457,7 @@ async def auth_login(request: Request):
 
         token = create_session(db, user.id)
         csrf = issue_csrf_token()
-        log_event(db, "auth.login", user.id, {"username": username})
+        log_event(db, "auth.login", user.id, {"username": username, "ip": _client_ip(request)})
         res = Response(content='{"ok":true}', media_type="application/json")
         res.set_cookie(
             key=SESSION_COOKIE,

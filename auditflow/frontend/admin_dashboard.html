@@ -474,6 +474,7 @@
           <button type="button" id="qaAudit" class="op-btn-chip op-btn-chip--gold">📝 سجل النشاط</button>
           <button type="button" id="qaBackup" class="op-btn-chip op-btn-chip--gold">💾 النسخ الاحتياطي</button>
           <button type="button" id="qaNotify" class="op-btn-chip op-btn-chip--gold">📢 إرسال إشعار</button>
+          <button type="button" id="qaSecurity" class="op-btn-chip op-btn-chip--gold">🔐 الأمان</button>
         </div>
       </div>
 
@@ -551,6 +552,51 @@
             </thead>
             <tbody id="adminUsersHost"></tbody>
           </table>
+        </div>
+      </div>
+
+            <div id="adminSecurityCard" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 shadow-sm">
+        <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">🔐 الأمان</h2>
+        <p class="text-slate-600 dark:text-slate-400 text-sm mt-1">محاولات الدخول الفاشلة، الحسابات المقفولة، والجلسات النشطة عبر المنصة.</p>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-4">
+          <div class="op-stat-card">
+            <div class="op-stat-icon">🔒</div>
+            <div class="op-stat-value" id="secLockedCount">0</div>
+            <div class="op-stat-label">حسابات مقفولة الآن</div>
+          </div>
+          <div class="op-stat-card">
+            <div class="op-stat-icon">🖥️</div>
+            <div class="op-stat-value" id="secSessionsCount">0</div>
+            <div class="op-stat-label">جلسات نشطة</div>
+          </div>
+          <div class="op-stat-card">
+            <div class="op-stat-icon">⚠️</div>
+            <div class="op-stat-value" id="secFailedTodayCount">0</div>
+            <div class="op-stat-label">محاولات فاشلة اليوم</div>
+          </div>
+        </div>
+
+        <div class="mt-6">
+          <h3 class="font-extrabold text-slate-900 dark:text-slate-50 text-sm">آخر محاولات الدخول الفاشلة</h3>
+          <div id="secFailedHost" class="mt-3 space-y-2 text-sm font-bold text-slate-700 dark:text-slate-300 max-h-72 overflow-y-auto"></div>
+        </div>
+
+        <div class="mt-6">
+          <h3 class="font-extrabold text-slate-900 dark:text-slate-50 text-sm">الجلسات النشطة</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">إنهاء جلستك الحالية سيسجّل خروجك فورًا.</p>
+          <div class="mt-3 overflow-auto rounded-2xl border border-slate-200 dark:border-slate-700">
+            <table class="op-admin-table w-full text-right text-sm">
+              <thead>
+                <tr>
+                  <th class="p-2">المستخدم</th>
+                  <th class="p-2">بدأت</th>
+                  <th class="p-2">تنتهي</th>
+                  <th class="p-2">إجراء</th>
+                </tr>
+              </thead>
+              <tbody id="secSessionsHost"></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -906,6 +952,7 @@
                   <button class="op-btn-chip op-btn-chip--gold" data-a="permsAll" title="منح كل الصفحات لهذا المستخدم دفعة واحدة">منح الكل</button>
                   ${x.is_admin ? "" : '<button class="op-btn-chip op-btn-chip--gold" data-a="impersonate" title="تسجيل الدخول كهذا المستخدم">تسجيل كمستخدم</button>'}
                   <button class="op-btn-chip" data-a="resetpw" title="إعادة تعيين كلمة المرور">إعادة كلمة المرور</button>
+                  ${x.locked_until && new Date(x.locked_until) > new Date() ? '<button class="op-btn-chip op-btn-chip--success" data-a="unlock" title="فك قفل الحساب">🔓 فك القفل</button>' : ""}
                   ${x.is_admin ? "" : '<button class="op-btn-chip op-btn-chip--danger" data-a="delete" title="حذف نهائي">حذف</button>'}
                 </div>
               </td>
@@ -943,6 +990,16 @@
                 showToast("تم إعادة تعيين كلمة المرور ✔️", "#10b981");
               } catch (e) {
                 showToast(e.message || "فشل إعادة التعيين", "#ef4444");
+              }
+            });
+            tr.querySelector('[data-a="unlock"]')?.addEventListener("click", async () => {
+              if (!confirm(`فك قفل حساب ${x.username}؟`)) return;
+              try {
+                await apiPostJson("/admin/security/unlock", { user_id: x.id });
+                showToast("تم فك القفل ✔️", "#10b981");
+                await loadAdminPanel();
+              } catch (e) {
+                showToast(e.message || "تعذر فك القفل", "#ef4444");
               }
             });
             tr.querySelector('[data-a="delete"]')?.addEventListener("click", async () => {
@@ -983,6 +1040,9 @@
       });
       document.getElementById("qaAudit")?.addEventListener("click", () => {
         document.getElementById("adminAuditCard")?.scrollIntoView({ behavior: "smooth" });
+      });
+      document.getElementById("qaSecurity")?.addEventListener("click", () => {
+        document.getElementById("adminSecurityCard")?.scrollIntoView({ behavior: "smooth" });
       });
       document.getElementById("qaBackup")?.addEventListener("click", () => {
         document.getElementById("adminConfigCard")?.scrollIntoView({ behavior: "smooth" });
@@ -1113,6 +1173,76 @@
           host.innerHTML = `<p class="text-rose-600">${e.message || "تعذّر تحميل سجل النشاط"}</p>`;
         }
       })();
+
+      (async function loadAdminSecurity() {
+        const lockedEl = document.getElementById("secLockedCount");
+        const sessionsEl = document.getElementById("secSessionsCount");
+        const failedTodayEl = document.getElementById("secFailedTodayCount");
+        const failedHost = document.getElementById("secFailedHost");
+        const sessionsHost = document.getElementById("secSessionsHost");
+        if (!lockedEl && !failedHost && !sessionsHost) return;
+        try {
+          const s = await apiGet("/admin/security/summary");
+          if (lockedEl) lockedEl.textContent = s.locked_accounts;
+          if (sessionsEl) sessionsEl.textContent = s.active_sessions;
+          if (failedTodayEl) failedTodayEl.textContent = s.failed_logins_today;
+        } catch (e) {
+          /* ignore for non-admins */
+        }
+        if (failedHost) {
+          try {
+            const data = await apiGet("/admin/security/failed-logins?limit=30");
+            const items = data.items || [];
+            if (!items.length) {
+              failedHost.innerHTML = '<p class="text-slate-500 dark:text-slate-400">لا محاولات فاشلة مسجّلة.</p>';
+            } else {
+              failedHost.innerHTML = "";
+              items.forEach((row) => {
+                const div = document.createElement("div");
+                div.className = "rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 bg-slate-50 dark:bg-slate-800/40 flex items-center justify-between gap-2";
+                div.innerHTML = `<div><span class="font-extrabold text-slate-900 dark:text-slate-100">${row.username || "(غير معروف)"}</span><span class="text-xs text-slate-500 dark:text-slate-400" dir="ltr"> · ${row.ip || ""}</span>${row.locked ? ' <span class="text-rose-600 font-extrabold text-xs">تم القفل</span>' : ""}</div><div class="text-xs text-slate-500 dark:text-slate-400" dir="ltr">${row.created_at || ""}</div>`;
+                failedHost.appendChild(div);
+              });
+            }
+          } catch (e) {
+            failedHost.innerHTML = `<p class="text-rose-600">${e.message || "تعذّر تحميل محاولات الدخول"}</p>`;
+          }
+        }
+        if (sessionsHost) {
+          try {
+            const data = await apiGet("/admin/security/sessions?limit=100");
+            const items = data.items || [];
+            sessionsHost.innerHTML = "";
+            if (!items.length) {
+              sessionsHost.innerHTML = '<tr><td colspan="4" class="p-3 text-center text-slate-500 dark:text-slate-400">لا جلسات نشطة.</td></tr>';
+            }
+            items.forEach((row) => {
+              const tr = document.createElement("tr");
+              tr.innerHTML = `
+                <td class="p-2 font-extrabold">${row.username}</td>
+                <td class="p-2 text-xs" dir="ltr">${row.created_at || ""}</td>
+                <td class="p-2 text-xs" dir="ltr">${row.expires_at || ""}</td>
+                <td class="p-2"><button class="op-btn-chip op-btn-chip--danger" data-token="${row.token_full}">إنهاء الجلسة</button></td>
+              `;
+              tr.querySelector("[data-token]")?.addEventListener("click", async (ev) => {
+                const token = ev.currentTarget.getAttribute("data-token");
+                if (!confirm(`إنهاء جلسة ${row.username}؟ إذا كانت جلستك الحالية سيتم تسجيل خروجك فورًا.`)) return;
+                try {
+                  await apiPostJson("/admin/security/sessions/revoke", { token });
+                  showToast("تم إنهاء الجلسة ✔️", "#10b981");
+                  await loadAdminSecurity();
+                } catch (e) {
+                  showToast(e.message || "تعذر إنهاء الجلسة", "#ef4444");
+                }
+              });
+              sessionsHost.appendChild(tr);
+            });
+          } catch (e) {
+            sessionsHost.innerHTML = `<tr><td colspan="4" class="p-3 text-rose-600">${e.message || "تعذّر تحميل الجلسات"}</td></tr>`;
+          }
+        }
+      })();
+
 
       (function setupBackupRestore() {
         const btn = document.getElementById("restoreBackupBtn");
