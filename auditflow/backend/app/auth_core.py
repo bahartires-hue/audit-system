@@ -128,7 +128,7 @@ PAGE_KEYS = [
     "op-hr",
     "op-finance",
     "op-inventory",
-    "op-rims",
+    "op-simpleinv",
     "op-suppliers",
     "op-analytics",
     "op-convert",

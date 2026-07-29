@@ -9,19 +9,19 @@ from sqlalchemy import func
 
 from ..auth_core import log_event, require_csrf, require_user, user_can_access_page_key
 from ..db import SessionLocal
-from ..models import RimProduct, RimPurchase, RimSale
+from ..models import SimpleProduct, SimplePurchase, SimpleSale
 
-router = APIRouter(prefix="/api/rims", tags=["rims-inventory"])
+router = APIRouter(prefix="/api/simple-inventory", tags=["simple-inventory"])
 
 
-def _require_rims_access(db, request: Request):
+def _require_simple_inventory_access(db, request: Request):
     user = require_user(db, request)
-    if not user_can_access_page_key(user, "op-rims"):
-        raise HTTPException(403, "ليس لديك صلاحية لاستخدام نظام مخزون الجنوط")
+    if not user_can_access_page_key(user, "op-simpleinv"):
+        raise HTTPException(403, "ليس لديك صلاحية لاستخدام نظام المخزون البسيط")
     return user
 
 
-def _product_out(p: RimProduct) -> dict:
+def _product_out(p: SimpleProduct) -> dict:
     return {
         "id": p.id,
         "name": p.name,
@@ -38,12 +38,12 @@ def _product_out(p: RimProduct) -> dict:
 def list_products(request: Request, q: str = ""):
     db = SessionLocal()
     try:
-        _require_rims_access(db, request)
-        query = db.query(RimProduct)
+        _require_simple_inventory_access(db, request)
+        query = db.query(SimpleProduct)
         qn = (q or "").strip()
         if qn:
-            query = query.filter(RimProduct.name.ilike(f"%{qn}%"))
-        rows = query.order_by(RimProduct.created_at.desc()).all()
+            query = query.filter(SimpleProduct.name.ilike(f"%{qn}%"))
+        rows = query.order_by(SimpleProduct.created_at.desc()).all()
         return {"items": [_product_out(p) for p in rows]}
     finally:
         db.close()
@@ -67,9 +67,9 @@ async def create_product(request: Request):
 
     db = SessionLocal()
     try:
-        user = _require_rims_access(db, request)
+        user = _require_simple_inventory_access(db, request)
         require_csrf(request)
-        p = RimProduct(
+        p = SimpleProduct(
             id=uuid.uuid4().hex,
             name=name,
             purchase_price=purchase_price,
@@ -79,7 +79,7 @@ async def create_product(request: Request):
         )
         db.add(p)
         db.commit()
-        log_event(db, "rims.product.created", user.id, {"product_id": p.id, "name": name})
+        log_event(db, "simple_inventory.product.created", user.id, {"product_id": p.id, "name": name})
         return _product_out(p)
     finally:
         db.close()
@@ -90,9 +90,9 @@ async def update_product(product_id: str, request: Request):
     payload = await request.json()
     db = SessionLocal()
     try:
-        user = _require_rims_access(db, request)
+        user = _require_simple_inventory_access(db, request)
         require_csrf(request)
-        p = db.query(RimProduct).filter(RimProduct.id == product_id).first()
+        p = db.query(SimpleProduct).filter(SimpleProduct.id == product_id).first()
         if not p:
             raise HTTPException(404, "الصنف غير موجود")
         if "name" in payload:
@@ -105,7 +105,7 @@ async def update_product(product_id: str, request: Request):
         if "notes" in payload:
             p.notes = (str(payload.get("notes") or "").strip() or None)
         db.commit()
-        log_event(db, "rims.product.updated", user.id, {"product_id": product_id})
+        log_event(db, "simple_inventory.product.updated", user.id, {"product_id": product_id})
         return _product_out(p)
     finally:
         db.close()
@@ -115,20 +115,20 @@ async def update_product(product_id: str, request: Request):
 def delete_product(product_id: str, request: Request):
     db = SessionLocal()
     try:
-        user = _require_rims_access(db, request)
+        user = _require_simple_inventory_access(db, request)
         require_csrf(request)
-        p = db.query(RimProduct).filter(RimProduct.id == product_id).first()
+        p = db.query(SimpleProduct).filter(SimpleProduct.id == product_id).first()
         if not p:
             raise HTTPException(404, "الصنف غير موجود")
         has_movements = (
-            db.query(RimPurchase).filter(RimPurchase.product_id == product_id).first()
-            or db.query(RimSale).filter(RimSale.product_id == product_id).first()
+            db.query(SimplePurchase).filter(SimplePurchase.product_id == product_id).first()
+            or db.query(SimpleSale).filter(SimpleSale.product_id == product_id).first()
         )
         if has_movements:
             raise HTTPException(400, "لا يمكن حذف صنف له حركات شراء أو بيع مسجّلة")
         db.delete(p)
         db.commit()
-        log_event(db, "rims.product.deleted", user.id, {"product_id": product_id, "name": p.name})
+        log_event(db, "simple_inventory.product.deleted", user.id, {"product_id": product_id, "name": p.name})
         return {"ok": True}
     finally:
         db.close()
@@ -138,12 +138,12 @@ def delete_product(product_id: str, request: Request):
 def product_movements(product_id: str, request: Request):
     db = SessionLocal()
     try:
-        _require_rims_access(db, request)
-        p = db.query(RimProduct).filter(RimProduct.id == product_id).first()
+        _require_simple_inventory_access(db, request)
+        p = db.query(SimpleProduct).filter(SimpleProduct.id == product_id).first()
         if not p:
             raise HTTPException(404, "الصنف غير موجود")
-        purchases = db.query(RimPurchase).filter(RimPurchase.product_id == product_id).all()
-        sales = db.query(RimSale).filter(RimSale.product_id == product_id).all()
+        purchases = db.query(SimplePurchase).filter(SimplePurchase.product_id == product_id).all()
+        sales = db.query(SimpleSale).filter(SimpleSale.product_id == product_id).all()
         items = []
         for x in purchases:
             items.append(
@@ -198,13 +198,13 @@ async def create_purchase(request: Request):
 
     db = SessionLocal()
     try:
-        user = _require_rims_access(db, request)
+        user = _require_simple_inventory_access(db, request)
         require_csrf(request)
-        p = db.query(RimProduct).filter(RimProduct.id == product_id).first()
+        p = db.query(SimpleProduct).filter(SimpleProduct.id == product_id).first()
         if not p:
             raise HTTPException(404, "الصنف غير موجود")
         total = quantity * purchase_price
-        purchase = RimPurchase(
+        purchase = SimplePurchase(
             id=uuid.uuid4().hex,
             product_id=product_id,
             quantity=quantity,
@@ -218,7 +218,7 @@ async def create_purchase(request: Request):
         db.commit()
         log_event(
             db,
-            "rims.purchase.created",
+            "simple_inventory.purchase.created",
             user.id,
             {"product_id": product_id, "quantity": quantity, "purchase_price": purchase_price},
         )
@@ -253,16 +253,16 @@ async def create_sale(request: Request):
 
     db = SessionLocal()
     try:
-        user = _require_rims_access(db, request)
+        user = _require_simple_inventory_access(db, request)
         require_csrf(request)
-        p = db.query(RimProduct).filter(RimProduct.id == product_id).first()
+        p = db.query(SimpleProduct).filter(SimpleProduct.id == product_id).first()
         if not p:
             raise HTTPException(404, "الصنف غير موجود")
         if int(p.quantity or 0) < quantity:
             raise HTTPException(400, f"الكمية المتاحة ({p.quantity}) غير كافية لإتمام عملية البيع")
         total = quantity * sale_price
         profit = (sale_price - float(p.purchase_price or 0)) * quantity
-        sale = RimSale(
+        sale = SimpleSale(
             id=uuid.uuid4().hex,
             product_id=product_id,
             quantity=quantity,
@@ -277,7 +277,7 @@ async def create_sale(request: Request):
         db.commit()
         log_event(
             db,
-            "rims.sale.created",
+            "simple_inventory.sale.created",
             user.id,
             {"product_id": product_id, "quantity": quantity, "sale_price": sale_price, "profit": profit},
         )
@@ -290,35 +290,35 @@ async def create_sale(request: Request):
 def dashboard_summary(request: Request):
     db = SessionLocal()
     try:
-        _require_rims_access(db, request)
+        _require_simple_inventory_access(db, request)
         now = dt.datetime.utcnow()
         today_start = dt.datetime(now.year, now.month, now.day)
 
-        items_count = db.query(RimProduct).count()
-        total_quantity = int(db.query(func.coalesce(func.sum(RimProduct.quantity), 0)).scalar() or 0)
+        items_count = db.query(SimpleProduct).count()
+        total_quantity = int(db.query(func.coalesce(func.sum(SimpleProduct.quantity), 0)).scalar() or 0)
 
         today_sales_total = float(
-            db.query(func.coalesce(func.sum(RimSale.total), 0.0))
-            .filter(RimSale.created_at >= today_start)
+            db.query(func.coalesce(func.sum(SimpleSale.total), 0.0))
+            .filter(SimpleSale.created_at >= today_start)
             .scalar()
             or 0.0
         )
         today_profit_total = float(
-            db.query(func.coalesce(func.sum(RimSale.profit), 0.0))
-            .filter(RimSale.created_at >= today_start)
+            db.query(func.coalesce(func.sum(SimpleSale.profit), 0.0))
+            .filter(SimpleSale.created_at >= today_start)
             .scalar()
             or 0.0
         )
 
-        all_time_sales_total = float(db.query(func.coalesce(func.sum(RimSale.total), 0.0)).scalar() or 0.0)
-        all_time_purchases_total = float(db.query(func.coalesce(func.sum(RimPurchase.total), 0.0)).scalar() or 0.0)
-        all_time_profit_total = float(db.query(func.coalesce(func.sum(RimSale.profit), 0.0)).scalar() or 0.0)
+        all_time_sales_total = float(db.query(func.coalesce(func.sum(SimpleSale.total), 0.0)).scalar() or 0.0)
+        all_time_purchases_total = float(db.query(func.coalesce(func.sum(SimplePurchase.total), 0.0)).scalar() or 0.0)
+        all_time_profit_total = float(db.query(func.coalesce(func.sum(SimpleSale.profit), 0.0)).scalar() or 0.0)
 
         since_30d = today_start - dt.timedelta(days=29)
         rows = (
-            db.query(func.date(RimSale.created_at), func.coalesce(func.sum(RimSale.total), 0.0))
-            .filter(RimSale.created_at >= since_30d)
-            .group_by(func.date(RimSale.created_at))
+            db.query(func.date(SimpleSale.created_at), func.coalesce(func.sum(SimpleSale.total), 0.0))
+            .filter(SimpleSale.created_at >= since_30d)
+            .group_by(func.date(SimpleSale.created_at))
             .all()
         )
         by_day = {str(d): float(v or 0.0) for d, v in rows}
@@ -330,7 +330,7 @@ def dashboard_summary(request: Request):
             labels.append(key)
             series.append(by_day.get(key, 0.0))
 
-        out_of_stock = db.query(RimProduct).filter(RimProduct.quantity <= 0).all()
+        out_of_stock = db.query(SimpleProduct).filter(SimpleProduct.quantity <= 0).all()
 
         return {
             "items_count": items_count,

@@ -472,11 +472,11 @@ class ImporterSnapshot(Base):
 
 
 
-# ============================================================ مخزون الجنوط المستعملة (نظام بسيط ومستقل)
-class RimProduct(Base):
-    """صنف جنط مستعمل. نظام بسيط ومستقل تمامًا عن نظام Item/Purchase/Sale الأصلي وعن محرك المطابقة."""
+# ============================================================ المخزون البسيط (نظام بسيط ومستقل)
+class SimpleProduct(Base):
+    """صنف في نظام المخزون البسيط. نظام بسيط ومستقل تمامًا عن نظام Item/Purchase/Sale الأصلي وعن محرك المطابقة."""
 
-    __tablename__ = "rim_products"
+    __tablename__ = "simple_products"
 
     id = Column(String, primary_key=True)
     name = Column(String, nullable=False, index=True)
@@ -487,22 +487,22 @@ class RimProduct(Base):
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
 
-class RimPurchase(Base):
-    __tablename__ = "rim_purchases"
+class SimplePurchase(Base):
+    __tablename__ = "simple_purchases"
 
     id = Column(String, primary_key=True)
-    product_id = Column(String, ForeignKey("rim_products.id"), nullable=False, index=True)
+    product_id = Column(String, ForeignKey("simple_products.id"), nullable=False, index=True)
     quantity = Column(Integer, nullable=False)
     purchase_price = Column(Float, nullable=False)
     total = Column(Float, nullable=False)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False, index=True)
 
 
-class RimSale(Base):
-    __tablename__ = "rim_sales"
+class SimpleSale(Base):
+    __tablename__ = "simple_sales"
 
     id = Column(String, primary_key=True)
-    product_id = Column(String, ForeignKey("rim_products.id"), nullable=False, index=True)
+    product_id = Column(String, ForeignKey("simple_products.id"), nullable=False, index=True)
     quantity = Column(Integer, nullable=False)
     sale_price = Column(Float, nullable=False)
     total = Column(Float, nullable=False)

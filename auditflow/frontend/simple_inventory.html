@@ -14,7 +14,7 @@
         }
       })();
     </script>
-    <title>مخزون الجنوط المستعملة | OptimalSuite AI</title>
+    <title>المخزون البسيط | OptimalSuite AI</title>
     <link rel="icon" href="/static/favicon.svg?v=9" type="image/svg+xml" />
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
@@ -335,13 +335,13 @@
       body.op-dashboard .op-btn-chip--danger { color: #dc2626; border-color: rgba(220, 38, 38, 0.35); }
       body.op-dashboard .op-btn-chip--danger:hover { background: rgba(220, 38, 38, 0.08); }
       body.op-dashboard .op-btn-chip--gold { background: var(--gold); color: #1a1200 !important; border-color: var(--gold); }
-      body.op-dashboard .rims-oos-badge {
+      body.op-dashboard .simple-inv-oos-badge {
         display: inline-block; background: rgba(220, 38, 38, 0.12); color: #dc2626; font-weight: 800;
         font-size: 0.68rem; padding: 2px 8px; border-radius: 999px; margin-inline-start: 6px;
       }
 
       @media (max-width: 900px) {
-        body.op-dashboard .rims-grid-2col { grid-template-columns: 1fr !important; }
+        body.op-dashboard .simple-inv-grid-2col { grid-template-columns: 1fr !important; }
         body.op-dashboard .op-stats { grid-template-columns: repeat(2, 1fr) !important; }
       }
 </style>
@@ -362,7 +362,7 @@
         <a href="/hr" class="op-side-link nav-link nav-link--idle" data-nav="op-hr" title="الموارد البشرية"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-4-4"/></svg></a>
         <a href="/finance" class="op-side-link nav-link nav-link--idle" data-nav="op-finance" title="مركز الأدوات الذكية"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 8h6m-5 4h4m-6 4h8M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg></a>
         <a href="/inventory-management" class="op-side-link nav-link nav-link--idle" data-nav="op-inventory" title="إدارة المخزون"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg></a>
-        <a href="/rims-inventory" class="op-side-link nav-link nav-link--active" data-nav="op-rims" title="مخزون الجنوط المستعملة"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" d="M12 4v2M12 18v2M20 12h-2M6 12H4M17.66 6.34l-1.42 1.42M7.76 16.24l-1.42 1.42M17.66 17.66l-1.42-1.42M7.76 7.76L6.34 6.34"/></svg></a>
+        <a href="/simple-inventory" class="op-side-link nav-link nav-link--active" data-nav="op-simpleinv" title="المخزون البسيط"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M21 8l-9-5-9 5 9 5 9-5zm0 0v8l-9 5m9-13l-9 5m0 8l-9-5m9 5v-8M3 8v8l9 5"/></svg></a>
         <a href="/suppliers" class="op-side-link nav-link nav-link--idle" data-nav="op-suppliers" title="إدارة المستندات"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13h1l2 7h11l2-7h1M8 13V7a4 4 0 118 0v6m-9 0h10"/></svg></a>
         <a href="/analytics" class="op-side-link nav-link nav-link--idle" data-nav="op-analytics" title="التقارير والتحليلات"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg></a>
         <a href="/convert" class="op-side-link nav-link nav-link--idle" data-nav="op-convert" title="تحويل الملفات"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4M16 17H4m0 0l4 4m-4-4l4-4"/></svg></a>
@@ -388,7 +388,7 @@
         <a href="/hr" data-nav="op-hr" class="nav-link nav-link--idle">الموارد البشرية</a>
         <a href="/finance" data-nav="op-finance" class="nav-link nav-link--idle">مركز الأدوات الذكية</a>
         <a href="/inventory-management" data-nav="op-inventory" class="nav-link nav-link--idle">إدارة المخزون</a>
-        <a href="/rims-inventory" data-nav="op-rims" class="nav-link nav-link--active">مخزون الجنوط المستعملة</a>
+        <a href="/simple-inventory" data-nav="op-simpleinv" class="nav-link nav-link--active">المخزون البسيط</a>
         <a href="/suppliers" data-nav="op-suppliers" class="nav-link nav-link--idle">إدارة المستندات</a>
         <a href="/analytics" data-nav="op-analytics" class="nav-link nav-link--idle">التقارير والتحليلات</a>
         <a href="/convert" data-nav="op-convert" class="nav-link nav-link--idle">تحويل الملفات</a>
@@ -410,7 +410,7 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
         </button>
         <div class="min-w-0 flex flex-col">
-          <span style="font-weight:800;color:var(--text-heading);font-size:0.85rem;">مخزون الجنوط المستعملة</span>
+          <span style="font-weight:800;color:var(--text-heading);font-size:0.85rem;">المخزون البسيط</span>
         </div>
         <div class="flex items-center gap-3" style="margin-inline-start:auto;">
           <div class="op-avatar" id="opAvatarInitial">؟</div>
@@ -435,56 +435,56 @@
 
       <main class="op-main">
         <div class="op-hero" style="margin-bottom:1.25rem;">
-          <h1>🛞 مخزون <b>الجنوط المستعملة</b></h1>
-          <p>نظام بسيط لتسجيل شراء وبيع الجنوط المستعملة ومتابعة الأرباح، دون أي تعقيد محاسبي.</p>
+          <h1>📦 <b>المخزون البسيط</b></h1>
+          <p>نظام بسيط لتسجيل الشراء والبيع ومتابعة الأرباح، دون أي تعقيد محاسبي.</p>
         </div>
 
         <div class="op-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.25rem;">
           <div class="op-stat-card">
             <div class="op-stat-icon"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 8l-9-5-9 5 9 5 9-5zm0 0v8l-9 5m9-13l-9 5m0 8l-9-5m9 5v-8M3 8v8l9 5"/></svg></div>
-            <div class="op-stat-value" id="rimsItemsCount">0</div>
+            <div class="op-stat-value" id="simpleInvItemsCount">0</div>
             <div class="op-stat-label">📦 عدد الأصناف</div>
           </div>
           <div class="op-stat-card">
             <div class="op-stat-icon"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 17l6-6 4 4 8-8m0 0h-5m5 0v5"/></svg></div>
-            <div class="op-stat-value" id="rimsTotalQty">0</div>
+            <div class="op-stat-value" id="simpleInvTotalQty">0</div>
             <div class="op-stat-label">📈 إجمالي الكمية الموجودة</div>
           </div>
           <div class="op-stat-card">
             <div class="op-stat-icon"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12V7H5a2 2 0 010-4h14v4M3 5v14a2 2 0 002 2h16v-5M18 12a2 2 0 100 4 2 2 0 000-4z"/></svg></div>
-            <div class="op-stat-value" id="rimsProfitToday">0</div>
+            <div class="op-stat-value" id="simpleInvProfitToday">0</div>
             <div class="op-stat-label">💰 أرباح اليوم</div>
           </div>
           <div class="op-stat-card">
             <div class="op-stat-icon"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 006 17h12M9 21a1 1 0 100-2 1 1 0 000 2zm8 0a1 1 0 100-2 1 1 0 000 2z"/></svg></div>
-            <div class="op-stat-value" id="rimsSalesToday">0</div>
+            <div class="op-stat-value" id="simpleInvSalesToday">0</div>
             <div class="op-stat-label">🛒 مبيعات اليوم</div>
           </div>
         </div>
 
-        <div style="display:grid;grid-template-columns:2fr 1fr;gap:1rem;margin-bottom:1.25rem;" class="rims-grid-2col">
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:1rem;margin-bottom:1.25rem;" class="simple-inv-grid-2col">
           <div class="op-shell-card" style="text-align:start;">
             <h2 style="color:var(--text-heading);font-weight:800;font-size:1.05rem;margin-bottom:0.75rem;">📊 المبيعات خلال آخر 30 يومًا</h2>
-            <div id="rimsChartHost" style="width:100%;overflow-x:auto;"></div>
+            <div id="simpleInvChartHost" style="width:100%;overflow-x:auto;"></div>
           </div>
           <div class="op-shell-card" style="text-align:start;">
             <h2 style="color:var(--text-heading);font-weight:800;font-size:1.05rem;margin-bottom:0.75rem;">حساب الأرباح</h2>
             <div style="display:flex;flex-direction:column;gap:0.6rem;font-size:0.85rem;font-weight:700;">
-              <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">إجمالي المبيعات</span><span id="rimsAllSales" style="color:var(--text-heading);">0</span></div>
-              <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">إجمالي المشتريات</span><span id="rimsAllPurchases" style="color:var(--text-heading);">0</span></div>
-              <div style="display:flex;justify-content:space-between;border-top:1px solid var(--gold-dim);padding-top:0.6rem;"><span style="color:var(--text-muted);">إجمالي الأرباح</span><span id="rimsAllProfit" style="color:var(--gold-soft);font-weight:800;">0</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">إجمالي المبيعات</span><span id="simpleInvAllSales" style="color:var(--text-heading);">0</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">إجمالي المشتريات</span><span id="simpleInvAllPurchases" style="color:var(--text-heading);">0</span></div>
+              <div style="display:flex;justify-content:space-between;border-top:1px solid var(--gold-dim);padding-top:0.6rem;"><span style="color:var(--text-muted);">إجمالي الأرباح</span><span id="simpleInvAllProfit" style="color:var(--gold-soft);font-weight:800;">0</span></div>
             </div>
-            <div id="rimsAlertsHost" style="margin-top:1rem;display:flex;flex-direction:column;gap:0.4rem;"></div>
+            <div id="simpleInvAlertsHost" style="margin-top:1rem;display:flex;flex-direction:column;gap:0.4rem;"></div>
           </div>
         </div>
 
         <div class="op-shell-card" style="text-align:start;margin-bottom:1.25rem;">
           <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;">
-            <button type="button" id="rimsAddProductBtn" class="op-btn-chip op-btn-chip--gold" style="display:flex;align-items:center;gap:6px;"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg> إضافة صنف</button>
-            <button type="button" id="rimsAddPurchaseBtn" class="op-btn-chip">📥 تسجيل شراء</button>
-            <button type="button" id="rimsAddSaleBtn" class="op-btn-chip">🧾 تسجيل بيع</button>
+            <button type="button" id="simpleInvAddProductBtn" class="op-btn-chip op-btn-chip--gold" style="display:flex;align-items:center;gap:6px;"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg> إضافة صنف</button>
+            <button type="button" id="simpleInvAddPurchaseBtn" class="op-btn-chip">📥 تسجيل شراء</button>
+            <button type="button" id="simpleInvAddSaleBtn" class="op-btn-chip">🧾 تسجيل بيع</button>
             <div style="margin-inline-start:auto;position:relative;">
-              <input id="rimsSearchInp" placeholder="ابحث باسم الصنف..." style="padding:0.5rem 0.75rem 0.5rem 2rem;border-radius:10px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);font-size:0.82rem;font-weight:600;min-width:220px;" />
+              <input id="simpleInvSearchInp" placeholder="ابحث باسم الصنف..." style="padding:0.5rem 0.75rem 0.5rem 2rem;border-radius:10px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);font-size:0.82rem;font-weight:600;min-width:220px;" />
             </div>
           </div>
         </div>
@@ -503,89 +503,89 @@
                   <th class="p-2">إجراءات</th>
                 </tr>
               </thead>
-              <tbody id="rimsProductsHost"></tbody>
+              <tbody id="simpleInvProductsHost"></tbody>
             </table>
           </div>
         </div>
 
         <!-- نافذة إضافة/تعديل صنف -->
-        <div id="rimsProductModalOverlay" class="op-tool-modal-overlay" style="display:none;">
+        <div id="simpleInvProductModalOverlay" class="op-tool-modal-overlay" style="display:none;">
           <div class="op-tool-modal">
             <div class="op-tool-modal-head">
               <div>
-                <h3 id="rimsProductModalTitle">إضافة صنف جديد</h3>
-                <p>أدخلي بيانات صنف الجنط.</p>
+                <h3 id="simpleInvProductModalTitle">إضافة صنف جديد</h3>
+                <p>أدخلي بيانات الصنف.</p>
               </div>
-              <button type="button" id="rimsProductModalClose">✕</button>
+              <button type="button" id="simpleInvProductModalClose">✕</button>
             </div>
-            <div class="op-tool-field"><label>اسم الصنف</label><input type="text" id="rimsPName" /></div>
-            <div class="op-tool-field"><label>سعر الشراء</label><input type="number" id="rimsPPurchasePrice" value="0" /></div>
-            <div class="op-tool-field"><label>سعر البيع</label><input type="number" id="rimsPSalePrice" value="0" /></div>
-            <div class="op-tool-field" id="rimsPQtyField"><label>الكمية</label><input type="number" id="rimsPQty" value="0" /></div>
-            <div class="op-tool-field"><label>ملاحظات (اختياري)</label><textarea id="rimsPNotes" rows="2"></textarea></div>
-            <div id="rimsProductModalResult" class="op-tool-modal-result" style="display:none;"></div>
+            <div class="op-tool-field"><label>اسم الصنف</label><input type="text" id="simpleInvPName" /></div>
+            <div class="op-tool-field"><label>سعر الشراء</label><input type="number" id="simpleInvPPurchasePrice" value="0" /></div>
+            <div class="op-tool-field"><label>سعر البيع</label><input type="number" id="simpleInvPSalePrice" value="0" /></div>
+            <div class="op-tool-field" id="simpleInvPQtyField"><label>الكمية</label><input type="number" id="simpleInvPQty" value="0" /></div>
+            <div class="op-tool-field"><label>ملاحظات (اختياري)</label><textarea id="simpleInvPNotes" rows="2"></textarea></div>
+            <div id="simpleInvProductModalResult" class="op-tool-modal-result" style="display:none;"></div>
             <div class="op-tool-modal-actions">
-              <button type="button" class="op-tool-btn-secondary" id="rimsProductModalCancel">إلغاء</button>
-              <button type="button" class="op-btn-chip op-btn-chip--gold" id="rimsProductModalSubmit">حفظ</button>
+              <button type="button" class="op-tool-btn-secondary" id="simpleInvProductModalCancel">إلغاء</button>
+              <button type="button" class="op-btn-chip op-btn-chip--gold" id="simpleInvProductModalSubmit">حفظ</button>
             </div>
           </div>
         </div>
 
         <!-- نافذة تسجيل شراء -->
-        <div id="rimsPurchaseModalOverlay" class="op-tool-modal-overlay" style="display:none;">
+        <div id="simpleInvPurchaseModalOverlay" class="op-tool-modal-overlay" style="display:none;">
           <div class="op-tool-modal">
             <div class="op-tool-modal-head">
               <div><h3>📥 تسجيل شراء</h3><p>زيادة الكمية وتحديث تكلفة الصنف تلقائيًا.</p></div>
-              <button type="button" id="rimsPurchaseModalClose">✕</button>
+              <button type="button" id="simpleInvPurchaseModalClose">✕</button>
             </div>
-            <div class="op-tool-field"><label>الصنف</label><select id="rimsPurProduct"></select></div>
-            <div class="op-tool-field"><label>الكمية</label><input type="number" id="rimsPurQty" value="1" /></div>
-            <div class="op-tool-field"><label>سعر الشراء</label><input type="number" id="rimsPurPrice" value="0" /></div>
-            <div class="op-tool-field"><label>التاريخ</label><input type="date" id="rimsPurDate" /></div>
-            <div id="rimsPurchaseModalResult" class="op-tool-modal-result" style="display:none;"></div>
+            <div class="op-tool-field"><label>الصنف</label><select id="simpleInvPurProduct"></select></div>
+            <div class="op-tool-field"><label>الكمية</label><input type="number" id="simpleInvPurQty" value="1" /></div>
+            <div class="op-tool-field"><label>سعر الشراء</label><input type="number" id="simpleInvPurPrice" value="0" /></div>
+            <div class="op-tool-field"><label>التاريخ</label><input type="date" id="simpleInvPurDate" /></div>
+            <div id="simpleInvPurchaseModalResult" class="op-tool-modal-result" style="display:none;"></div>
             <div class="op-tool-modal-actions">
-              <button type="button" class="op-tool-btn-secondary" id="rimsPurchaseModalCancel">إلغاء</button>
-              <button type="button" class="op-btn-chip op-btn-chip--gold" id="rimsPurchaseModalSubmit">حفظ</button>
+              <button type="button" class="op-tool-btn-secondary" id="simpleInvPurchaseModalCancel">إلغاء</button>
+              <button type="button" class="op-btn-chip op-btn-chip--gold" id="simpleInvPurchaseModalSubmit">حفظ</button>
             </div>
           </div>
         </div>
 
         <!-- نافذة تسجيل بيع -->
-        <div id="rimsSaleModalOverlay" class="op-tool-modal-overlay" style="display:none;">
+        <div id="simpleInvSaleModalOverlay" class="op-tool-modal-overlay" style="display:none;">
           <div class="op-tool-modal">
             <div class="op-tool-modal-head">
               <div><h3>🧾 تسجيل بيع</h3><p>العميل الافتراضي «نقدي». تُخصم الكمية ويُحسب الربح تلقائيًا.</p></div>
-              <button type="button" id="rimsSaleModalClose">✕</button>
+              <button type="button" id="simpleInvSaleModalClose">✕</button>
             </div>
-            <div class="op-tool-field"><label>الصنف</label><select id="rimsSaleProduct"></select></div>
-            <div class="op-tool-field"><label>الكمية</label><input type="number" id="rimsSaleQty" value="1" /></div>
-            <div class="op-tool-field"><label>سعر البيع</label><input type="number" id="rimsSalePrice" value="0" /></div>
-            <div class="op-tool-field"><label>التاريخ</label><input type="date" id="rimsSaleDate" /></div>
-            <div id="rimsSaleModalResult" class="op-tool-modal-result" style="display:none;"></div>
+            <div class="op-tool-field"><label>الصنف</label><select id="simpleInvSaleProduct"></select></div>
+            <div class="op-tool-field"><label>الكمية</label><input type="number" id="simpleInvSaleQty" value="1" /></div>
+            <div class="op-tool-field"><label>سعر البيع</label><input type="number" id="simpleInvSalePrice" value="0" /></div>
+            <div class="op-tool-field"><label>التاريخ</label><input type="date" id="simpleInvSaleDate" /></div>
+            <div id="simpleInvSaleModalResult" class="op-tool-modal-result" style="display:none;"></div>
             <div class="op-tool-modal-actions">
-              <button type="button" class="op-tool-btn-secondary" id="rimsSaleModalCancel">إلغاء</button>
-              <button type="button" class="op-btn-chip op-btn-chip--gold" id="rimsSaleModalSubmit">حفظ</button>
+              <button type="button" class="op-tool-btn-secondary" id="simpleInvSaleModalCancel">إلغاء</button>
+              <button type="button" class="op-btn-chip op-btn-chip--gold" id="simpleInvSaleModalSubmit">حفظ</button>
             </div>
           </div>
         </div>
 
         <!-- نافذة حركة المخزون -->
-        <div id="rimsMovementsModalOverlay" class="op-tool-modal-overlay" style="display:none;">
+        <div id="simpleInvMovementsModalOverlay" class="op-tool-modal-overlay" style="display:none;">
           <div class="op-tool-modal" style="max-width:640px;">
             <div class="op-tool-modal-head">
-              <div><h3 id="rimsMovementsTitle">حركة المخزون</h3><p>كل عمليات الشراء والبيع لهذا الصنف.</p></div>
-              <button type="button" id="rimsMovementsModalClose">✕</button>
+              <div><h3 id="simpleInvMovementsTitle">حركة المخزون</h3><p>كل عمليات الشراء والبيع لهذا الصنف.</p></div>
+              <button type="button" id="simpleInvMovementsModalClose">✕</button>
             </div>
             <div class="mt-2 overflow-auto rounded-2xl" style="border:1px solid var(--gold-dim);border-radius:16px;max-height:50vh;">
               <table class="op-admin-table w-full text-right text-sm">
                 <thead>
                   <tr><th class="p-2">النوع</th><th class="p-2">الكمية</th><th class="p-2">السعر</th><th class="p-2">الإجمالي</th><th class="p-2">التاريخ</th></tr>
                 </thead>
-                <tbody id="rimsMovementsHost"></tbody>
+                <tbody id="simpleInvMovementsHost"></tbody>
               </table>
             </div>
             <div class="op-tool-modal-actions" style="margin-top:1rem;">
-              <button type="button" class="op-tool-btn-secondary" id="rimsMovementsCloseBtn">إغلاق</button>
+              <button type="button" class="op-tool-btn-secondary" id="simpleInvMovementsCloseBtn">إغلاق</button>
             </div>
           </div>
         </div>
@@ -653,8 +653,8 @@
           return d.getFullYear() + "-" + m + "-" + day;
         }
 
-        function renderRimsChart(chart) {
-          var host = document.getElementById("rimsChartHost");
+        function renderSimpleInvChart(chart) {
+          var host = document.getElementById("simpleInvChartHost");
           if (!host || !chart) return;
           var labels = chart.labels || [];
           var a = chart.sales || [];
@@ -686,16 +686,16 @@
 
         async function loadDashboard() {
           try {
-            var s = await apiGet("/api/rims/dashboard-summary");
-            document.getElementById("rimsItemsCount").textContent = s.items_count;
-            document.getElementById("rimsTotalQty").textContent = s.total_quantity;
-            document.getElementById("rimsProfitToday").textContent = fmtMoney(s.today_profit_total);
-            document.getElementById("rimsSalesToday").textContent = fmtMoney(s.today_sales_total);
-            document.getElementById("rimsAllSales").textContent = fmtMoney(s.all_time_sales_total);
-            document.getElementById("rimsAllPurchases").textContent = fmtMoney(s.all_time_purchases_total);
-            document.getElementById("rimsAllProfit").textContent = fmtMoney(s.all_time_profit_total);
-            renderRimsChart(s.chart_30d);
-            var alertsHost = document.getElementById("rimsAlertsHost");
+            var s = await apiGet("/api/simple-inventory/dashboard-summary");
+            document.getElementById("simpleInvItemsCount").textContent = s.items_count;
+            document.getElementById("simpleInvTotalQty").textContent = s.total_quantity;
+            document.getElementById("simpleInvProfitToday").textContent = fmtMoney(s.today_profit_total);
+            document.getElementById("simpleInvSalesToday").textContent = fmtMoney(s.today_sales_total);
+            document.getElementById("simpleInvAllSales").textContent = fmtMoney(s.all_time_sales_total);
+            document.getElementById("simpleInvAllPurchases").textContent = fmtMoney(s.all_time_purchases_total);
+            document.getElementById("simpleInvAllProfit").textContent = fmtMoney(s.all_time_profit_total);
+            renderSimpleInvChart(s.chart_30d);
+            var alertsHost = document.getElementById("simpleInvAlertsHost");
             if (alertsHost) {
               var oos = s.out_of_stock || [];
               if (!oos.length) {
@@ -718,7 +718,7 @@
         }
 
         function productRowHtml(p) {
-          var oosBadge = p.out_of_stock ? '<span class="rims-oos-badge">⚠️ نفد المخزون</span>' : "";
+          var oosBadge = p.out_of_stock ? '<span class="simple-inv-oos-badge">⚠️ نفد المخزون</span>' : "";
           return (
             '<tr data-id="' + p.id + '">' +
             '<td class="p-2 font-extrabold">' + p.name + oosBadge + "</td>" +
@@ -736,10 +736,10 @@
         }
 
         async function loadProducts(q) {
-          var host = document.getElementById("rimsProductsHost");
+          var host = document.getElementById("simpleInvProductsHost");
           if (!host) return;
           try {
-            var data = await apiGet("/api/rims/products" + (q ? "?q=" + encodeURIComponent(q) : ""));
+            var data = await apiGet("/api/simple-inventory/products" + (q ? "?q=" + encodeURIComponent(q) : ""));
             productsCache = data.items || [];
             if (!productsCache.length) {
               host.innerHTML = '<tr><td colspan="6" class="p-3 text-center" style="color:var(--text-muted);">لا توجد أصناف بعد.</td></tr>';
@@ -754,9 +754,9 @@
               tr.querySelector('[data-a="delete"]')?.addEventListener("click", async function () {
                 if (!confirm('حذف صنف "' + p.name + '"؟')) return;
                 try {
-                  await apiDelete("/api/rims/products/" + p.id);
+                  await apiDelete("/api/simple-inventory/products/" + p.id);
                   showToast("تم الحذف ✔️", "#10b981");
-                  await Promise.all([loadProducts(document.getElementById("rimsSearchInp").value.trim()), loadDashboard()]);
+                  await Promise.all([loadProducts(document.getElementById("simpleInvSearchInp").value.trim()), loadDashboard()]);
                 } catch (e) {
                   showToast(e.message || "تعذر حذف الصنف", "#ef4444");
                 }
@@ -769,7 +769,7 @@
         }
 
         function refreshProductSelects() {
-          [document.getElementById("rimsPurProduct"), document.getElementById("rimsSaleProduct")].forEach(function (sel) {
+          [document.getElementById("simpleInvPurProduct"), document.getElementById("simpleInvSaleProduct")].forEach(function (sel) {
             if (!sel) return;
             var current = sel.value;
             sel.innerHTML = productsCache
@@ -780,44 +780,44 @@
         }
 
         // ---------- نافذة الصنف (إضافة/تعديل) ----------
-        var productOverlay = document.getElementById("rimsProductModalOverlay");
-        var productTitle = document.getElementById("rimsProductModalTitle");
-        var productResult = document.getElementById("rimsProductModalResult");
-        var pQtyField = document.getElementById("rimsPQtyField");
+        var productOverlay = document.getElementById("simpleInvProductModalOverlay");
+        var productTitle = document.getElementById("simpleInvProductModalTitle");
+        var productResult = document.getElementById("simpleInvProductModalResult");
+        var pQtyField = document.getElementById("simpleInvPQtyField");
 
         function openProductModal(p) {
           editingProductId = p ? p.id : null;
           productTitle.textContent = p ? "تعديل صنف" : "إضافة صنف جديد";
-          document.getElementById("rimsPName").value = p ? p.name : "";
-          document.getElementById("rimsPPurchasePrice").value = p ? p.purchase_price : 0;
-          document.getElementById("rimsPSalePrice").value = p ? p.sale_price : 0;
-          document.getElementById("rimsPQty").value = p ? p.quantity : 0;
-          document.getElementById("rimsPNotes").value = p ? p.notes || "" : "";
-          document.getElementById("rimsPPurchasePrice").disabled = !!p;
+          document.getElementById("simpleInvPName").value = p ? p.name : "";
+          document.getElementById("simpleInvPPurchasePrice").value = p ? p.purchase_price : 0;
+          document.getElementById("simpleInvPSalePrice").value = p ? p.sale_price : 0;
+          document.getElementById("simpleInvPQty").value = p ? p.quantity : 0;
+          document.getElementById("simpleInvPNotes").value = p ? p.notes || "" : "";
+          document.getElementById("simpleInvPPurchasePrice").disabled = !!p;
           pQtyField.style.display = p ? "none" : "";
           productResult.style.display = "none";
           productOverlay.style.display = "flex";
         }
         function closeProductModal() { productOverlay.style.display = "none"; }
-        document.getElementById("rimsAddProductBtn")?.addEventListener("click", function () { openProductModal(null); });
-        document.getElementById("rimsProductModalClose")?.addEventListener("click", closeProductModal);
-        document.getElementById("rimsProductModalCancel")?.addEventListener("click", closeProductModal);
+        document.getElementById("simpleInvAddProductBtn")?.addEventListener("click", function () { openProductModal(null); });
+        document.getElementById("simpleInvProductModalClose")?.addEventListener("click", closeProductModal);
+        document.getElementById("simpleInvProductModalCancel")?.addEventListener("click", closeProductModal);
         productOverlay?.addEventListener("click", function (e) { if (e.target === productOverlay) closeProductModal(); });
-        document.getElementById("rimsProductModalSubmit")?.addEventListener("click", async function () {
-          var name = document.getElementById("rimsPName").value.trim();
+        document.getElementById("simpleInvProductModalSubmit")?.addEventListener("click", async function () {
+          var name = document.getElementById("simpleInvPName").value.trim();
           if (!name) { showToast("الرجاء إدخال اسم الصنف", "#ef4444"); return; }
           var payload = {
             name: name,
-            sale_price: Number(document.getElementById("rimsPSalePrice").value || 0),
-            notes: document.getElementById("rimsPNotes").value.trim(),
+            sale_price: Number(document.getElementById("simpleInvPSalePrice").value || 0),
+            notes: document.getElementById("simpleInvPNotes").value.trim(),
           };
           try {
             if (editingProductId) {
-              await apiPatchJson("/api/rims/products/" + editingProductId, payload);
+              await apiPatchJson("/api/simple-inventory/products/" + editingProductId, payload);
             } else {
-              payload.purchase_price = Number(document.getElementById("rimsPPurchasePrice").value || 0);
-              payload.quantity = Number(document.getElementById("rimsPQty").value || 0);
-              await apiPostJson("/api/rims/products", payload);
+              payload.purchase_price = Number(document.getElementById("simpleInvPPurchasePrice").value || 0);
+              payload.quantity = Number(document.getElementById("simpleInvPQty").value || 0);
+              await apiPostJson("/api/simple-inventory/products", payload);
             }
             showToast("تم الحفظ ✔️", "#10b981");
             closeProductModal();
@@ -829,28 +829,28 @@
         });
 
         // ---------- نافذة الشراء ----------
-        var purchaseOverlay = document.getElementById("rimsPurchaseModalOverlay");
-        document.getElementById("rimsAddPurchaseBtn")?.addEventListener("click", function () {
-          document.getElementById("rimsPurQty").value = 1;
-          document.getElementById("rimsPurPrice").value = 0;
-          document.getElementById("rimsPurDate").value = todayStr();
-          document.getElementById("rimsPurchaseModalResult").style.display = "none";
+        var purchaseOverlay = document.getElementById("simpleInvPurchaseModalOverlay");
+        document.getElementById("simpleInvAddPurchaseBtn")?.addEventListener("click", function () {
+          document.getElementById("simpleInvPurQty").value = 1;
+          document.getElementById("simpleInvPurPrice").value = 0;
+          document.getElementById("simpleInvPurDate").value = todayStr();
+          document.getElementById("simpleInvPurchaseModalResult").style.display = "none";
           refreshProductSelects();
           purchaseOverlay.style.display = "flex";
         });
-        document.getElementById("rimsPurchaseModalClose")?.addEventListener("click", function () { purchaseOverlay.style.display = "none"; });
-        document.getElementById("rimsPurchaseModalCancel")?.addEventListener("click", function () { purchaseOverlay.style.display = "none"; });
+        document.getElementById("simpleInvPurchaseModalClose")?.addEventListener("click", function () { purchaseOverlay.style.display = "none"; });
+        document.getElementById("simpleInvPurchaseModalCancel")?.addEventListener("click", function () { purchaseOverlay.style.display = "none"; });
         purchaseOverlay?.addEventListener("click", function (e) { if (e.target === purchaseOverlay) purchaseOverlay.style.display = "none"; });
-        document.getElementById("rimsPurchaseModalSubmit")?.addEventListener("click", async function () {
-          var resultEl = document.getElementById("rimsPurchaseModalResult");
-          var productId = document.getElementById("rimsPurProduct").value;
+        document.getElementById("simpleInvPurchaseModalSubmit")?.addEventListener("click", async function () {
+          var resultEl = document.getElementById("simpleInvPurchaseModalResult");
+          var productId = document.getElementById("simpleInvPurProduct").value;
           if (!productId) { showToast("الرجاء اختيار الصنف", "#ef4444"); return; }
           try {
-            await apiPostJson("/api/rims/purchases", {
+            await apiPostJson("/api/simple-inventory/purchases", {
               product_id: productId,
-              quantity: Number(document.getElementById("rimsPurQty").value || 0),
-              purchase_price: Number(document.getElementById("rimsPurPrice").value || 0),
-              date: document.getElementById("rimsPurDate").value || undefined,
+              quantity: Number(document.getElementById("simpleInvPurQty").value || 0),
+              purchase_price: Number(document.getElementById("simpleInvPurPrice").value || 0),
+              date: document.getElementById("simpleInvPurDate").value || undefined,
             });
             showToast("تم تسجيل الشراء ✔️", "#10b981");
             purchaseOverlay.style.display = "none";
@@ -862,28 +862,28 @@
         });
 
         // ---------- نافذة البيع ----------
-        var saleOverlay = document.getElementById("rimsSaleModalOverlay");
-        document.getElementById("rimsAddSaleBtn")?.addEventListener("click", function () {
-          document.getElementById("rimsSaleQty").value = 1;
-          document.getElementById("rimsSalePrice").value = 0;
-          document.getElementById("rimsSaleDate").value = todayStr();
-          document.getElementById("rimsSaleModalResult").style.display = "none";
+        var saleOverlay = document.getElementById("simpleInvSaleModalOverlay");
+        document.getElementById("simpleInvAddSaleBtn")?.addEventListener("click", function () {
+          document.getElementById("simpleInvSaleQty").value = 1;
+          document.getElementById("simpleInvSalePrice").value = 0;
+          document.getElementById("simpleInvSaleDate").value = todayStr();
+          document.getElementById("simpleInvSaleModalResult").style.display = "none";
           refreshProductSelects();
           saleOverlay.style.display = "flex";
         });
-        document.getElementById("rimsSaleModalClose")?.addEventListener("click", function () { saleOverlay.style.display = "none"; });
-        document.getElementById("rimsSaleModalCancel")?.addEventListener("click", function () { saleOverlay.style.display = "none"; });
+        document.getElementById("simpleInvSaleModalClose")?.addEventListener("click", function () { saleOverlay.style.display = "none"; });
+        document.getElementById("simpleInvSaleModalCancel")?.addEventListener("click", function () { saleOverlay.style.display = "none"; });
         saleOverlay?.addEventListener("click", function (e) { if (e.target === saleOverlay) saleOverlay.style.display = "none"; });
-        document.getElementById("rimsSaleModalSubmit")?.addEventListener("click", async function () {
-          var resultEl = document.getElementById("rimsSaleModalResult");
-          var productId = document.getElementById("rimsSaleProduct").value;
+        document.getElementById("simpleInvSaleModalSubmit")?.addEventListener("click", async function () {
+          var resultEl = document.getElementById("simpleInvSaleModalResult");
+          var productId = document.getElementById("simpleInvSaleProduct").value;
           if (!productId) { showToast("الرجاء اختيار الصنف", "#ef4444"); return; }
           try {
-            var r = await apiPostJson("/api/rims/sales", {
+            var r = await apiPostJson("/api/simple-inventory/sales", {
               product_id: productId,
-              quantity: Number(document.getElementById("rimsSaleQty").value || 0),
-              sale_price: Number(document.getElementById("rimsSalePrice").value || 0),
-              date: document.getElementById("rimsSaleDate").value || undefined,
+              quantity: Number(document.getElementById("simpleInvSaleQty").value || 0),
+              sale_price: Number(document.getElementById("simpleInvSalePrice").value || 0),
+              date: document.getElementById("simpleInvSaleDate").value || undefined,
             });
             showToast("تم تسجيل البيع ✔️ (الربح: " + fmtMoney(r.profit) + ")", "#10b981");
             saleOverlay.style.display = "none";
@@ -895,14 +895,14 @@
         });
 
         // ---------- نافذة حركة المخزون ----------
-        var movementsOverlay = document.getElementById("rimsMovementsModalOverlay");
+        var movementsOverlay = document.getElementById("simpleInvMovementsModalOverlay");
         async function openMovementsModal(p) {
-          document.getElementById("rimsMovementsTitle").textContent = "حركة المخزون — " + p.name;
-          var host = document.getElementById("rimsMovementsHost");
+          document.getElementById("simpleInvMovementsTitle").textContent = "حركة المخزون — " + p.name;
+          var host = document.getElementById("simpleInvMovementsHost");
           host.innerHTML = '<tr><td colspan="5" class="p-3 text-center">جارٍ التحميل...</td></tr>';
           movementsOverlay.style.display = "flex";
           try {
-            var data = await apiGet("/api/rims/products/" + p.id + "/movements");
+            var data = await apiGet("/api/simple-inventory/products/" + p.id + "/movements");
             var items = data.items || [];
             if (!items.length) {
               host.innerHTML = '<tr><td colspan="5" class="p-3 text-center" style="color:var(--text-muted);">لا توجد حركات بعد.</td></tr>';
@@ -922,13 +922,13 @@
             host.innerHTML = '<tr><td colspan="5" class="p-3" style="color:#dc2626;">' + (e.message || "تعذر تحميل الحركات") + "</td></tr>";
           }
         }
-        document.getElementById("rimsMovementsModalClose")?.addEventListener("click", function () { movementsOverlay.style.display = "none"; });
-        document.getElementById("rimsMovementsCloseBtn")?.addEventListener("click", function () { movementsOverlay.style.display = "none"; });
+        document.getElementById("simpleInvMovementsModalClose")?.addEventListener("click", function () { movementsOverlay.style.display = "none"; });
+        document.getElementById("simpleInvMovementsCloseBtn")?.addEventListener("click", function () { movementsOverlay.style.display = "none"; });
         movementsOverlay?.addEventListener("click", function (e) { if (e.target === movementsOverlay) movementsOverlay.style.display = "none"; });
 
         // ---------- البحث ----------
         var searchTimer = null;
-        document.getElementById("rimsSearchInp")?.addEventListener("input", function (e) {
+        document.getElementById("simpleInvSearchInp")?.addEventListener("input", function (e) {
           clearTimeout(searchTimer);
           var val = e.target.value;
           searchTimer = setTimeout(function () { loadProducts(val.trim()); }, 300);
