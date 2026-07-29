@@ -7,12 +7,12 @@ from typing import Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import func
 
 from ..auth_core import log_event, require_csrf, require_user, user_can_access_page_key
 from ..db import SessionLocal
-from ..models import SimpleProduct, SimplePurchase, SimpleSale
+from ..models import CompanyProfile, SimpleProduct, SimplePurchase, SimpleSale
 
 router = APIRouter(prefix="/api/simple-inventory", tags=["simple-inventory"])
 
@@ -169,6 +169,7 @@ def product_movements(product_id: str, request: Request):
         for x in sales:
             items.append(
                 {
+                    "id": x.id,
                     "type": "sale",
                     "quantity": x.quantity,
                     "price": x.sale_price,
@@ -292,7 +293,7 @@ async def create_sale(request: Request):
             user.id,
             {"product_id": product_id, "quantity": quantity, "sale_price": sale_price, "profit": profit},
         )
-        return {"ok": True, "product": _product_out(p), "profit": profit}
+        return {"ok": True, "product": _product_out(p), "profit": profit, "sale_id": sale.id}
     finally:
         db.close()
 
@@ -650,5 +651,190 @@ def export_inventory_report(request: Request):
             "تقرير_المخزون.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+    finally:
+        db.close()
+
+
+def _build_zatca_qr_base64(seller_name, vat_number, timestamp_iso, total, vat_total):
+    def _tlv(tag, value):
+        value_bytes = (value or "").encode("utf-8")
+        return bytes([tag, len(value_bytes)]) + value_bytes
+
+    import base64 as _b64
+
+    payload = (
+        _tlv(1, seller_name)
+        + _tlv(2, vat_number)
+        + _tlv(3, timestamp_iso)
+        + _tlv(4, f"{total:.2f}")
+        + _tlv(5, f"{vat_total:.2f}")
+    )
+    return _b64.b64encode(payload).decode("ascii")
+
+
+@router.get("/sales/{sale_id}/invoice", response_class=HTMLResponse)
+def sale_invoice(sale_id: str, request: Request):
+    import base64
+    import html as _html
+
+    db = SessionLocal()
+    try:
+        _require_simple_inventory_access(db, request)
+        sale = db.query(SimpleSale).filter(SimpleSale.id == sale_id).first()
+        if not sale:
+            raise HTTPException(404, "الفاتورة غير موجودة")
+        product = db.query(SimpleProduct).filter(SimpleProduct.id == sale.product_id).first()
+        company = db.query(CompanyProfile).filter(CompanyProfile.id == "default").first()
+
+        vat_percentage = float(company.vat_percentage) if company and company.vat_percentage is not None else 15.0
+        subtotal = float(sale.total or 0)
+        tax_amount = subtotal * (vat_percentage / 100.0)
+        final_total = subtotal + tax_amount
+
+        created_at = sale.created_at or dt.datetime.utcnow()
+        invoice_no = f"INV-{created_at.strftime('%Y%m%d')}-{sale.id[:6].upper()}"
+        invoice_date = created_at.strftime("%Y-%m-%d")
+        invoice_time = created_at.strftime("%H:%M")
+
+        company_name = (company.company_name if company else None) or "اسم الشركة"
+        tax_number = (company.tax_number if company else None) or ""
+        logo_url = (company.logo_url if company else None) or ""
+        commercial_register = (company.commercial_register if company else None) or ""
+        address_parts = [p for p in [
+            (company.address if company else None),
+            (company.city if company else None),
+            (company.country if company else None),
+        ] if p]
+        address_line = "، ".join(address_parts)
+        phone = (company.phone if company else None) or ""
+        email = (company.email if company else None) or ""
+        currency = (company.currency if company else None) or "SAR"
+
+        qr_html = ""
+        if tax_number:
+            qr_b64_payload = _build_zatca_qr_base64(
+                company_name, tax_number, created_at.isoformat(), final_total, tax_amount
+            )
+            import qrcode
+
+            qr_img = qrcode.make(qr_b64_payload)
+            qr_buf = io.BytesIO()
+            qr_img.save(qr_buf, format="PNG")
+            qr_data_uri = "data:image/png;base64," + base64.b64encode(qr_buf.getvalue()).decode("ascii")
+            qr_html = f'<div class="inv-qr"><img src="{qr_data_uri}" alt="QR" /></div>'
+
+        logo_html = f'<img src="{_html.escape(logo_url)}" class="inv-logo" alt="شعار الشركة" />' if logo_url else ""
+        cr_html = f'<div>س.ت: {_html.escape(commercial_register)}</div>' if commercial_register else ""
+        tax_html = f'<div>الرقم الضريبي: {_html.escape(tax_number)}</div>' if tax_number else ""
+        address_html = f'<div>{_html.escape(address_line)}</div>' if address_line else ""
+        phone_html = f'<div dir="ltr">{_html.escape(phone)}</div>' if phone else ""
+        email_html = f'<div dir="ltr">{_html.escape(email)}</div>' if email else ""
+
+        product_name = _html.escape(product.name) if product else "صنف محذوف"
+        customer_name = _html.escape(sale.customer_name or "نقدي")
+
+        html_out = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<title>فاتورة {_html.escape(invoice_no)}</title>
+<style>
+  @page {{ size: A4; margin: 14mm; }}
+  * {{ box-sizing: border-box; }}
+  body {{
+    font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+    background: #f4f5f7; color: #1a1a2e; margin: 0; padding: 24px;
+  }}
+  .inv-sheet {{
+    max-width: 800px; margin: 0 auto; background: #fff; border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.08); padding: 32px 36px; position: relative;
+  }}
+  .inv-toolbar {{
+    max-width: 800px; margin: 0 auto 14px; display: flex; gap: 10px; justify-content: flex-end;
+  }}
+  .inv-toolbar button {{
+    padding: 10px 18px; border-radius: 10px; border: 1px solid #d4af37; background: #0f1420;
+    color: #d4af37; font-weight: 700; cursor: pointer; font-size: 0.85rem;
+  }}
+  .inv-toolbar button:hover {{ background: #d4af37; color: #0f1420; }}
+  .inv-head {{ display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f1420; padding-bottom: 16px; margin-bottom: 16px; gap: 16px; flex-wrap: wrap; }}
+  .inv-logo {{ max-width: 110px; max-height: 90px; object-fit: contain; }}
+  .inv-company-info {{ font-size: 0.82rem; color: #444; line-height: 1.6; }}
+  .inv-company-info strong {{ font-size: 1.15rem; color: #0f1420; display: block; margin-bottom: 4px; }}
+  .inv-meta {{ text-align: start; font-size: 0.85rem; color: #444; line-height: 1.7; }}
+  .inv-meta b {{ color: #0f1420; }}
+  .inv-title {{ font-size: 1.4rem; font-weight: 800; color: #0f1420; margin-bottom: 4px; }}
+  .inv-customer {{ margin: 18px 0; font-size: 0.9rem; }}
+  table.inv-table {{ width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 0.88rem; }}
+  table.inv-table th {{ background: #0f1420; color: #d4af37; padding: 10px 8px; text-align: center; }}
+  table.inv-table td {{ padding: 10px 8px; text-align: center; border-bottom: 1px solid #eee; }}
+  .inv-totals {{ margin-inline-start: auto; width: 280px; font-size: 0.9rem; }}
+  .inv-totals div {{ display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #eee; }}
+  .inv-totals .inv-final {{ font-weight: 800; font-size: 1.05rem; color: #0f1420; border-bottom: none; border-top: 2px solid #0f1420; padding-top: 10px; margin-top: 4px; }}
+  .inv-footer {{ text-align: center; margin-top: 28px; color: #666; font-size: 0.85rem; border-top: 1px dashed #ccc; padding-top: 14px; }}
+  .inv-qr {{ text-align: center; margin-top: 14px; }}
+  .inv-qr img {{ width: 110px; height: 110px; }}
+  @media print {{
+    body {{ background: #fff; padding: 0; }}
+    .inv-toolbar {{ display: none; }}
+    .inv-sheet {{ box-shadow: none; border-radius: 0; padding: 0; }}
+  }}
+</style>
+</head>
+<body>
+  <div class="inv-toolbar">
+    <button onclick="window.print()">🖨️ طباعة مباشرة</button>
+    <button onclick="window.print()">💾 حفظ PDF</button>
+    <button onclick="var b=this; b.textContent='قريبًا 🙂';">📧 إرسال عبر البريد الإلكتروني</button>
+  </div>
+
+  <div class="inv-sheet">
+    <div class="inv-head">
+      <div style="display:flex;gap:14px;align-items:flex-start;">
+        {logo_html}
+        <div class="inv-company-info">
+          <strong>{_html.escape(company_name)}</strong>
+          {cr_html}
+          {tax_html}
+          {address_html}
+          {phone_html}
+          {email_html}
+        </div>
+      </div>
+      <div class="inv-meta">
+        <div class="inv-title">فاتورة بيع</div>
+        <div><b>رقم الفاتورة:</b> {_html.escape(invoice_no)}</div>
+        <div><b>التاريخ:</b> {invoice_date}</div>
+        <div><b>الوقت:</b> {invoice_time}</div>
+      </div>
+    </div>
+
+    <div class="inv-customer"><b>العميل:</b> {customer_name}</div>
+
+    <table class="inv-table">
+      <thead><tr><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>{product_name}</td>
+          <td>{sale.quantity}</td>
+          <td>{sale.sale_price:,.2f} {_html.escape(currency)}</td>
+          <td>{subtotal:,.2f} {_html.escape(currency)}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="inv-totals">
+      <div><span>الإجمالي قبل الضريبة</span><span>{subtotal:,.2f} {_html.escape(currency)}</span></div>
+      <div><span>الضريبة ({vat_percentage:g}%)</span><span>{tax_amount:,.2f} {_html.escape(currency)}</span></div>
+      <div class="inv-final"><span>الإجمالي النهائي</span><span>{final_total:,.2f} {_html.escape(currency)}</span></div>
+    </div>
+
+    {qr_html}
+
+    <div class="inv-footer">شكراً لتعاملكم معنا.</div>
+  </div>
+</body>
+</html>"""
+        return HTMLResponse(content=html_out)
     finally:
         db.close()

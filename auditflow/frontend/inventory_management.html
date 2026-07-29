@@ -605,7 +605,7 @@
             <div class="mt-2 overflow-auto rounded-2xl" style="border:1px solid var(--gold-dim);border-radius:16px;max-height:50vh;">
               <table class="op-admin-table w-full text-right text-sm">
                 <thead>
-                  <tr><th class="p-2">النوع</th><th class="p-2">الكمية</th><th class="p-2">السعر</th><th class="p-2">الإجمالي</th><th class="p-2">التاريخ</th></tr>
+                  <tr><th class="p-2">النوع</th><th class="p-2">الكمية</th><th class="p-2">السعر</th><th class="p-2">الإجمالي</th><th class="p-2">التاريخ</th><th class="p-2">الإجراء</th></tr>
                 </thead>
                 <tbody id="simpleInvMovementsHost"></tbody>
               </table>
@@ -1043,7 +1043,10 @@
               date: document.getElementById("simpleInvSaleDate").value || undefined,
             });
             showToast("تم تسجيل البيع ✔️ (الربح: " + fmtMoney(r.profit) + ")", "#10b981");
-            saleOverlay.style.display = "none";
+            resultEl.style.display = "block";
+            resultEl.innerHTML =
+              'تم تسجيل البيع بنجاح (الربح: ' + fmtMoney(r.profit) + ') &nbsp; ' +
+              '<button type="button" class="op-btn-chip op-btn-chip--gold" style="margin-inline-start:8px;" onclick="window.open(\'/api/simple-inventory/sales/' + r.sale_id + '/invoice\', \'_blank\')">🖨️ طباعة فاتورة</button>';
             await Promise.all([loadProducts(""), loadDashboard()]);
           } catch (e) {
             resultEl.style.display = "block";
@@ -1068,15 +1071,18 @@
             host.innerHTML = items
               .map(function (m) {
                 var typeLabel = m.type === "purchase" ? "📥 شراء" : "🧾 بيع";
+                var actionCell = m.type === "sale" && m.id
+                  ? '<button type="button" class="op-btn-chip" style="padding:4px 10px;font-size:0.72rem;" onclick="window.open(\'/api/simple-inventory/sales/' + m.id + '/invoice\', \'_blank\')">🖨️ طباعة</button>'
+                  : "";
                 return (
                   "<tr><td class=\"p-2\">" + typeLabel + "</td><td class=\"p-2\">" + m.quantity + "</td><td class=\"p-2\">" +
                   fmtMoney(m.price) + "</td><td class=\"p-2\">" + fmtMoney(m.total) + "</td><td class=\"p-2\" dir=\"ltr\" style=\"font-size:0.72rem;\">" +
-                  (m.created_at || "") + "</td></tr>"
+                  (m.created_at || "") + "</td><td class=\"p-2\">" + actionCell + "</td></tr>"
                 );
               })
               .join("");
           } catch (e) {
-            host.innerHTML = '<tr><td colspan="5" class="p-3" style="color:#dc2626;">' + (e.message || "تعذر تحميل الحركات") + "</td></tr>";
+            host.innerHTML = '<tr><td colspan="6" class="p-3" style="color:#dc2626;">' + (e.message || "تعذر تحميل الحركات") + "</td></tr>";
           }
         }
         document.getElementById("simpleInvMovementsModalClose")?.addEventListener("click", function () { movementsOverlay.style.display = "none"; });
