@@ -511,6 +511,30 @@ class SimpleSale(Base):
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False, index=True)
 
 
+# ============================================================ بيانات الشركة الأساسية (للفواتير والتقارير)
+class CompanyProfile(Base):
+    """سجل واحد ثابت (id='default') يحمل بيانات الشركة الأساسية المستخدمة في الفواتير والتقارير."""
+
+    __tablename__ = "company_profile"
+
+    id = Column(String, primary_key=True, default="default")
+    company_name = Column(String, nullable=True)
+    trade_name = Column(String, nullable=True)
+    logo_url = Column(String, nullable=True)
+    commercial_register = Column(String, nullable=True)
+    tax_number = Column(String, nullable=True)
+    address = Column(String, nullable=True)
+    city = Column(String, nullable=True)
+    country = Column(String, nullable=True)
+    postal_code = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    website = Column(String, nullable=True)
+    currency = Column(String, nullable=False, default="SAR")
+    vat_percentage = Column(Float, nullable=False, default=15.0)
+    updated_at = Column(DateTime, default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow, nullable=False)
+
+
 def init_db() -> None:
     from .db import engine
     from .migrate import run_migrations

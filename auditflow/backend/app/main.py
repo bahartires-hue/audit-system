@@ -28,6 +28,7 @@ from .routers.toolbox_api import router as toolbox_router
 from .routes.importer import router as importer_router
 from .routers.smartpos_v2_api import router as smartpos_v2_router
 from .routers.trade_api import router as trade_router
+from .routers.company_profile_api import router as company_profile_router
 from .routers.simple_inventory_api import router as simple_inventory_router
 from .services.analyzer import analyze as analyze_pairs
 from .services.analyzer import (
@@ -137,6 +138,7 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 app.include_router(auth_router)
 app.include_router(trade_router)
 app.include_router(simple_inventory_router)
+app.include_router(company_profile_router)
 app.include_router(cashierko_router)
 app.include_router(documents_router)
 app.include_router(toolbox_router)
