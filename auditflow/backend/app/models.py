@@ -471,6 +471,46 @@ class ImporterSnapshot(Base):
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False, index=True)
 
 
+
+# ============================================================ مخزون الجنوط المستعملة (نظام بسيط ومستقل)
+class RimProduct(Base):
+    """صنف جنط مستعمل. نظام بسيط ومستقل تمامًا عن نظام Item/Purchase/Sale الأصلي وعن محرك المطابقة."""
+
+    __tablename__ = "rim_products"
+
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False, index=True)
+    purchase_price = Column(Float, nullable=False, default=0.0)
+    sale_price = Column(Float, nullable=False, default=0.0)
+    quantity = Column(Integer, nullable=False, default=0)
+    notes = Column(String, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class RimPurchase(Base):
+    __tablename__ = "rim_purchases"
+
+    id = Column(String, primary_key=True)
+    product_id = Column(String, ForeignKey("rim_products.id"), nullable=False, index=True)
+    quantity = Column(Integer, nullable=False)
+    purchase_price = Column(Float, nullable=False)
+    total = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False, index=True)
+
+
+class RimSale(Base):
+    __tablename__ = "rim_sales"
+
+    id = Column(String, primary_key=True)
+    product_id = Column(String, ForeignKey("rim_products.id"), nullable=False, index=True)
+    quantity = Column(Integer, nullable=False)
+    sale_price = Column(Float, nullable=False)
+    total = Column(Float, nullable=False)
+    profit = Column(Float, nullable=False, default=0.0)
+    customer_name = Column(String, nullable=False, default="نقدي")
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False, index=True)
+
+
 def init_db() -> None:
     from .db import engine
     from .migrate import run_migrations

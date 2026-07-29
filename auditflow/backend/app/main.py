@@ -28,6 +28,7 @@ from .routers.toolbox_api import router as toolbox_router
 from .routes.importer import router as importer_router
 from .routers.smartpos_v2_api import router as smartpos_v2_router
 from .routers.trade_api import router as trade_router
+from .routers.rims_api import router as rims_router
 from .services.analyzer import analyze as analyze_pairs
 from .services.analyzer import (
     analyze_companies,
@@ -135,6 +136,7 @@ app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 app.include_router(auth_router)
 app.include_router(trade_router)
+app.include_router(rims_router)
 app.include_router(cashierko_router)
 app.include_router(documents_router)
 app.include_router(toolbox_router)
@@ -238,6 +240,11 @@ def ui_finance(request: Request):
 @app.get("/inventory-management", response_class=HTMLResponse)
 def ui_inventory_management(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "inventory_management.html", "op-inventory")
+
+
+@app.get("/rims-inventory", response_class=HTMLResponse)
+def ui_rims_inventory(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "rims_inventory.html", "op-rims")
 
 
 @app.get("/suppliers", response_class=HTMLResponse)
