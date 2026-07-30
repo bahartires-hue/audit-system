@@ -276,7 +276,7 @@ def ui_brand_scan_redirect():
 
 @app.get("/trade", response_class=HTMLResponse)
 def ui_trade_dashboard(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_sales.html", "op-inventory")
+    return _require_login_page(request, FRONTEND_DIR / "trade_dashboard.html", "op-inventory")
 
 
 @app.get("/trade/items", response_class=HTMLResponse)
@@ -296,7 +296,7 @@ def ui_trade_sales(request: Request):
 
 @app.get("/trade/pos", response_class=HTMLResponse)
 def ui_trade_pos(request: Request):
-    return RedirectResponse(url="/trade/sales", status_code=302)
+    return _require_login_page(request, FRONTEND_DIR / "trade_pos.html", "op-inventory")
 
 
 @app.get("/trade/inventory", response_class=HTMLResponse)
