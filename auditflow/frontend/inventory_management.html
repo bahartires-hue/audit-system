@@ -438,47 +438,100 @@
 
       <main class="op-main">
         <div class="op-content-panel">
-          <div class="op-hero" style="margin-bottom:1.25rem;">
-            <h1>🏢 <b>بيانات الشركة الأساسية</b></h1>
-            <p>هذه البيانات تُستخدم تلقائيًا في فواتير البيع، التقارير، وصفحة الطباعة.</p>
+          <div class="op-hero" style="margin-bottom:1rem;">
+            <h1>🧾 <b>نقطة البيع</b></h1>
+            <p>أنشئ فاتورة بيع كاملة خلال ثوانٍ — البحث عن الصنف، الحفظ، والطباعة من مكان واحد.</p>
           </div>
 
-          <div class="op-shell-card" style="text-align:start;">
-            <div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start;">
-              <div style="flex:0 0 160px;text-align:center;">
-                <div id="companyLogoPreviewWrap" style="width:140px;height:140px;border-radius:16px;border:2px dashed var(--gold-dim);display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--bg-2);margin:0 auto 0.6rem;">
-                  <img id="companyLogoPreview" src="" style="display:none;max-width:100%;max-height:100%;object-fit:contain;" alt="شعار الشركة" />
-                  <span id="companyLogoPlaceholder" style="font-size:2rem;">🏢</span>
+          <div class="pos-main-grid" style="display:grid;grid-template-columns:1fr 340px;gap:1rem;align-items:start;">
+            <!-- ===================== يمين: الفاتورة ===================== -->
+            <div class="op-shell-card" style="text-align:start;padding:1.5rem;">
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.8rem;margin-bottom:1rem;">
+                <div class="op-tool-field" style="margin-bottom:0;"><label>رقم الفاتورة</label><input type="text" id="posInvoiceNo" readonly /></div>
+                <div class="op-tool-field" style="margin-bottom:0;"><label>التاريخ والوقت</label><input type="text" id="posDateTime" readonly /></div>
+                <div class="op-tool-field" style="margin-bottom:0;"><label>طريقة الدفع</label>
+                  <select id="posPaymentType">
+                    <option value="cash">نقدًا</option>
+                    <option value="card">شبكة</option>
+                    <option value="transfer">تحويل</option>
+                    <option value="credit">آجل</option>
+                  </select>
                 </div>
-                <button type="button" class="op-btn-chip" id="companyLogoUploadBtn">📷 رفع الشعار</button>
-                <input type="file" id="companyLogoInput" accept=".png,.jpg,.jpeg,.svg" style="display:none;" />
-                <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.4rem;">PNG / JPG / SVG</div>
+                <div class="op-tool-field" style="margin-bottom:0;"><label>العميل (اختياري)</label><input type="text" id="posCustomerName" placeholder="عميل نقدي" /></div>
               </div>
 
-              <div style="flex:1;min-width:280px;display:grid;grid-template-columns:repeat(2,1fr);gap:0.9rem;">
-                <div class="op-tool-field"><label>اسم الشركة</label><input type="text" id="cpCompanyName" /></div>
-                <div class="op-tool-field"><label>الاسم التجاري (اختياري)</label><input type="text" id="cpTradeName" /></div>
-                <div class="op-tool-field"><label>السجل التجاري</label><input type="text" id="cpCommercialRegister" /></div>
-                <div class="op-tool-field"><label>الرقم الضريبي</label><input type="text" id="cpTaxNumber" /></div>
-                <div class="op-tool-field" style="grid-column:1 / -1;"><label>عنوان الشركة</label><input type="text" id="cpAddress" /></div>
-                <div class="op-tool-field"><label>المدينة</label><input type="text" id="cpCity" /></div>
-                <div class="op-tool-field"><label>الدولة</label><input type="text" id="cpCountry" /></div>
-                <div class="op-tool-field"><label>الرمز البريدي</label><input type="text" id="cpPostalCode" /></div>
-                <div class="op-tool-field"><label>رقم الجوال</label><input type="text" id="cpPhone" dir="ltr" /></div>
-                <div class="op-tool-field"><label>البريد الإلكتروني</label><input type="email" id="cpEmail" dir="ltr" /></div>
-                <div class="op-tool-field"><label>الموقع الإلكتروني</label><input type="text" id="cpWebsite" dir="ltr" /></div>
-                <div class="op-tool-field"><label>العملة</label><input type="text" id="cpCurrency" placeholder="SAR" /></div>
-                <div class="op-tool-field"><label>نسبة ضريبة القيمة المضافة (%)</label><input type="number" id="cpVat" value="15" step="0.1" /></div>
+              <div style="position:relative;margin-bottom:1rem;">
+                <div class="op-tool-field" style="margin-bottom:0;">
+                  <label>🔍 ابحث عن صنف بالاسم أو الكود أو الباركود</label>
+                  <input type="text" id="posItemSearch" placeholder="اكتب اسم الصنف أو الكود..." autocomplete="off" />
+                </div>
+                <div id="posItemResults" style="display:none;position:absolute;z-index:50;top:100%;right:0;left:0;margin-top:4px;max-height:260px;overflow-y:auto;background:var(--bg-1);border:1px solid var(--gold-dim);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,0.18);"></div>
+              </div>
+
+              <div style="overflow-x:auto;">
+                <table class="op-admin-table w-full" style="width:100%;border-collapse:collapse;">
+                  <thead>
+                    <tr>
+                      <th style="padding:0.5rem;">الصنف</th>
+                      <th style="padding:0.5rem;">الكمية</th>
+                      <th style="padding:0.5rem;">سعر البيع</th>
+                      <th style="padding:0.5rem;">الخصم</th>
+                      <th style="padding:0.5rem;">الضريبة</th>
+                      <th style="padding:0.5rem;">الإجمالي</th>
+                      <th style="padding:0.5rem;"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="posCartBody"></tbody>
+                </table>
+                <div id="posCartEmpty" style="text-align:center;color:var(--text-muted);font-weight:700;padding:1.5rem 0;">لم تتم إضافة أي صنف بعد — ابحث عن صنف أعلاه لإضافته للفاتورة.</div>
               </div>
             </div>
 
-            <div id="companyProfileResult" style="display:none;margin-top:1rem;"></div>
+            <!-- ===================== يسار: الملخص والأزرار ===================== -->
+            <div class="op-shell-card" style="text-align:start;padding:1.25rem;position:sticky;top:1rem;">
+              <div style="font-weight:800;color:var(--text-heading);margin-bottom:0.75rem;font-size:0.95rem;">ملخص الفاتورة</div>
+              <div style="display:flex;justify-content:space-between;padding:0.35rem 0;color:var(--text-body);font-weight:700;font-size:0.85rem;">
+                <span>الإجمالي قبل الخصم</span><span id="posSubTotal">0.00</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:0.35rem 0;color:var(--text-body);font-weight:700;font-size:0.85rem;">
+                <span>الخصم</span><span id="posDiscTotal">0.00</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;padding:0.35rem 0;color:var(--text-body);font-weight:700;font-size:0.85rem;">
+                <span>الضريبة</span><span id="posTaxTotal">0.00</span>
+              </div>
+              <div style="border-top:1px dashed var(--gold-dim);margin:0.6rem 0;"></div>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;padding:0.35rem 0;">
+                <span style="font-weight:800;color:var(--text-heading);">الإجمالي النهائي</span>
+                <span id="posGrandTotal" style="font-weight:800;color:var(--gold-soft);font-size:2rem;line-height:1;">0.00</span>
+              </div>
 
-            <div style="margin-top:1.25rem;">
-              <button type="button" class="op-btn-chip op-btn-chip--gold" id="companySaveBtn">💾 حفظ البيانات</button>
+              <div style="display:grid;gap:0.6rem;margin-top:1.25rem;">
+                <button type="button" class="op-btn-chip op-btn-chip--gold" id="posSaveBtn" style="padding:0.85rem;font-size:0.95rem;">💾 حفظ الفاتورة</button>
+                <button type="button" class="op-btn-chip" id="posPrintBtn" style="padding:0.75rem;">🖨️ طباعة</button>
+                <button type="button" class="op-btn-chip" id="posNewBtn" style="padding:0.75rem;">🆕 فاتورة جديدة</button>
+                <button type="button" class="op-btn-chip" id="posSuspendBtn" style="padding:0.75rem;">⏸️ تعليق الفاتورة</button>
+                <button type="button" class="op-btn-chip" id="posResumeBtn" style="padding:0.75rem;">↩️ استرجاع فاتورة</button>
+                <button type="button" class="op-btn-chip op-btn-chip--danger" id="posDeleteBtn" style="padding:0.75rem;">🗑️ حذف الفاتورة</button>
+                <div style="border-top:1px solid var(--gold-dim);margin:0.4rem 0;"></div>
+                <button type="button" class="op-btn-chip" id="posManageItemsBtn" style="padding:0.75rem;">📦 إدارة الأصناف</button>
+              </div>
             </div>
           </div>
         </div>
+
+        <div class="op-tool-modal-overlay" id="posResumeModal" style="display:none;">
+          <div class="op-tool-modal">
+            <div class="op-tool-modal-head">
+              <div>
+                <h3>الفواتير المعلقة</h3>
+                <p>اختر فاتورة معلقة لاسترجاعها ومتابعة العمل عليها</p>
+              </div>
+              <button type="button" id="posResumeModalClose">✕</button>
+            </div>
+            <div id="posResumeList"></div>
+          </div>
+        </div>
+
       </main>
     </div>
 
@@ -527,93 +580,429 @@
   
     <script>
       (function () {
-        loadCompanyProfile();
+        var cart = [];
+        var lastSavedSaleId = null;
+        var companyProfile = {};
+        var posSettings = { shop_name: "", currency: "SAR", print_size: "A4", thermal_header: "" };
+        var searchResults = [];
 
-        // ------------------------- بيانات الشركة الأساسية -------------------------
-        var cpFields = {
-          company_name: document.getElementById("cpCompanyName"),
-          trade_name: document.getElementById("cpTradeName"),
-          commercial_register: document.getElementById("cpCommercialRegister"),
-          tax_number: document.getElementById("cpTaxNumber"),
-          address: document.getElementById("cpAddress"),
-          city: document.getElementById("cpCity"),
-          country: document.getElementById("cpCountry"),
-          postal_code: document.getElementById("cpPostalCode"),
-          phone: document.getElementById("cpPhone"),
-          email: document.getElementById("cpEmail"),
-          website: document.getElementById("cpWebsite"),
-          currency: document.getElementById("cpCurrency"),
-        };
-        var cpVatInput = document.getElementById("cpVat");
-        var logoPreview = document.getElementById("companyLogoPreview");
-        var logoPlaceholder = document.getElementById("companyLogoPlaceholder");
-        var logoUploadBtn = document.getElementById("companyLogoUploadBtn");
-        var logoInput = document.getElementById("companyLogoInput");
-        var companySaveBtn = document.getElementById("companySaveBtn");
-        var companyProfileResult = document.getElementById("companyProfileResult");
+        function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]; }); }
+        function round2(v) { return Math.round((Number(v) || 0) * 100) / 100; }
+        function money(v) { return round2(v).toFixed(2); }
 
-        function applyLogoUrl(url) {
-          if (!logoPreview || !logoPlaceholder) return;
-          if (url) {
-            logoPreview.src = url;
-            logoPreview.style.display = "block";
-            logoPlaceholder.style.display = "none";
-          } else {
-            logoPreview.style.display = "none";
-            logoPlaceholder.style.display = "block";
-          }
+        function genInvoiceNo() {
+          var d = new Date();
+          var stamp = d.getFullYear().toString() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0");
+          return "INV-" + stamp + "-" + Date.now().toString().slice(-5);
+        }
+
+        function refreshDateTime() {
+          var el = document.getElementById("posDateTime");
+          if (!el) return;
+          var d = new Date();
+          var datePart = d.toLocaleDateString("ar-SA");
+          var timePart = d.toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" });
+          el.value = datePart + " - " + timePart;
         }
 
         async function loadCompanyProfile() {
           try {
-            var data = await apiGet("/api/company-profile");
-            Object.keys(cpFields).forEach(function (key) {
-              if (cpFields[key]) cpFields[key].value = data[key] || "";
-            });
-            if (cpVatInput) cpVatInput.value = data.vat_percentage != null ? data.vat_percentage : 15;
-            applyLogoUrl(data.logo_url);
+            companyProfile = await apiGet("/api/company-profile");
           } catch (e) {
-            showToast(e.message || "تعذر تحميل بيانات الشركة", "#dc2626");
+            companyProfile = {};
           }
         }
 
-        if (logoUploadBtn) logoUploadBtn.addEventListener("click", function () { logoInput && logoInput.click(); });
-        if (logoInput) {
-          logoInput.addEventListener("change", async function () {
-            var f = logoInput.files && logoInput.files[0];
-            if (!f) return;
-            try {
-              var fd = new FormData();
-              fd.append("file", f);
-              var data = await apiPostForm("/api/company-profile/logo", fd);
-              applyLogoUrl(data.logo_url);
-              showToast("تم تحديث الشعار بنجاح", "#22c55e");
-            } catch (e) {
-              showToast(e.message || "تعذر رفع الشعار", "#dc2626");
-            }
+        async function loadPosSettings() {
+          try {
+            var d = await apiGet("/api/cashierko/settings");
+            posSettings = Object.assign({}, posSettings, d.settings || {});
+          } catch (e) {}
+        }
+
+        function lineTotal(row) {
+          var gross = Number(row.qty) * Number(row.sale_price);
+          var afterDiscount = gross - (Number(row.discount) || 0);
+          return afterDiscount + (Number(row.tax) || 0);
+        }
+
+        function defaultTaxForRow(item, qty, price) {
+          if (!item || !item.is_taxable) return 0;
+          var rate = Number(item.tax_rate) || 0;
+          if (rate > 1) rate = rate / 100;
+          return round2(qty * price * rate);
+        }
+
+        function renderItemResults(list) {
+          var host = document.getElementById("posItemResults");
+          if (!host) return;
+          searchResults = list || [];
+          if (!searchResults.length) {
+            host.style.display = "none";
+            host.innerHTML = "";
+            return;
+          }
+          host.innerHTML = searchResults.map(function (x, i) {
+            var oos = Number(x.quantity) <= 0 ? '<span class="simple-inv-oos-badge">نفذ المخزون</span>' : "";
+            return '<div data-pick="' + i + '" style="padding:0.6rem 0.85rem;cursor:pointer;border-bottom:1px solid var(--gold-dim);display:flex;justify-content:space-between;gap:0.5rem;align-items:center;">' +
+              '<div><div style="font-weight:800;color:var(--text-heading);font-size:0.85rem;">' + esc(x.name) + oos + '</div>' +
+              '<div style="font-size:0.72rem;color:var(--text-muted);">' + esc(x.code) + ' · متاح: ' + esc(x.quantity) + '</div></div>' +
+              '<div style="font-weight:800;color:var(--gold-soft);">' + money(x.default_sale_price) + '</div></div>';
+          }).join("");
+          host.style.display = "block";
+          host.querySelectorAll("[data-pick]").forEach(function (el) {
+            el.addEventListener("click", function () {
+              var idx = Number(el.getAttribute("data-pick"));
+              addItemToCart(searchResults[idx]);
+              var s = document.getElementById("posItemSearch");
+              s.value = "";
+              s.focus();
+              host.style.display = "none";
+            });
           });
         }
 
-        if (companySaveBtn) {
-          companySaveBtn.addEventListener("click", async function () {
-            var payload = {};
-            Object.keys(cpFields).forEach(function (key) {
-              if (cpFields[key]) payload[key] = cpFields[key].value.trim();
+        async function searchItems(q) {
+          try {
+            var d = await apiGet("/api/trade/items?q=" + encodeURIComponent(q || ""));
+            var items = (d.items || []).filter(function (x) { return x.is_active; }).slice(0, 8);
+            renderItemResults(items);
+          } catch (e) {
+            renderItemResults([]);
+          }
+        }
+
+        function addItemToCart(item) {
+          if (!item) return;
+          var existing = cart.find(function (r) { return r.item_id === item.id; });
+          if (existing) {
+            existing.qty = round2(Number(existing.qty) + 1);
+            existing.tax = defaultTaxForRow(item, existing.qty, existing.sale_price);
+          } else {
+            var qty = 1, price = Number(item.default_sale_price) || 0;
+            cart.push({
+              item_id: item.id,
+              code: item.code,
+              name: item.name,
+              available: Number(item.quantity) || 0,
+              qty: qty,
+              sale_price: price,
+              discount: 0,
+              tax: defaultTaxForRow(item, qty, price),
+              is_taxable: !!item.is_taxable,
+              tax_rate: Number(item.tax_rate) || 0,
             });
-            payload.vat_percentage = Number(cpVatInput ? cpVatInput.value : 15) || 0;
-            try {
-              await apiPatchJson("/api/company-profile", payload);
-              if (companyProfileResult) {
-                companyProfileResult.style.display = "block";
-                companyProfileResult.textContent = "تم تحديث بيانات الشركة بنجاح.";
+          }
+          renderCart();
+        }
+
+        function renderCart() {
+          var body = document.getElementById("posCartBody");
+          var empty = document.getElementById("posCartEmpty");
+          if (!body) return;
+          if (!cart.length) {
+            body.innerHTML = "";
+            if (empty) empty.style.display = "block";
+            renderSummary();
+            return;
+          }
+          if (empty) empty.style.display = "none";
+          body.innerHTML = cart.map(function (row, i) {
+            var over = Number(row.qty) > Number(row.available);
+            var overBadge = over ? '<div style="color:#dc2626;font-size:0.68rem;font-weight:800;">الكمية أكبر من المتاح (' + esc(row.available) + ')</div>' : "";
+            var inputStyle = "width:100%;min-width:60px;padding:5px 6px;border-radius:6px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);font-weight:700;text-align:center;font-size:0.8rem;";
+            return '<tr data-row="' + i + '">' +
+              '<td style="padding:0.5rem;"><div style="font-weight:800;color:var(--text-heading);font-size:0.85rem;">' + esc(row.name) + '</div><div style="font-size:0.7rem;color:var(--text-muted);">' + esc(row.code) + '</div>' + overBadge + '</td>' +
+              '<td style="padding:0.4rem;"><input type="number" step="0.01" min="0.01" value="' + esc(row.qty) + '" data-f="qty" style="' + inputStyle + '" /></td>' +
+              '<td style="padding:0.4rem;"><input type="number" step="0.01" min="0" value="' + esc(row.sale_price) + '" data-f="sale_price" style="' + inputStyle + '" /></td>' +
+              '<td style="padding:0.4rem;"><input type="number" step="0.01" min="0" value="' + esc(row.discount) + '" data-f="discount" style="' + inputStyle + '" /></td>' +
+              '<td style="padding:0.4rem;"><input type="number" step="0.01" min="0" value="' + esc(row.tax) + '" data-f="tax" style="' + inputStyle + '" /></td>' +
+              '<td style="padding:0.5rem;font-weight:800;color:var(--gold-soft);white-space:nowrap;">' + money(lineTotal(row)) + '</td>' +
+              '<td style="padding:0.4rem;"><button type="button" data-del="' + i + '" class="op-btn-chip op-btn-chip--danger" style="padding:4px 10px;">✕</button></td>' +
+              '</tr>';
+          }).join("");
+          body.querySelectorAll("input[data-f]").forEach(function (inp) {
+            inp.addEventListener("input", function () {
+              var tr = inp.closest("tr");
+              var idx = Number(tr.getAttribute("data-row"));
+              var field = inp.getAttribute("data-f");
+              cart[idx][field] = Number(inp.value) || 0;
+              renderCart();
+            });
+          });
+          body.querySelectorAll("[data-del]").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+              cart.splice(Number(btn.getAttribute("data-del")), 1);
+              renderCart();
+            });
+          });
+          renderSummary();
+        }
+
+        function renderSummary() {
+          var sub = cart.reduce(function (s, r) { return s + Number(r.qty) * Number(r.sale_price); }, 0);
+          var disc = cart.reduce(function (s, r) { return s + (Number(r.discount) || 0); }, 0);
+          var tax = cart.reduce(function (s, r) { return s + (Number(r.tax) || 0); }, 0);
+          var grand = Math.max(0, sub - disc + tax);
+          var set = function (id, v) { var el = document.getElementById(id); if (el) el.textContent = money(v); };
+          set("posSubTotal", sub);
+          set("posDiscTotal", disc);
+          set("posTaxTotal", tax);
+          var gEl = document.getElementById("posGrandTotal");
+          if (gEl) gEl.textContent = money(grand);
+        }
+
+        function resetInvoiceForm() {
+          cart = [];
+          lastSavedSaleId = null;
+          var noEl = document.getElementById("posInvoiceNo");
+          if (noEl) noEl.value = genInvoiceNo();
+          var custEl = document.getElementById("posCustomerName");
+          if (custEl) custEl.value = "";
+          var payEl = document.getElementById("posPaymentType");
+          if (payEl) payEl.value = "cash";
+          refreshDateTime();
+          renderCart();
+          var searchEl = document.getElementById("posItemSearch");
+          if (searchEl) searchEl.focus();
+        }
+
+        function buildSalePayload() {
+          var grand = Math.max(0, cart.reduce(function (s, r) { return s + Number(r.qty) * Number(r.sale_price) - (Number(r.discount) || 0) + (Number(r.tax) || 0); }, 0));
+          var paymentType = (document.getElementById("posPaymentType") || {}).value || "cash";
+          return {
+            invoice_no: document.getElementById("posInvoiceNo").value || genInvoiceNo(),
+            customer_name: (document.getElementById("posCustomerName").value || "").trim() || "عميل نقدي",
+            sale_date: new Date().toISOString().slice(0, 10),
+            payment_type: paymentType,
+            discount: 0,
+            paid_amount: paymentType === "credit" ? 0 : round2(grand),
+            seller_name: "",
+            branch_name: "",
+            lines: cart.map(function (r) {
+              var perUnitDiscount = Number(r.qty) > 0 ? (Number(r.discount) || 0) / Number(r.qty) : 0;
+              return {
+                item_id: r.item_id,
+                qty: Number(r.qty),
+                sale_price: round2(Math.max(0, Number(r.sale_price) - perUnitDiscount)),
+                tax_amount: round2(Number(r.tax) || 0),
+              };
+            }),
+          };
+        }
+
+        function buildQrPayload(details) {
+          var total = Number(details.total_amount || 0).toFixed(2);
+          var tax = (details.lines || []).reduce(function (s, x) { return s + Number(x.tax_amount || 0); }, 0).toFixed(2);
+          return "الشركة:" + (companyProfile.company_name || "") + "|فاتورة:" + details.invoice_no + "|التاريخ:" + details.sale_date + "|الإجمالي:" + total + "|الضريبة:" + tax;
+        }
+
+        function invoicePrintHtml(details) {
+          var lines = details.lines || [];
+          var logoHtml = companyProfile.logo_url ? '<img src="' + esc(companyProfile.logo_url) + '" style="max-width:110px;max-height:70px;object-fit:contain;" />' : "";
+          var rowsHtml = lines.map(function (x) {
+            return "<tr><td>" + esc(x.item_name) + "</td><td>" + esc(x.qty) + "</td><td>" + Number(x.sale_price).toFixed(2) + "</td><td>" + Number(x.tax_amount).toFixed(2) + "</td><td>" + Number(x.line_total).toFixed(2) + "</td></tr>";
+          }).join("");
+          var qrPayload = buildQrPayload(details);
+          var scriptOpen = "<" + "script src=\"https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js\"><" + "/script>";
+          var inlineScriptOpen = "<" + "script>";
+          var inlineScriptClose = "<" + "/script>";
+          var html = "<!doctype html><html lang=\"ar\" dir=\"rtl\"><head><meta charset=\"UTF-8\">" +
+            "<title>فاتورة " + esc(details.invoice_no) + "</title>" +
+            "<style>body{font-family:Arial,sans-serif;padding:18px;color:#111;} .invoice{max-width:820px;margin:0 auto;} " +
+            ".inv-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #b8863a;padding-bottom:12px;margin-bottom:12px;} " +
+            "table{width:100%;border-collapse:collapse;margin-top:10px;} th,td{border:1px solid #ccc;padding:6px 8px;text-align:right;font-size:13px;} " +
+            "th{background:#f6f1e4;} .totals{margin-top:12px;width:280px;margin-inline-start:auto;} .totals div{display:flex;justify-content:space-between;padding:3px 0;font-size:13px;} " +
+            ".grand{font-weight:800;font-size:1.3rem;border-top:2px solid #b8863a;margin-top:6px;padding-top:6px;} " +
+            ".footer{margin-top:20px;text-align:center;font-size:12px;color:#555;} #qrHost{margin-top:14px;text-align:center;}</style></head><body>" +
+            "<div class=\"invoice\">" +
+            "<div class=\"inv-head\">" +
+            "<div>" + logoHtml + "<h2 style=\"margin:6px 0;\">" + esc(companyProfile.company_name || "") + "</h2>" +
+            "<div style=\"font-size:12px;\">" + esc(companyProfile.address || "") + (companyProfile.city ? ("، " + esc(companyProfile.city)) : "") + "</div>" +
+            "<div style=\"font-size:12px;\">" + (companyProfile.commercial_register ? ("س.ت: " + esc(companyProfile.commercial_register) + " &nbsp; ") : "") + (companyProfile.tax_number ? ("ر.ض: " + esc(companyProfile.tax_number)) : "") + "</div>" +
+            "</div>" +
+            "<div style=\"text-align:left;font-size:13px;\">" +
+            "<div>رقم الفاتورة: <b>" + esc(details.invoice_no) + "</b></div>" +
+            "<div>التاريخ: <b>" + esc(details.sale_date) + "</b></div>" +
+            "<div>العميل: <b>" + esc(details.customer_name) + "</b></div>" +
+            "<div>طريقة الدفع: <b>" + esc(details.payment_type) + "</b></div>" +
+            "</div></div>" +
+            "<table><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الضريبة</th><th>الإجمالي</th></tr></thead><tbody>" + rowsHtml + "</tbody></table>" +
+            "<div class=\"totals\">" +
+            "<div><span>الإجمالي قبل الضريبة</span><span>" + (Number(details.total_amount || 0) - lines.reduce(function (s, x) { return s + Number(x.tax_amount || 0); }, 0)).toFixed(2) + "</span></div>" +
+            "<div><span>الضريبة</span><span>" + lines.reduce(function (s, x) { return s + Number(x.tax_amount || 0); }, 0).toFixed(2) + "</span></div>" +
+            "<div class=\"grand\"><span>الإجمالي النهائي</span><span>" + Number(details.total_amount || 0).toFixed(2) + " " + esc(posSettings.currency || "SAR") + "</span></div>" +
+            "</div>" +
+            "<div id=\"qrHost\"></div>" +
+            "<div class=\"footer\">" + esc(posSettings.thermal_header || "") + "</div>" +
+            "</div>" +
+            scriptOpen +
+            inlineScriptOpen + "try{new QRCode(document.getElementById('qrHost'),{text:" + JSON.stringify(qrPayload) + ",width:110,height:110});}catch(e){}window.onload=function(){setTimeout(function(){window.print();},300);};" + inlineScriptClose +
+            "</body></html>";
+          return html;
+        }
+
+        function openPrintInvoice(details) {
+          var w = window.open("", "_blank");
+          if (!w) { showToast("يرجى السماح بالنوافذ المنبثقة للطباعة", "#dc2626"); return; }
+          w.document.open();
+          w.document.write(invoicePrintHtml(details));
+          w.document.close();
+          w.focus();
+        }
+
+        async function saveInvoice() {
+          if (!cart.length) { showToast("أضف صنفًا واحدًا على الأقل قبل الحفظ", "#dc2626"); return; }
+          try {
+            var payload = buildSalePayload();
+            var res = await apiPostJson("/api/trade/sales", payload);
+            lastSavedSaleId = res.id;
+            showToast("تم حفظ الفاتورة بنجاح ✔️", "#22c55e");
+            var details = await apiGet("/api/trade/sales/" + encodeURIComponent(res.id));
+            openPrintInvoice(details);
+          } catch (e) {
+            showToast(e.message || "تعذر حفظ الفاتورة", "#dc2626");
+          }
+        }
+
+        async function printCurrentInvoice() {
+          if (!lastSavedSaleId) { showToast("احفظ الفاتورة أولاً قبل الطباعة", "#dc2626"); return; }
+          try {
+            var details = await apiGet("/api/trade/sales/" + encodeURIComponent(lastSavedSaleId));
+            openPrintInvoice(details);
+          } catch (e) {
+            showToast(e.message || "تعذر تحميل الفاتورة للطباعة", "#dc2626");
+          }
+        }
+
+        async function suspendInvoice() {
+          if (!cart.length) { showToast("السلة فارغة، لا يوجد ما يتم تعليقه", "#dc2626"); return; }
+          try {
+            await apiPostJson("/api/trade/sales/suspend", buildSalePayload());
+            showToast("تم تعليق الفاتورة ✔️", "#22c55e");
+            resetInvoiceForm();
+          } catch (e) {
+            showToast(e.message || "تعذر تعليق الفاتورة", "#dc2626");
+          }
+        }
+
+        function renderResumeList(rows) {
+          var host = document.getElementById("posResumeList");
+          if (!host) return;
+          if (!rows.length) {
+            host.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-weight:700;padding:1.5rem 0;">لا توجد فواتير معلقة حاليًا</div>';
+            return;
+          }
+          host.innerHTML = rows.map(function (x, i) {
+            return '<div data-resume="' + i + '" style="padding:0.75rem;border:1px solid var(--gold-dim);border-radius:12px;margin-bottom:0.5rem;cursor:pointer;display:flex;justify-content:space-between;align-items:center;">' +
+              '<div><div style="font-weight:800;color:var(--text-heading);">' + esc(x.invoice_no) + '</div>' +
+              '<div style="font-size:0.75rem;color:var(--text-muted);">' + esc(x.customer_name) + ' — ' + esc(x.sale_date) + '</div></div>' +
+              '<button type="button" class="op-btn-chip op-btn-chip--gold" style="padding:6px 14px;">استرجاع</button></div>';
+          }).join("");
+          host.querySelectorAll("[data-resume]").forEach(function (el) {
+            el.addEventListener("click", async function () {
+              var idx = Number(el.getAttribute("data-resume"));
+              var row = rows[idx];
+              try {
+                var res = await apiPostJson("/api/trade/sales/suspended/" + encodeURIComponent(row.id) + "/checkout", {});
+                var details = await apiGet("/api/trade/sales/" + encodeURIComponent(res.sale_id));
+                closeResumeModal();
+                lastSavedSaleId = res.sale_id;
+                cart = [];
+                renderCart();
+                openPrintInvoice(details);
+                showToast("تم استرجاع الفاتورة وإتمامها ✔️", "#22c55e");
+              } catch (e) {
+                showToast(e.message || "تعذر استرجاع الفاتورة", "#dc2626");
               }
-              showToast("تم تحديث بيانات الشركة بنجاح", "#22c55e");
-            } catch (e) {
-              showToast(e.message || "تعذر حفظ بيانات الشركة", "#dc2626");
+            });
+          });
+        }
+
+        async function openResumeModal() {
+          try {
+            var d = await apiGet("/api/trade/sales/suspended?limit=50");
+            renderResumeList(d.items || []);
+            document.getElementById("posResumeModal").style.display = "flex";
+          } catch (e) {
+            showToast(e.message || "تعذر تحميل الفواتير المعلقة", "#dc2626");
+          }
+        }
+
+        function closeResumeModal() {
+          var m = document.getElementById("posResumeModal");
+          if (m) m.style.display = "none";
+        }
+
+        async function deleteCurrentInvoice() {
+          if (!lastSavedSaleId) {
+            if (!cart.length) { showToast("لا توجد فاتورة لحذفها", "#dc2626"); return; }
+            resetInvoiceForm();
+            showToast("تم تفريغ الفاتورة الحالية", "#22c55e");
+            return;
+          }
+          if (!confirm("هل تريد حذف هذه الفاتورة نهائيًا؟ سيتم إرجاع الكميات إلى المخزون.")) return;
+          try {
+            await apiDelete("/api/trade/sales/" + encodeURIComponent(lastSavedSaleId));
+            showToast("تم حذف الفاتورة ✔️", "#22c55e");
+            resetInvoiceForm();
+          } catch (e) {
+            showToast(e.message || "تعذر حذف الفاتورة", "#dc2626");
+          }
+        }
+
+        var searchDebounce = null;
+        var searchInputEl = document.getElementById("posItemSearch");
+        if (searchInputEl) {
+          searchInputEl.addEventListener("input", function () {
+            var q = searchInputEl.value || "";
+            if (searchDebounce) clearTimeout(searchDebounce);
+            if (!q.trim()) { renderItemResults([]); return; }
+            searchDebounce = setTimeout(function () { searchItems(q); }, 220);
+          });
+          searchInputEl.addEventListener("keydown", function (ev) {
+            if (ev.key === "Enter") {
+              ev.preventDefault();
+              if (searchResults.length) {
+                addItemToCart(searchResults[0]);
+                searchInputEl.value = "";
+                renderItemResults([]);
+              }
             }
           });
         }
+        document.addEventListener("click", function (ev) {
+          var host = document.getElementById("posItemResults");
+          if (host && !host.contains(ev.target) && ev.target !== searchInputEl) host.style.display = "none";
+        });
+
+        var saveBtn = document.getElementById("posSaveBtn");
+        if (saveBtn) saveBtn.addEventListener("click", function () { saveInvoice(); });
+        var printBtn = document.getElementById("posPrintBtn");
+        if (printBtn) printBtn.addEventListener("click", function () { printCurrentInvoice(); });
+        var newBtn = document.getElementById("posNewBtn");
+        if (newBtn) newBtn.addEventListener("click", function () { resetInvoiceForm(); });
+        var suspendBtn = document.getElementById("posSuspendBtn");
+        if (suspendBtn) suspendBtn.addEventListener("click", function () { suspendInvoice(); });
+        var resumeBtn = document.getElementById("posResumeBtn");
+        if (resumeBtn) resumeBtn.addEventListener("click", function () { openResumeModal(); });
+        var deleteBtn = document.getElementById("posDeleteBtn");
+        if (deleteBtn) deleteBtn.addEventListener("click", function () { deleteCurrentInvoice(); });
+        var manageItemsBtn = document.getElementById("posManageItemsBtn");
+        if (manageItemsBtn) manageItemsBtn.addEventListener("click", function () { window.open("/trade/items", "_blank"); });
+        var resumeCloseBtn = document.getElementById("posResumeModalClose");
+        if (resumeCloseBtn) resumeCloseBtn.addEventListener("click", closeResumeModal);
+        var resumeOverlay = document.getElementById("posResumeModal");
+        if (resumeOverlay) resumeOverlay.addEventListener("click", function (ev) { if (ev.target === resumeOverlay) closeResumeModal(); });
+
+        (async function init() {
+          await loadCompanyProfile();
+          await loadPosSettings();
+          resetInvoiceForm();
+          setInterval(refreshDateTime, 30000);
+        })();
       })();
     </script>
+
 </body>
 </html>
