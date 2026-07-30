@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="/static/tailwind.css?v=9" />
     <link rel="stylesheet" href="/static/dark.css?v=9" />
     <style>
-      .top-alert { background: #ea580c; color: #fff; padding: 6px 12px; font-size: 12px; font-weight: 700; }
       .layout { display: grid; grid-template-columns: 260px 1fr; gap: 0; min-height: calc(100vh - 24px); }
       .sidebar { background: linear-gradient(180deg, #2d1ea8, #3f2bbf); color: #fff; padding: 14px 12px; }
       .side-link { display: flex; align-items: center; justify-content: space-between; border-radius: 10px; padding: 9px 10px; font-weight: 800; color: #dbeafe; border: 1px solid transparent; }
@@ -27,10 +26,10 @@
     </style>
   </head>
   <body class="bg-slate-100 text-slate-900 min-h-screen">
-    <div class="top-alert">متبقي 14 يوماً على نهاية الفترة المجانية</div>
     <div class="max-w-[1700px] mx-auto">
       <div class="layout">
         <aside class="sidebar">
+          <div class="text-2xl font-extrabold mb-4">OptimalSuite AI</div>
           <a class="side-link active" href="/trade"><span>لوحة التحكم</span><span>⌂</span></a>
           <button id="salesMenuToggle" class="side-link side-menu-btn mt-1" type="button"><span>المبيعات</span><span id="salesMenuArrow">▾</span></button>
           <div id="salesSubmenu" class="submenu open">
