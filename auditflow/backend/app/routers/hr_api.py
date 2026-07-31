@@ -32,7 +32,9 @@ from ..models import (
     PayrollAllowance,
     PayrollDeduction,
     AppSetting,
+    CompanyProfile,
 )
+from ..pdf_utils import generate_pdf_report
 
 router = APIRouter(prefix="/api/hr", tags=["hr"])
 
@@ -97,6 +99,14 @@ def _xlsx_response(headers, rows, filename):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": disposition},
     )
+
+
+def _pdf_meta(db, user):
+    company = db.query(CompanyProfile).filter(CompanyProfile.id == "default").first()
+    company_name = (company.trade_name or company.company_name) if company else None
+    logo_url = company.logo_url if company else None
+    generated_by = getattr(user, "username", None) or getattr(user, "email", None)
+    return company_name, logo_url, generated_by
 
 
 STATUS_LABELS = {
@@ -2300,6 +2310,194 @@ def report_employees_by_department_export(request: Request):
             by_dept[d] += 1
         data = [[d, c] for d, c in sorted(by_dept.items(), key=lambda x: -x[1])]
         return _xlsx_response(["القسم","عدد الموظفين"], data, "الموظفين_حسب_القسم.xlsx")
+    finally:
+        db.close()
+
+
+# ============================================================
+# نفس التقارير أعلاه — نسخة PDF احترافية (شعار + اسم الشركة + تاريخ + ترقيم صفحات + دعم عربي كامل)
+# ============================================================
+
+@router.get("/reports/payroll/pdf")
+def report_payroll_pdf(request: Request, month: int = Query(0), year: int = Query(0)):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        q = db.query(Payroll, Employee).join(Employee, Employee.id == Payroll.employee_id).filter(Payroll.user_id == user.id)
+        if month:
+            q = q.filter(Payroll.month == month)
+        if year:
+            q = q.filter(Payroll.year == year)
+        rows = q.order_by(Payroll.year.desc(), Payroll.month.desc()).all()
+        data = [[e.name, MONTHS_AR[p.month-1], p.year, p.base_salary, p.total_allowances, p.total_deductions, p.tax_amount, p.net_salary, p.status] for p, e in rows]
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+        return generate_pdf_report(["الموظف","الشهر","السنة","الأساسي","البدلات","الاستقطاعات","الضريبة","الصافي","الحالة"], data, "تقرير الرواتب", "رواتب.pdf", company_name, logo_url, generated_by)
+    finally:
+        db.close()
+
+
+@router.get("/reports/advances/pdf")
+def report_advances_pdf(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = db.query(Advance, Employee).join(Employee, Employee.id == Advance.employee_id).filter(Advance.user_id == user.id).all()
+        data = [[e.name, _fmt_date(a.date), a.amount, a.reason or "", a.installments_count, a.remaining_amount, a.status] for a, e in rows]
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+        return generate_pdf_report(["الموظف","التاريخ","المبلغ","السبب","عدد الأقساط","المتبقي","الحالة"], data, "تقرير السلف", "السلف.pdf", company_name, logo_url, generated_by)
+    finally:
+        db.close()
+
+
+@router.get("/reports/deductions/pdf")
+def report_deductions_pdf(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = db.query(DeductionRecord, Employee).join(Employee, Employee.id == DeductionRecord.employee_id).filter(DeductionRecord.user_id == user.id).all()
+        data = [[e.name, d.deduction_type or "", d.amount, d.reason or "", _fmt_date(d.date), "مطبّق" if d.applied else "بالانتظار"] for d, e in rows]
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+        return generate_pdf_report(["الموظف","النوع","القيمة","السبب","التاريخ","الحالة"], data, "تقرير الاستقطاعات", "الاستقطاعات.pdf", company_name, logo_url, generated_by)
+    finally:
+        db.close()
+
+
+@router.get("/reports/commissions/pdf")
+def report_commissions_pdf(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = db.query(CommissionRecord, Employee).join(Employee, Employee.id == CommissionRecord.employee_id).filter(CommissionRecord.user_id == user.id).all()
+        data = [[e.name, c.sales_amount, c.percentage, c.commission_value, _fmt_date(c.date), "مطبّقة" if c.applied else "بالانتظار"] for c, e in rows]
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+        return generate_pdf_report(["الموظف","المبيعات","النسبة %","قيمة العمولة","التاريخ","الحالة"], data, "تقرير العمولات", "العمولات.pdf", company_name, logo_url, generated_by)
+    finally:
+        db.close()
+
+
+@router.get("/reports/attendance/pdf")
+def report_attendance_pdf(request: Request, month: int = Query(0), year: int = Query(0)):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = db.query(Attendance, Employee).join(Employee, Employee.id == Attendance.employee_id).filter(Attendance.user_id == user.id).all()
+        if month:
+            rows = [r for r in rows if r[0].date and r[0].date.month == month]
+        if year:
+            rows = [r for r in rows if r[0].date and r[0].date.year == year]
+        data = [[e.name, _fmt_date(a.date), a.check_in or "", a.check_out or "", a.late_minutes, a.overtime_minutes, "غياب" if a.is_absent else "حضور"] for a, e in rows]
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+        return generate_pdf_report(["الموظف","التاريخ","الدخول","الخروج","التأخير(دقيقة)","الإضافي(دقيقة)","الحالة"], data, "تقرير الحضور والانصراف", "الحضور.pdf", company_name, logo_url, generated_by)
+    finally:
+        db.close()
+
+
+@router.get("/reports/leaves/pdf")
+def report_leaves_pdf(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = db.query(LeaveRequest, Employee).join(Employee, Employee.id == LeaveRequest.employee_id).filter(LeaveRequest.user_id == user.id).all()
+        data = [[e.name, l.leave_type or "", _fmt_date(l.start_date), _fmt_date(l.end_date), l.days_count, "مدفوعة" if l.paid else "غير مدفوعة", l.status] for l, e in rows]
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+        return generate_pdf_report(["الموظف","النوع","من","إلى","الأيام","مدفوعة؟","الحالة"], data, "تقرير الإجازات", "الإجازات.pdf", company_name, logo_url, generated_by)
+    finally:
+        db.close()
+
+
+@router.get("/reports/residency-expiry/pdf")
+def report_residency_expiry_pdf(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = db.query(Employee).filter(Employee.user_id == user.id, Employee.residency_expiry.isnot(None)).all()
+        data = [[e.name, e.national_id or "", _fmt_date(e.residency_expiry), _days_left(e.residency_expiry)] for e in rows]
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+        return generate_pdf_report(["الموظف","رقم الهوية/الإقامة","تاريخ الانتهاء","الأيام المتبقية"], data, "تقرير انتهاء الإقامات", "انتهاء_الاقامات.pdf", company_name, logo_url, generated_by)
+    finally:
+        db.close()
+
+
+@router.get("/reports/passport-expiry/pdf")
+def report_passport_expiry_pdf(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = db.query(Employee).filter(Employee.user_id == user.id, Employee.passport_expiry.isnot(None)).all()
+        data = [[e.name, e.passport_number or "", _fmt_date(e.passport_expiry), _days_left(e.passport_expiry)] for e in rows]
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+        return generate_pdf_report(["الموظف","رقم الجواز","تاريخ الانتهاء","الأيام المتبقية"], data, "تقرير انتهاء الجوازات", "انتهاء_الجوازات.pdf", company_name, logo_url, generated_by)
+    finally:
+        db.close()
+
+
+@router.get("/reports/contracts-expiry/pdf")
+def report_contracts_expiry_pdf(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = db.query(EmployeeContract, Employee).join(Employee, Employee.id == EmployeeContract.employee_id).filter(EmployeeContract.user_id == user.id, EmployeeContract.status == "active").all()
+        data = [[e.name, c.contract_type or "", _fmt_date(c.end_date), _days_left(c.end_date)] for c, e in rows]
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+        return generate_pdf_report(["الموظف","نوع العقد","تاريخ الانتهاء","الأيام المتبقية"], data, "تقرير انتهاء العقود", "انتهاء_العقود.pdf", company_name, logo_url, generated_by)
+    finally:
+        db.close()
+
+
+@router.get("/reports/employee-cost/pdf")
+def report_employee_cost_pdf(request: Request, month: int = Query(0), year: int = Query(0)):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        q = db.query(Payroll, Employee).join(Employee, Employee.id == Payroll.employee_id).filter(Payroll.user_id == user.id)
+        if month:
+            q = q.filter(Payroll.month == month)
+        if year:
+            q = q.filter(Payroll.year == year)
+        rows = q.all()
+        by_emp = {}
+        for p, e in rows:
+            by_emp.setdefault(e.name, 0.0)
+            by_emp[e.name] += float(p.net_salary or 0.0)
+        data = [[name, round(total, 2)] for name, total in sorted(by_emp.items(), key=lambda x: -x[1])]
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+        return generate_pdf_report(["الموظف","إجمالي التكلفة"], data, "تقرير تكلفة الموظفين", "تكلفة_الموظفين.pdf", company_name, logo_url, generated_by)
+    finally:
+        db.close()
+
+
+@router.get("/reports/employees-by-branch/pdf")
+def report_employees_by_branch_pdf(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = db.query(Employee).filter(Employee.user_id == user.id).all()
+        by_branch = {}
+        for e in rows:
+            b = e.branch_name or "بدون فرع"
+            by_branch.setdefault(b, 0)
+            by_branch[b] += 1
+        data = [[b, c] for b, c in sorted(by_branch.items(), key=lambda x: -x[1])]
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+        return generate_pdf_report(["الفرع","عدد الموظفين"], data, "تقرير الموظفين حسب الفرع", "الموظفين_حسب_الفرع.pdf", company_name, logo_url, generated_by)
+    finally:
+        db.close()
+
+
+@router.get("/reports/employees-by-department/pdf")
+def report_employees_by_department_pdf(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = db.query(Employee).filter(Employee.user_id == user.id).all()
+        by_dept = {}
+        for e in rows:
+            d = e.department or "بدون قسم"
+            by_dept.setdefault(d, 0)
+            by_dept[d] += 1
+        data = [[d, c] for d, c in sorted(by_dept.items(), key=lambda x: -x[1])]
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+        return generate_pdf_report(["القسم","عدد الموظفين"], data, "تقرير الموظفين حسب القسم", "الموظفين_حسب_القسم.pdf", company_name, logo_url, generated_by)
     finally:
         db.close()
 
