@@ -666,7 +666,7 @@
       </main>
     </div>
 
-    <script src="/static/app.js?v=18"></script>
+    <script src="/static/app.js?v=19"></script>
     <script>
       (function () {
         var fsBtn = document.getElementById("opFullscreenBtn");
@@ -774,6 +774,8 @@
         }
 
         document.getElementById("basicSaveBtn").addEventListener("click", async function () {
+          var __saveBtn = this;
+          await guardedSave(__saveBtn, async function () {
           try {
             await apiPatchJson("/api/hr/employees/" + encodeURIComponent(_empId), {
               name: document.getElementById("basicName").value.trim(),
@@ -795,8 +797,11 @@
               notes: document.getElementById("basicNotes").value
             });
             showToast("تم حفظ البيانات ✔️", "#22c55e");
+            if (window.__markSaved) window.__markSaved();
             await loadEmployeeHeader();
           } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
+        
+          }, "جارٍ الحفظ ...");
         });
 
         document.getElementById("basicPhoto").addEventListener("change", async function () {
@@ -1069,6 +1074,8 @@
         document.getElementById("docModalCancel").addEventListener("click", function () { document.getElementById("docModal").style.display = "none"; });
 
         document.getElementById("docModalSave").addEventListener("click", async function () {
+          var __saveBtn = this;
+          await guardedSave(__saveBtn, async function () {
           var docType = document.getElementById("docType").value.trim();
           if (!docType) { showToast("اكتب نوع الوثيقة", "#dc2626"); return; }
           try {
@@ -1094,9 +1101,12 @@
               await apiPostForm("/api/hr/employees/" + encodeURIComponent(_empId) + "/documents", fd);
             }
             showToast("تم حفظ الوثيقة ✔️", "#22c55e");
+            if (window.__markSaved) window.__markSaved();
             document.getElementById("docModal").style.display = "none";
             await loadDocsTab();
           } catch (e) { showToast(e.message || "تعذر حفظ الوثيقة", "#dc2626"); }
+        
+          }, "جارٍ الحفظ ...");
         });
 
         async function deleteDoc(id) {
@@ -1118,6 +1128,8 @@
         document.getElementById("renewModalClose").addEventListener("click", function () { document.getElementById("renewModal").style.display = "none"; });
         document.getElementById("renewModalCancel").addEventListener("click", function () { document.getElementById("renewModal").style.display = "none"; });
         document.getElementById("renewModalSave").addEventListener("click", async function () {
+          var __saveBtn = this;
+          await guardedSave(__saveBtn, async function () {
           var newExpiry = document.getElementById("renewExpiry").value;
           if (!newExpiry) { showToast("تاريخ الانتهاء الجديد مطلوب", "#dc2626"); return; }
           try {
@@ -1127,9 +1139,12 @@
               notes: document.getElementById("renewNotes").value
             });
             showToast("تم تجديد الوثيقة ✔️", "#22c55e");
+            if (window.__markSaved) window.__markSaved();
             document.getElementById("renewModal").style.display = "none";
             await loadDocsTab();
           } catch (e) { showToast(e.message || "تعذر التجديد", "#dc2626"); }
+        
+          }, "جارٍ التأكيد ...");
         });
 
         async function openHistoryModal(id) {
@@ -1258,6 +1273,8 @@
           var initialTab = new URLSearchParams(window.location.search).get("tab") === "docs" ? "docs" : "basic";
           switchTab(initialTab);
         })();
+    
+        initUnsavedGuard({ modals: ["docModal", "renewModal", "historyModal"], dirtyContainers: ["tab-basic"] });
     </script>
 
   </body>

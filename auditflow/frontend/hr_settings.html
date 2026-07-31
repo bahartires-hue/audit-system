@@ -494,7 +494,7 @@
       </main>
     </div>
 
-    <script src="/static/app.js?v=18"></script>
+    <script src="/static/app.js?v=19"></script>
     <script>
       (function () {
         var fsBtn = document.getElementById("opFullscreenBtn");
@@ -585,6 +585,8 @@
           } catch (e) {}
         }
         document.getElementById("saveSettingsBtn").addEventListener("click", async function () {
+          var __saveBtn = this;
+          await guardedSave(__saveBtn, async function () {
           try {
             await apiPatchJson("/api/hr/settings", {
               tax_enabled: document.getElementById("taxEnabled").checked,
@@ -592,13 +594,18 @@
               currency: document.getElementById("currency").value || "SAR"
             });
             showToast("تم حفظ الإعدادات ✔️", "#22c55e");
+            if (window.__markSaved) window.__markSaved();
           } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
+        
+          }, "جارٍ الحفظ ...");
         });
 
         (async function () {
           await loadHrSettings();
           for (var i = 0; i < CATEGORIES.length; i++) { await loadConfigList(CATEGORIES[i]); }
         })();
+    
+        initUnsavedGuard({ modals: [] });
     </script>
 
   </body>

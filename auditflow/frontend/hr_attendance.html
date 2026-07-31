@@ -467,7 +467,7 @@
       </main>
     </div>
 
-    <script src="/static/app.js?v=18"></script>
+    <script src="/static/app.js?v=19"></script>
     <script>
       (function () {
         var fsBtn = document.getElementById("opFullscreenBtn");
@@ -578,6 +578,8 @@
         document.getElementById("addModal").addEventListener("click", function (ev) { if (ev.target === this) this.style.display = "none"; });
 
         document.getElementById("modalSave").addEventListener("click", async function () {
+          var __saveBtn = this;
+          await guardedSave(__saveBtn, async function () {
           var employee_id = document.getElementById("fEmployee").value;
           var date = document.getElementById("fDate").value;
           if (!employee_id || !date) { showToast("اختر الموظف والتاريخ", "#dc2626"); return; }
@@ -590,9 +592,12 @@
               is_absent: document.getElementById("fAbsent").checked
             });
             showToast("تم الحفظ ✔️", "#22c55e");
+            if (window.__markSaved) window.__markSaved();
             document.getElementById("addModal").style.display = "none";
             await loadList();
           } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
+        
+          }, "جارٍ الحفظ ...");
         });
 
         async function deleteItem(id) {
@@ -602,6 +607,8 @@
         }
 
         (async function () { await loadEmployeeOptions(); await loadList(); })();
+    
+        initUnsavedGuard({ modals: ["addModal"] });
     </script>
 
   </body>
