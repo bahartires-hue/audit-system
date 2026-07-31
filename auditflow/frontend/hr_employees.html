@@ -501,7 +501,7 @@
       </main>
     </div>
 
-    <script src="/static/app.js?v=18"></script>
+    <script src="/static/app.js?v=19"></script>
     <script>
       (function () {
         var fsBtn = document.getElementById("opFullscreenBtn");
@@ -635,6 +635,8 @@
         document.getElementById("empModal").addEventListener("click", function (ev) { if (ev.target === this) this.style.display = "none"; });
 
         document.getElementById("empModalSave").addEventListener("click", async function () {
+          var __saveBtn = this;
+          await guardedSave(__saveBtn, async function () {
           var name = document.getElementById("fName").value.trim();
           if (!name) { showToast("اكتب اسم الموظف", "#dc2626"); return; }
           var payload = {
@@ -663,9 +665,12 @@
               await apiPostJson("/api/hr/employees", payload);
             }
             showToast("تم الحفظ ✔️", "#22c55e");
+            if (window.__markSaved) window.__markSaved();
             document.getElementById("empModal").style.display = "none";
             await loadEmployees();
           } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
+        
+          }, "جارٍ الحفظ ...");
         });
 
         async function deleteEmp(id) {
@@ -678,6 +683,8 @@
         }
 
         loadEmployees();
+    
+        initUnsavedGuard({ modals: ["empModal"] });
     </script>
 
   </body>
