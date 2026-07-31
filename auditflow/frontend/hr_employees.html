@@ -450,6 +450,10 @@
               </select>
             </div>
             <button type="button" class="op-btn-chip op-btn-chip--gold" id="addEmpBtn">➕ إضافة موظف</button>
+            <button type="button" class="op-tool-btn-secondary" id="downloadTemplateBtn">⬇️ تنزيل القالب</button>
+            <button type="button" class="op-tool-btn-secondary" id="importExcelBtn">📤 استيراد من Excel</button>
+            <input type="file" id="importFileInput" accept=".xlsx" style="display:none" />
+            <button type="button" class="op-tool-btn-secondary" id="exportExcelBtn">📥 تصدير Excel</button>
           </div>
         </div>
 
@@ -495,6 +499,17 @@
             <div class="op-tool-modal-actions">
               <button type="button" class="op-tool-btn-secondary" id="empModalCancel">إلغاء</button>
               <button type="button" class="op-btn-chip op-btn-chip--gold" id="empModalSave">حفظ</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="op-tool-modal-overlay" id="importReportModal" style="display:none;">
+          <div class="op-tool-modal" style="max-width:560px;">
+            <div class="op-tool-modal-head"><div><h3>نتيجة الاستيراد</h3></div><button type="button" id="importReportClose">✕</button></div>
+            <div id="importReportSummary" style="display:flex;gap:1rem;margin-bottom:0.75rem;font-weight:700;"></div>
+            <div id="importReportErrors" style="max-height:320px;overflow:auto;font-size:0.85rem;"></div>
+            <div class="op-tool-modal-actions">
+              <button type="button" class="op-btn-chip op-btn-chip--gold" id="importReportOk">تم</button>
             </div>
           </div>
         </div>
@@ -683,7 +698,100 @@
         }
 
         loadEmployees();
-    
+
+        function parseFilenameFromDisposition(cd, fallback) {
+          if (!cd) return fallback;
+          var m = /filename\*=UTF-8''([^;]+)/i.exec(cd) || /filename="?([^";]+)"?/i.exec(cd);
+          if (!m) return fallback;
+          try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
+        }
+
+        async function downloadBlobFrom(url, fallbackName) {
+          syncCsrfFromCookie();
+          var res = await fetch(url, { method: "GET", credentials: "include" });
+          if (!res.ok) throw new Error(await readErrorMessage(res));
+          var blob = await res.blob();
+          var filename = parseFilenameFromDisposition(res.headers.get("Content-Disposition"), fallbackName);
+          var a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          URL.revokeObjectURL(a.href);
+          a.remove();
+        }
+
+        document.getElementById("downloadTemplateBtn").addEventListener("click", async function () {
+          var btn = this;
+          await guardedSave(btn, async function () {
+            try {
+              await downloadBlobFrom("/api/hr/employees/import-template", "قالب_استيراد_الموظفين.xlsx");
+            } catch (e) { showToast(e.message || "تعذر تنزيل القالب", "#dc2626"); }
+          }, "جارٍ التنزيل ...");
+        });
+
+        document.getElementById("exportExcelBtn").addEventListener("click", async function () {
+          var btn = this;
+          await guardedSave(btn, async function () {
+            try {
+              var qv = document.getElementById("flSearch") ? document.getElementById("flSearch").value : "";
+              var dv = document.getElementById("flDept") ? document.getElementById("flDept").value : "";
+              var bv = document.getElementById("flBranch") ? document.getElementById("flBranch").value : "";
+              var sv = document.getElementById("flStatus") ? document.getElementById("flStatus").value : "";
+              var params = new URLSearchParams();
+              if (qv) params.set("q", qv);
+              if (dv) params.set("department", dv);
+              if (bv) params.set("branch_name", bv);
+              if (sv) params.set("status", sv);
+              await downloadBlobFrom("/api/hr/employees/export?" + params.toString(), "الموظفون.xlsx");
+              showToast("تم التصدير ✔️", "#22c55e");
+            } catch (e) { showToast(e.message || "تعذر التصدير", "#dc2626"); }
+          }, "جارٍ التصدير ...");
+        });
+
+        document.getElementById("importExcelBtn").addEventListener("click", function () {
+          document.getElementById("importFileInput").click();
+        });
+
+        document.getElementById("importFileInput").addEventListener("change", async function () {
+          var fileInput = this;
+          var file = fileInput.files && fileInput.files[0];
+          if (!file) return;
+          var importBtn = document.getElementById("importExcelBtn");
+          await guardedSave(importBtn, async function () {
+            try {
+              var fd = new FormData();
+              fd.append("file", file);
+              var report = await apiPostForm("/api/hr/employees/import", fd);
+              showImportReport(report);
+              await loadEmployees();
+            } catch (e) { showToast(e.message || "تعذر الاستيراد", "#dc2626"); }
+            finally { fileInput.value = ""; }
+          }, "جارٍ الاستيراد ...");
+        });
+
+        function showImportReport(report) {
+          var summary = document.getElementById("importReportSummary");
+          var errBox = document.getElementById("importReportErrors");
+          var added = report.added || 0, updated = report.updated || 0;
+          var errors = report.errors || [];
+          summary.innerHTML =
+            "<span style='color:#22c55e'>تمت إضافة: " + added + "</span>" +
+            "<span style='color:#0ea5e9'>تم تحديث: " + updated + "</span>" +
+            "<span style='color:#dc2626'>أخطاء: " + errors.length + "</span>";
+          if (!errors.length) {
+            errBox.innerHTML = "<div style='color:var(--text-muted)'>لا توجد أخطاء</div>";
+          } else {
+            errBox.innerHTML = errors.map(function (er) {
+              return "<div style='padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.08)'>صف " + er.row + ": " + er.reason + "</div>";
+            }).join("");
+          }
+          document.getElementById("importReportModal").style.display = "flex";
+        }
+        document.getElementById("importReportClose").addEventListener("click", function () { document.getElementById("importReportModal").style.display = "none"; });
+        document.getElementById("importReportOk").addEventListener("click", function () { document.getElementById("importReportModal").style.display = "none"; });
+        document.getElementById("importReportModal").addEventListener("click", function (ev) { if (ev.target === this) this.style.display = "none"; });
+
         initUnsavedGuard({ modals: ["empModal"] });
     </script>
 

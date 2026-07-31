@@ -4,6 +4,7 @@ import datetime as dt
 import io
 import os as _os
 import uuid
+from urllib.parse import quote as _quote
 from pathlib import Path as _Path
 from typing import Optional
 
@@ -89,10 +90,12 @@ def _xlsx_response(headers, rows, filename):
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
+    ascii_fallback = "export.xlsx"
+    disposition = f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{_quote(filename, safe='')}"
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": disposition},
     )
 
 
@@ -344,6 +347,229 @@ def create_employee(request: Request, body: EmployeeCreate = Body(...)):
         return _employee_out(rec)
     finally:
         db.close()
+
+
+EMPLOYEE_IMPORT_HEADERS = [
+    "الرقم الوظيفي", "اسم الموظف", "الجنسية", "رقم الهوية/الإقامة",
+    "تاريخ انتهاء الهوية/الإقامة", "رقم الجواز", "تاريخ انتهاء الجواز",
+    "الجوال", "البريد الإلكتروني", "الوظيفة", "القسم", "الفرع",
+    "الراتب الأساسي", "نسبة العمولة", "تاريخ التعيين", "الحالة", "ملاحظات",
+]
+
+_STATUS_LABEL_TO_VALUE = {v: k for k, v in STATUS_LABELS.items()}
+
+
+def _cell_str(v) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, dt.datetime):
+        return v.strftime("%Y-%m-%d")
+    return str(v).strip()
+
+
+def _parse_import_date(v, field_name: str):
+    if v is None or (isinstance(v, str) and not v.strip()):
+        return None
+    if isinstance(v, dt.datetime):
+        return v
+    s = str(v).strip()
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d"):
+        try:
+            return dt.datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    raise ValueError(f"{field_name} بصيغة غير صحيحة (استخدم YYYY-MM-DD): {s}")
+
+
+def _parse_import_status(v):
+    s = _cell_str(v)
+    if not s:
+        return "active"
+    if s in STATUS_LABELS:
+        return s
+    if s in _STATUS_LABEL_TO_VALUE:
+        return _STATUS_LABEL_TO_VALUE[s]
+    raise ValueError(f"قيمة الحالة غير معروفة: {s}")
+
+
+@router.get("/employees/import-template")
+def download_employees_import_template(request: Request):
+    db = SessionLocal()
+    try:
+        require_user(db, request)
+        example = [
+            "EMP-0001", "محمد أحمد", "سعودي", "1012345678", "2027-01-01",
+            "A1234567", "2029-05-01", "0501234567", "employee@example.com",
+            "محاسب", "المالية", "الفرع الرئيسي", 6000, 2.5, "2024-01-01", "نشط", "",
+        ]
+        return _xlsx_response(EMPLOYEE_IMPORT_HEADERS, [example], "قالب_استيراد_الموظفين.xlsx")
+    finally:
+        db.close()
+
+
+@router.get("/employees/export")
+def export_employees(request: Request, q: str = Query(""), department: str = Query(""), branch_name: str = Query(""), status: str = Query("")):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = db.query(Employee).filter(Employee.user_id == user.id).order_by(Employee.created_at.desc()).all()
+        qn = (q or "").strip().lower()
+        if qn:
+            rows = [r for r in rows if qn in (r.name or "").lower() or qn in (r.employee_number or "").lower()]
+        if department:
+            rows = [r for r in rows if (r.department or "") == department]
+        if branch_name:
+            rows = [r for r in rows if (r.branch_name or "") == branch_name]
+        if status:
+            rows = [r for r in rows if (r.status or "active") == status]
+        out_rows = []
+        for e in rows:
+            out_rows.append([
+                e.employee_number or "",
+                e.name or "",
+                e.nationality or "",
+                e.national_id or "",
+                _fmt_date(e.residency_expiry),
+                e.passport_number or "",
+                _fmt_date(e.passport_expiry),
+                e.phone or "",
+                e.email or "",
+                e.position or "",
+                e.department or "",
+                e.branch_name or "",
+                round(float(e.basic_salary or 0.0), 2),
+                e.commission_percentage,
+                _fmt_date(e.hire_date),
+                STATUS_LABELS.get(e.status or "active", e.status or ""),
+                e.notes or "",
+            ])
+        log_event(db, "hr.employee.export", user.id, {"count": len(out_rows)})
+        return _xlsx_response(EMPLOYEE_IMPORT_HEADERS, out_rows, "الموظفون.xlsx")
+    finally:
+        db.close()
+
+
+@router.post("/employees/import")
+async def import_employees(request: Request, file: UploadFile = File(...)):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        original = file.filename or "import.xlsx"
+        if not original.lower().endswith((".xlsx", ".xlsm")):
+            raise HTTPException(400, "يجب أن يكون الملف بصيغة Excel (.xlsx)")
+        content = await file.read()
+        if len(content) > 15 * 1024 * 1024:
+            raise HTTPException(400, "حجم الملف أكبر من 15 ميجابايت")
+        try:
+            from openpyxl import load_workbook
+            wb = load_workbook(io.BytesIO(content), data_only=True)
+            ws = wb.active
+        except Exception:
+            raise HTTPException(400, "تعذر قراءة ملف Excel — تأكد أنه بصيغة .xlsx صحيحة")
+
+        added = 0
+        updated = 0
+        errors = []
+        row_num = 1
+        for raw_row in ws.iter_rows(min_row=2, values_only=True):
+            row_num += 1
+            if raw_row is None or all(c is None or (isinstance(c, str) and not c.strip()) for c in raw_row):
+                continue
+            cells = list(raw_row) + [None] * max(0, 17 - len(raw_row))
+            try:
+                employee_number = _cell_str(cells[0])
+                name = _cell_str(cells[1])
+                if not name:
+                    raise ValueError("اسم الموظف مطلوب")
+                nationality = _cell_str(cells[2])
+                national_id = _cell_str(cells[3])
+                residency_expiry = _parse_import_date(cells[4], "تاريخ انتهاء الهوية/الإقامة")
+                passport_number = _cell_str(cells[5])
+                passport_expiry = _parse_import_date(cells[6], "تاريخ انتهاء الجواز")
+                phone = _cell_str(cells[7])
+                email = _cell_str(cells[8])
+                position = _cell_str(cells[9])
+                department = _cell_str(cells[10])
+                branch_name = _cell_str(cells[11])
+                salary_raw = cells[12]
+                try:
+                    basic_salary = float(salary_raw) if salary_raw not in (None, "") else 0.0
+                except (TypeError, ValueError):
+                    raise ValueError(f"الراتب الأساسي غير رقمي: {salary_raw}")
+                comm_raw = cells[13]
+                try:
+                    commission_percentage = float(comm_raw) if comm_raw not in (None, "") else None
+                except (TypeError, ValueError):
+                    raise ValueError(f"نسبة العمولة غير رقمية: {comm_raw}")
+                hire_date = _parse_import_date(cells[14], "تاريخ التعيين")
+                status = _parse_import_status(cells[15])
+                notes = _cell_str(cells[16])
+            except ValueError as ve:
+                errors.append({"row": row_num, "reason": str(ve)})
+                continue
+
+            existing = None
+            if national_id:
+                existing = db.query(Employee).filter(Employee.user_id == user.id, Employee.national_id == national_id).first()
+            if not existing and employee_number:
+                existing = db.query(Employee).filter(Employee.user_id == user.id, Employee.employee_number == employee_number).first()
+
+            try:
+                if existing:
+                    existing.name = name
+                    existing.nationality = nationality or None
+                    existing.national_id = national_id or existing.national_id
+                    existing.residency_expiry = residency_expiry
+                    existing.passport_number = passport_number or None
+                    existing.passport_expiry = passport_expiry
+                    existing.position = position or None
+                    existing.department = department or None
+                    existing.branch_name = branch_name or None
+                    existing.basic_salary = basic_salary
+                    existing.commission_percentage = commission_percentage
+                    existing.hire_date = hire_date
+                    existing.phone = phone or None
+                    existing.email = email or None
+                    existing.status = status
+                    existing.is_active = 1 if status == "active" else 0
+                    existing.notes = notes or None
+                    updated += 1
+                else:
+                    rec = Employee(
+                        id=uuid.uuid4().hex,
+                        user_id=user.id,
+                        employee_number=employee_number or _next_employee_number(db, user.id),
+                        name=name,
+                        nationality=nationality or None,
+                        national_id=national_id or None,
+                        residency_expiry=residency_expiry,
+                        passport_number=passport_number or None,
+                        passport_expiry=passport_expiry,
+                        position=position or None,
+                        department=department or None,
+                        branch_name=branch_name or None,
+                        basic_salary=basic_salary,
+                        commission_percentage=commission_percentage,
+                        hire_date=hire_date,
+                        phone=phone or None,
+                        email=email or None,
+                        status=status,
+                        is_active=1 if status == "active" else 0,
+                        notes=notes or None,
+                    )
+                    db.add(rec)
+                    added += 1
+                db.commit()
+            except Exception as ex:
+                db.rollback()
+                errors.append({"row": row_num, "reason": f"تعذر الحفظ: {ex}"})
+
+        log_event(db, "hr.employee.import", user.id, {"added": added, "updated": updated, "errors": len(errors)})
+        return {"added": added, "updated": updated, "errors": errors, "total_rows": row_num - 1}
+    finally:
+        db.close()
+
 
 
 @router.get("/employees/{employee_id}")
