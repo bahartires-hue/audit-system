@@ -117,6 +117,51 @@ function showToast(msg, color = "#10b981") {
   setTimeout(() => t.classList.add("hidden"), 3000);
 }
 
+
+// ---- Data-loss / double-submit hardening helpers (shared across all forms) ----
+// Prevents duplicate records from double-clicking Save, disables the button and shows
+// a spinner while the request is in flight, and NEVER clears form fields on error --
+// only guardedSave's caller decides what happens on success (usually closing the modal).
+async function guardedSave(btn, fn, savingText) {
+  if (!btn || btn.dataset.saving === "1") return;
+  btn.dataset.saving = "1";
+  setLoading(btn, true, savingText || "جارٍ الحفظ ...");
+  try {
+    await fn();
+  } finally {
+    btn.dataset.saving = "0";
+    setLoading(btn, false);
+  }
+}
+
+// Warns before the user navigates away / reloads / closes the tab while a modal is open
+// or while tracked fields have unsaved changes. Call window.__markSaved() right after a
+// successful save to clear the "dirty" flag for tracked containers.
+function initUnsavedGuard(opts) {
+  opts = opts || {};
+  var modalIds = opts.modals || [];
+  var dirtyContainers = opts.dirtyContainers || [];
+  var dirty = false;
+  dirtyContainers.forEach(function (id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("input", function () { dirty = true; });
+    el.addEventListener("change", function () { dirty = true; });
+  });
+  window.__markSaved = function () { dirty = false; };
+  window.addEventListener("beforeunload", function (e) {
+    var anyModalOpen = modalIds.some(function (id) {
+      var m = document.getElementById(id);
+      return m && m.style && m.style.display && m.style.display !== "none";
+    });
+    if (anyModalOpen || dirty) {
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    }
+  });
+}
+
 function setLoading(btn, loading, text) {
   if (!btn) return;
   if (loading) {
@@ -259,7 +304,7 @@ function exportFilteredCsv() {
       [e.branch, e.amount, e.type, e.date, e.doc, e.reason].map(esc).join(",")
     );
   }
-  const blob = new Blob(["\ufeff" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = `filtered_${qs("id") || "report"}.csv`;
@@ -1056,4 +1101,3 @@ window.downloadCSV = downloadCSV;
 window.downloadErrors = downloadReportFile;
 window.goMismatchPage = goMismatchPage;
 window.exportFilteredCsv = exportFilteredCsv;
-
