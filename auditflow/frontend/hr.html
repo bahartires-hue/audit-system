@@ -425,72 +425,83 @@
       </header>
 
       <main class="op-main">
-        <div class="hr-nav" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-radius:14px;background:linear-gradient(90deg, rgba(180,140,60,0.14), rgba(180,140,60,0.03));border:1px solid var(--gold-dim);margin-bottom:14px;">
-          <span style="font-weight:800;color:var(--gold-soft);">👥 الموارد البشرية</span>
-          <a href="/hr" style="padding:7px 14px;border-radius:999px;font-weight:800;font-size:0.85rem;background:linear-gradient(270deg, #8a6a1f 0%, var(--gold) 45%, var(--gold-soft) 100%);color:#1a1406;border:none;">🏠 الرئيسية</a>
-          <a href="/hr/payroll" style="padding:7px 14px;border-radius:999px;font-weight:800;font-size:0.85rem;border:1px solid var(--gold-dim);color:var(--text-heading);">💰 الرواتب</a>
-          <a href="/hr/alerts" style="padding:7px 14px;border-radius:999px;font-weight:800;font-size:0.85rem;border:1px solid var(--gold-dim);color:var(--text-heading);">🔔 التنبيهات والوثائق</a>
-        </div>
-        <div class="op-content-panel">
-          <div class="op-hero" style="margin-bottom:1.25rem;">
-            <h1>👥 <b>الموارد البشرية</b></h1>
-            <p>نظرة عامة على الموظفين، الرواتب، والوثائق الرسمية التي تحتاج متابعة.</p>
-          </div>
-
-          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:1rem;margin-bottom:1.25rem;">
-            <a href="/hr/alerts?doc_type=" id="cardResidency" class="op-shell-card" style="padding:1.1rem;text-align:start;text-decoration:none;">
-              <div style="font-size:0.78rem;color:var(--text-muted);font-weight:800;">🟡 إقامات تنتهي قريبًا</div>
-              <div id="cardResidencyVal" style="font-size:1.7rem;font-weight:800;color:var(--text-heading);">0</div>
-            </a>
-            <a href="/hr/alerts?status=expired" id="cardPassport" class="op-shell-card" style="padding:1.1rem;text-align:start;text-decoration:none;">
-              <div style="font-size:0.78rem;color:var(--text-muted);font-weight:800;">🔴 جوازات منتهية</div>
-              <div id="cardPassportVal" style="font-size:1.7rem;font-weight:800;color:var(--text-heading);">0</div>
-            </a>
-            <a href="/hr/alerts?doc_type=" id="cardWorkLicense" class="op-shell-card" style="padding:1.1rem;text-align:start;text-decoration:none;">
-              <div style="font-size:0.78rem;color:var(--text-muted);font-weight:800;">🟠 رخص عمل تنتهي قريبًا</div>
-              <div id="cardWorkLicenseVal" style="font-size:1.7rem;font-weight:800;color:var(--text-heading);">0</div>
-            </a>
-            <a href="/hr/alerts?doc_type=%D8%B9%D9%82%D8%AF%20%D8%B9%D9%85%D9%84" id="cardContracts" class="op-shell-card" style="padding:1.1rem;text-align:start;text-decoration:none;">
-              <div style="font-size:0.78rem;color:var(--text-muted);font-weight:800;">📄 عقود تنتهي قريبًا</div>
-              <div id="cardContractsVal" style="font-size:1.7rem;font-weight:800;color:var(--text-heading);">0</div>
-            </a>
-            <a href="/hr/alerts" id="cardNeedsUpdate" class="op-shell-card" style="padding:1.1rem;text-align:start;text-decoration:none;">
-              <div style="font-size:0.78rem;color:var(--text-muted);font-weight:800;">⚠️ وثائق تحتاج تحديث</div>
-              <div id="cardNeedsUpdateVal" style="font-size:1.7rem;font-weight:800;color:var(--text-heading);">0</div>
-            </a>
-          </div>
-
-          <div class="op-shell-card" style="padding:1.25rem;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
-              <h3 style="font-weight:800;color:var(--text-heading);">👤 الموظفون</h3>
-              <div style="display:flex;gap:8px;">
-                <input type="text" id="hubSearch" placeholder="بحث بالاسم..." style="padding:8px 12px;border-radius:10px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);" />
-                <button type="button" class="op-btn-chip op-btn-chip--gold" id="hubAddEmpBtn">➕ موظف جديد</button>
-              </div>
-            </div>
-            <div style="overflow:auto;">
-              <table class="op-admin-table" style="width:100%;">
-                <thead>
-                  <tr><th>الاسم</th><th>الوظيفة</th><th>القسم</th><th>الفرع</th><th>الحالة</th><th>إجراء</th></tr>
-                </thead>
-                <tbody id="hubEmpBody"></tbody>
-              </table>
-              <div id="hubEmpEmpty" style="display:none;padding:2rem;text-align:center;color:var(--text-muted);font-weight:700;">لا يوجد موظفون بعد</div>
-            </div>
-          </div>
+        <div class="op-hero" style="margin-bottom:1.1rem;">
+          <h1>👥 <b>الموارد البشرية</b></h1>
+          <p>نظام موارد بشرية متكامل — كل البيانات مترابطة تلقائياً مع الرواتب.</p>
         </div>
 
-        <div class="op-tool-modal-overlay" id="hubEmpModal" style="display:none;">
-          <div class="op-tool-modal">
-            <div class="op-tool-modal-head"><div><h3>موظف جديد</h3></div><button type="button" id="hubEmpModalClose">✕</button></div>
-            <div class="op-tool-field"><label>اسم الموظف</label><input type="text" id="hubEmpName" /></div>
-            <div class="op-tool-field"><label>الوظيفة (اختياري)</label><input type="text" id="hubEmpPosition" /></div>
-            <div class="op-tool-field"><label>القسم (اختياري)</label><input type="text" id="hubEmpDepartment" /></div>
-            <div class="op-tool-field"><label>الفرع (اختياري)</label><input type="text" id="hubEmpBranch" /></div>
-            <div class="op-tool-modal-actions">
-              <button type="button" class="op-tool-btn-secondary" id="hubEmpModalCancel">إلغاء</button>
-              <button type="button" class="op-btn-chip op-btn-chip--gold" id="hubEmpModalSave">حفظ</button>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:0.8rem;margin-bottom:1.1rem;">
+          <div class="op-shell-card" style="padding:0.9rem;text-align:start;"><div style="font-size:0.72rem;color:var(--text-muted);font-weight:800;">عدد الموظفين</div><div id="stEmployees" style="font-size:1.5rem;font-weight:800;">0</div></div>
+          <div class="op-shell-card" style="padding:0.9rem;text-align:start;"><div style="font-size:0.72rem;color:var(--text-muted);font-weight:800;">الرواتب هذا الشهر</div><div id="stPayroll" style="font-size:1.5rem;font-weight:800;">0</div></div>
+          <div class="op-shell-card" style="padding:0.9rem;text-align:start;"><div style="font-size:0.72rem;color:var(--text-muted);font-weight:800;">سلف نشطة</div><div id="stAdvances" style="font-size:1.5rem;font-weight:800;">0</div></div>
+          <div class="op-shell-card" style="padding:0.9rem;text-align:start;"><div style="font-size:0.72rem;color:var(--text-muted);font-weight:800;">إجازات بالانتظار</div><div id="stLeaves" style="font-size:1.5rem;font-weight:800;">0</div></div>
+          <div class="op-shell-card" style="padding:0.9rem;text-align:start;"><div style="font-size:0.72rem;color:var(--text-muted);font-weight:800;">إقامات منتهية</div><div id="stResidency" style="font-size:1.5rem;font-weight:800;">0</div></div>
+          <div class="op-shell-card" style="padding:0.9rem;text-align:start;"><div style="font-size:0.72rem;color:var(--text-muted);font-weight:800;">عقود تنتهي قريباً</div><div id="stContracts" style="font-size:1.5rem;font-weight:800;">0</div></div>
+          <div class="op-shell-card" style="padding:0.9rem;text-align:start;"><div style="font-size:0.72rem;color:var(--text-muted);font-weight:800;">غياب اليوم</div><div id="stAbsent" style="font-size:1.5rem;font-weight:800;">0</div></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:1rem;align-items:start;">
+          <div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.9rem;margin-bottom:0.9rem;">
+              <a href="/hr/employees" class="op-shell-card" style="padding:1.4rem 1rem;text-align:center;text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:0.5rem;">
+                <span style="font-size:1.8rem;">👤</span>
+                <span style="font-weight:800;color:var(--text-heading);font-size:0.9rem;">الموظفون</span>
+              </a>
+              <a href="/hr/payroll" class="op-shell-card" style="padding:1.4rem 1rem;text-align:center;text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:0.5rem;">
+                <span style="font-size:1.8rem;">💰</span>
+                <span style="font-weight:800;color:var(--text-heading);font-size:0.9rem;">الرواتب</span>
+              </a>
+              <a href="/hr/advances" class="op-shell-card" style="padding:1.4rem 1rem;text-align:center;text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:0.5rem;">
+                <span style="font-size:1.8rem;">💳</span>
+                <span style="font-weight:800;color:var(--text-heading);font-size:0.9rem;">السلف</span>
+              </a>
+              <a href="/hr/deductions" class="op-shell-card" style="padding:1.4rem 1rem;text-align:center;text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:0.5rem;">
+                <span style="font-size:1.8rem;">📉</span>
+                <span style="font-weight:800;color:var(--text-heading);font-size:0.9rem;">الاستقطاعات</span>
+              </a>
+              <a href="/hr/allowances" class="op-shell-card" style="padding:1.4rem 1rem;text-align:center;text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:0.5rem;">
+                <span style="font-size:1.8rem;">🎁</span>
+                <span style="font-weight:800;color:var(--text-heading);font-size:0.9rem;">البدلات</span>
+              </a>
+              <a href="/hr/commissions" class="op-shell-card" style="padding:1.4rem 1rem;text-align:center;text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:0.5rem;">
+                <span style="font-size:1.8rem;">📈</span>
+                <span style="font-weight:800;color:var(--text-heading);font-size:0.9rem;">العمولات</span>
+              </a>
+              <a href="/hr/leaves" class="op-shell-card" style="padding:1.4rem 1rem;text-align:center;text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:0.5rem;">
+                <span style="font-size:1.8rem;">🏖</span>
+                <span style="font-weight:800;color:var(--text-heading);font-size:0.9rem;">الإجازات</span>
+              </a>
+              <a href="/hr/attendance" class="op-shell-card" style="padding:1.4rem 1rem;text-align:center;text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:0.5rem;">
+                <span style="font-size:1.8rem;">⏰</span>
+                <span style="font-weight:800;color:var(--text-heading);font-size:0.9rem;">الحضور</span>
+              </a>
+              <a href="/hr/contracts" class="op-shell-card" style="padding:1.4rem 1rem;text-align:center;text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:0.5rem;">
+                <span style="font-size:1.8rem;">📄</span>
+                <span style="font-weight:800;color:var(--text-heading);font-size:0.9rem;">العقود</span>
+              </a>
+              <a href="/hr/alerts" class="op-shell-card" style="padding:1.4rem 1rem;text-align:center;text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:0.5rem;">
+                <span style="font-size:1.8rem;">📁</span>
+                <span style="font-weight:800;color:var(--text-heading);font-size:0.9rem;">الوثائق</span>
+              </a>
+              <a href="/hr/alerts" class="op-shell-card" style="padding:1.4rem 1rem;text-align:center;text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:0.5rem;">
+                <span style="font-size:1.8rem;">⚠️</span>
+                <span style="font-weight:800;color:var(--text-heading);font-size:0.9rem;">التنبيهات</span>
+              </a>
+              <a href="/hr/reports" class="op-shell-card" style="padding:1.4rem 1rem;text-align:center;text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:0.5rem;">
+                <span style="font-size:1.8rem;">📊</span>
+                <span style="font-weight:800;color:var(--text-heading);font-size:0.9rem;">التقارير</span>
+              </a>
             </div>
+            <a href="/hr/settings" class="op-btn-chip" style="padding:8px 16px;font-size:0.82rem;">⚙️ إعدادات الموارد البشرية</a>
+          </div>
+
+          <div class="op-shell-card" style="padding:1.1rem;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+              <h3 style="font-weight:800;">🔔 التنبيهات</h3>
+              <a href="/hr/alerts" style="font-size:0.78rem;color:var(--gold-soft);font-weight:800;text-decoration:none;">عرض الكل →</a>
+            </div>
+            <div id="feedWrap" style="display:flex;flex-direction:column;gap:8px;max-height:420px;overflow:auto;"></div>
+            <div id="feedEmpty" style="display:none;padding:1rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد تنبيهات حالياً 🎉</div>
           </div>
         </div>
       </main>
@@ -540,73 +551,44 @@
     </script>
     <script>
 
-        var _hubEmployees = [];
+        var SEV_META = {
+          critical: {color:"#dc2626", bg:"rgba(220,38,38,0.12)", icon:"🔴"},
+          high: {color:"#f97316", bg:"rgba(249,115,22,0.12)", icon:"🟠"},
+          medium: {color:"#eab308", bg:"rgba(234,179,8,0.12)", icon:"🟡"},
+          notice: {color:"#22c55e", bg:"rgba(34,197,94,0.12)", icon:"🟢"}
+        };
 
-        async function loadHubSummary() {
+        async function loadStats() {
           try {
-            var s = await apiGet("/api/hr/documents/dashboard-summary");
-            document.getElementById("cardResidencyVal").textContent = s.residency_expiring_soon || 0;
-            document.getElementById("cardPassportVal").textContent = s.passports_expired || 0;
-            document.getElementById("cardWorkLicenseVal").textContent = s.work_licenses_expiring_soon || 0;
-            document.getElementById("cardContractsVal").textContent = s.contracts_expiring_soon || 0;
-            document.getElementById("cardNeedsUpdateVal").textContent = s.documents_need_update || 0;
+            var s = await apiGet("/api/hr/dashboard-summary");
+            document.getElementById("stEmployees").textContent = s.employees_count;
+            document.getElementById("stPayroll").textContent = (s.total_this_month || 0).toLocaleString();
+            document.getElementById("stAdvances").textContent = s.advances_active;
+            document.getElementById("stLeaves").textContent = s.leaves_pending;
+            document.getElementById("stResidency").textContent = s.residency_expired_count;
+            document.getElementById("stContracts").textContent = s.contracts_expiring_count;
+            document.getElementById("stAbsent").textContent = s.absent_today;
           } catch (e) {}
         }
 
-        function renderHubEmpRow(e) {
-          var tr = document.createElement("tr");
-          tr.innerHTML =
-            '<td style="font-weight:800;">' + e.name + '</td>' +
-            '<td>' + (e.position || "—") + '</td>' +
-            '<td>' + (e.department || "—") + '</td>' +
-            '<td>' + (e.branch_name || "—") + '</td>' +
-            '<td>' + (e.is_active ? "🟢 نشط" : "⚪ موقوف") + '</td>' +
-            '<td><a href="/hr/employee?id=' + encodeURIComponent(e.id) + '" class="op-btn-chip" style="padding:5px 12px;font-size:0.78rem;">عرض الملف</a></td>';
-          return tr;
-        }
-
-        function renderHubEmpList() {
-          var q = (document.getElementById("hubSearch").value || "").trim().toLowerCase();
-          var body = document.getElementById("hubEmpBody");
-          body.innerHTML = "";
-          var filtered = _hubEmployees.filter(function (e) { return !q || (e.name || "").toLowerCase().indexOf(q) !== -1; });
-          filtered.forEach(function (e) { body.appendChild(renderHubEmpRow(e)); });
-          document.getElementById("hubEmpEmpty").style.display = filtered.length ? "none" : "block";
-        }
-
-        async function loadHubEmployees() {
+        async function loadFeed() {
           try {
-            var res = await apiGet("/api/hr/employees");
-            _hubEmployees = res.items || [];
-            renderHubEmpList();
-          } catch (e) { showToast(e.message || "تعذر تحميل الموظفين", "#dc2626"); }
-        }
-
-        document.getElementById("hubSearch").addEventListener("input", renderHubEmpList);
-        document.getElementById("hubAddEmpBtn").addEventListener("click", function () {
-          ["hubEmpName","hubEmpPosition","hubEmpDepartment","hubEmpBranch"].forEach(function(id){ document.getElementById(id).value = ""; });
-          document.getElementById("hubEmpModal").style.display = "flex";
-        });
-        document.getElementById("hubEmpModalClose").addEventListener("click", function () { document.getElementById("hubEmpModal").style.display = "none"; });
-        document.getElementById("hubEmpModalCancel").addEventListener("click", function () { document.getElementById("hubEmpModal").style.display = "none"; });
-        document.getElementById("hubEmpModalSave").addEventListener("click", async function () {
-          var name = document.getElementById("hubEmpName").value.trim();
-          if (!name) { showToast("اكتب اسم الموظف", "#dc2626"); return; }
-          try {
-            await apiPostJson("/api/hr/employees", {
-              name: name,
-              position: document.getElementById("hubEmpPosition").value || "",
-              department: document.getElementById("hubEmpDepartment").value || "",
-              branch_name: document.getElementById("hubEmpBranch").value || ""
+            var res = await apiGet("/api/hr/alerts/feed");
+            var items = (res.items || []).slice(0, 12);
+            var wrap = document.getElementById("feedWrap");
+            wrap.innerHTML = "";
+            items.forEach(function (it) {
+              var m = SEV_META[it.severity] || SEV_META.notice;
+              var card = document.createElement("div");
+              card.style.cssText = "padding:0.6rem 0.75rem;border-radius:10px;display:flex;align-items:center;gap:8px;background:" + m.bg + ";border-inline-start:3px solid " + m.color + ";font-size:0.82rem;";
+              card.innerHTML = "<span>" + m.icon + "</span><span style='font-weight:700;'>" + it.message + "</span>";
+              wrap.appendChild(card);
             });
-            showToast("تمت إضافة الموظف ✔️", "#22c55e");
-            document.getElementById("hubEmpModal").style.display = "none";
-            await loadHubEmployees();
-          } catch (e) { showToast(e.message || "تعذر إضافة الموظف", "#dc2626"); }
-        });
-        document.getElementById("hubEmpModal").addEventListener("click", function (ev) { if (ev.target === this) this.style.display = "none"; });
+            document.getElementById("feedEmpty").style.display = items.length ? "none" : "block";
+          } catch (e) {}
+        }
 
-        (async function () { await Promise.all([loadHubSummary(), loadHubEmployees()]); })();
+        (async function () { await Promise.all([loadStats(), loadFeed()]); })();
     </script>
 
   </body>

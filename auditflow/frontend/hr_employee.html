@@ -436,78 +436,135 @@
       </header>
 
       <main class="op-main">
-        <div class="hr-nav" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-radius:14px;background:linear-gradient(90deg, rgba(180,140,60,0.14), rgba(180,140,60,0.03));border:1px solid var(--gold-dim);margin-bottom:14px;">
-          <span style="font-weight:800;color:var(--gold-soft);">👥 الموارد البشرية</span>
-          <a href="/hr" style="padding:7px 14px;border-radius:999px;font-weight:800;font-size:0.85rem;border:1px solid var(--gold-dim);color:var(--text-heading);">🏠 الرئيسية</a>
-          <a href="/hr/payroll" style="padding:7px 14px;border-radius:999px;font-weight:800;font-size:0.85rem;border:1px solid var(--gold-dim);color:var(--text-heading);">💰 الرواتب</a>
-          <a href="/hr/alerts" style="padding:7px 14px;border-radius:999px;font-weight:800;font-size:0.85rem;border:1px solid var(--gold-dim);color:var(--text-heading);">🔔 التنبيهات والوثائق</a>
-        </div>
         <div class="op-content-panel">
-          <div style="margin-bottom:0.75rem;">
-            <a href="/hr" style="font-weight:800;color:var(--gold-soft);text-decoration:none;">→ رجوع لقائمة الموظفين</a>
-          </div>
-          <div class="op-hero" style="margin-bottom:1.25rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+        <div style="margin-bottom:0.6rem;">
+          <a href="/hr/employees" style="font-weight:800;color:var(--gold-soft);text-decoration:none;font-size:0.85rem;">→ رجوع لقائمة الموظفين</a>
+        </div>
+        <div class="op-hero" style="margin-bottom:1.1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+          <div style="display:flex;align-items:center;gap:1rem;">
+            <img id="empPhoto" src="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;display:none;border:2px solid var(--gold-dim);" />
             <div>
-              <h1>👤 <b id="empHeaderName">—</b></h1>
+              <h1><b id="empHeaderName">—</b> <span id="empHeaderNumber" style="font-size:0.75rem;color:var(--text-muted);"></span></h1>
               <p id="empHeaderSub">—</p>
             </div>
-            <span id="empHeaderStatus" style="padding:6px 14px;border-radius:999px;font-weight:800;font-size:0.8rem;"></span>
           </div>
+          <span id="empHeaderStatus" style="padding:6px 14px;border-radius:999px;font-weight:800;font-size:0.8rem;"></span>
+        </div>
 
-          <div class="fin-nav" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;border-radius:14px;background:var(--surface-soft);border:1px solid var(--gold-dim);margin-bottom:14px;">
-            <button type="button" class="op-tab-btn" data-tab="basic">البيانات الأساسية</button>
-            <button type="button" class="op-tab-btn" data-tab="salary">الراتب</button>
-            <button type="button" class="op-tab-btn" data-tab="attendance">الحضور والانصراف</button>
-            <button type="button" class="op-tab-btn" data-tab="contracts">العقود</button>
-            <button type="button" class="op-tab-btn" data-tab="docs">الوثائق الرسمية والتنبيهات</button>
-            <button type="button" class="op-tab-btn" data-tab="files">المستندات</button>
-            <button type="button" class="op-tab-btn" data-tab="activity">سجل النشاط</button>
-          </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;border-radius:14px;background:var(--surface-soft);border:1px solid var(--gold-dim);margin-bottom:14px;">
+          <button type="button" class="op-tab-btn" data-tab="basic">📄 البيانات الأساسية</button>
+          <button type="button" class="op-tab-btn" data-tab="payroll">💰 الرواتب</button>
+          <button type="button" class="op-tab-btn" data-tab="advances">💳 السلف</button>
+          <button type="button" class="op-tab-btn" data-tab="deductions">📉 الاستقطاعات</button>
+          <button type="button" class="op-tab-btn" data-tab="allowances">🎁 البدلات</button>
+          <button type="button" class="op-tab-btn" data-tab="commissions">📈 العمولات</button>
+          <button type="button" class="op-tab-btn" data-tab="leaves">🏖 الإجازات</button>
+          <button type="button" class="op-tab-btn" data-tab="attendance">⏰ الحضور</button>
+          <button type="button" class="op-tab-btn" data-tab="docs">📁 الوثائق</button>
+          <button type="button" class="op-tab-btn" data-tab="contract">📑 العقد</button>
+          <button type="button" class="op-tab-btn" data-tab="alerts">⚠️ التنبيهات</button>
+          <button type="button" class="op-tab-btn" data-tab="reports">📊 التقارير</button>
+          <button type="button" class="op-tab-btn" data-tab="eos">🔚 نهاية الخدمة</button>
+        </div>
 
-          <!-- تبويب: البيانات الأساسية -->
           <div class="op-tab-panel" id="tab-basic">
-            <div class="op-shell-card" style="padding:1.25rem;max-width:640px;">
-              <div class="op-tool-field"><label>اسم الموظف</label><input type="text" id="basicName" /></div>
-              <div class="op-tool-field"><label>الوظيفة</label><input type="text" id="basicPosition" /></div>
-              <div class="op-tool-field"><label>القسم</label><input type="text" id="basicDepartment" /></div>
-              <div class="op-tool-field"><label>الفرع</label><input type="text" id="basicBranch" /></div>
-              <div class="op-tool-field"><label>ملاحظات</label><input type="text" id="basicNotes" /></div>
-              <div class="op-tool-field" style="display:flex;align-items:center;gap:8px;">
-                <input type="checkbox" id="basicActive" style="width:auto;" />
-                <label style="margin:0;">موظف نشط</label>
+            <div class="op-shell-card" style="padding:1.25rem;max-width:760px;">
+              <div class="op-tool-field"><label>صورة الموظف</label><input type="file" id="basicPhoto" accept=".png,.jpg,.jpeg,.webp" /></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 1rem;">
+                <div class="op-tool-field"><label>الاسم</label><input type="text" id="basicName" /></div>
+                <div class="op-tool-field"><label>الجنسية</label><input type="text" id="basicNationality" /></div>
+                <div class="op-tool-field"><label>رقم الهوية / الإقامة</label><input type="text" id="basicNationalId" /></div>
+                <div class="op-tool-field"><label>تاريخ انتهاء الإقامة</label><input type="date" id="basicResidencyExpiry" /></div>
+                <div class="op-tool-field"><label>رقم الجواز</label><input type="text" id="basicPassportNumber" /></div>
+                <div class="op-tool-field"><label>تاريخ انتهاء الجواز</label><input type="date" id="basicPassportExpiry" /></div>
+                <div class="op-tool-field"><label>الوظيفة</label><input type="text" id="basicPosition" /></div>
+                <div class="op-tool-field"><label>القسم</label><input type="text" id="basicDepartment" /></div>
+                <div class="op-tool-field"><label>الفرع</label><input type="text" id="basicBranch" /></div>
+                <div class="op-tool-field"><label>الراتب الأساسي</label><input type="number" id="basicBasicSalary" step="0.01" /></div>
+                <div class="op-tool-field"><label>نسبة العمولة %</label><input type="number" id="basicCommissionPct" step="0.01" /></div>
+                <div class="op-tool-field"><label>تاريخ التعيين</label><input type="date" id="basicHireDate" /></div>
+                <div class="op-tool-field"><label>تاريخ الميلاد</label><input type="date" id="basicBirthDate" /></div>
+                <div class="op-tool-field"><label>رقم الجوال</label><input type="text" id="basicPhone" /></div>
+                <div class="op-tool-field"><label>البريد الإلكتروني</label><input type="email" id="basicEmail" /></div>
+                <div class="op-tool-field">
+                  <label>الحالة</label>
+                  <select id="basicStatus">
+                    <option value="active">نشط</option><option value="on_leave">إجازة</option><option value="suspended">موقوف</option>
+                    <option value="resigned">مستقيل</option><option value="terminated">منتهي الخدمة</option>
+                  </select>
+                </div>
               </div>
+              <div class="op-tool-field"><label>ملاحظات</label><input type="text" id="basicNotes" /></div>
               <button type="button" class="op-btn-chip op-btn-chip--gold" id="basicSaveBtn">حفظ التعديلات</button>
             </div>
           </div>
 
-          <!-- تبويب: الراتب -->
-          <div class="op-tab-panel" id="tab-salary" style="display:none;">
+          <div class="op-tab-panel" id="tab-payroll" style="display:none;">
+            <div style="display:flex;justify-content:flex-end;margin-bottom:0.75rem;">
+              <a href="/hr/payroll" class="op-btn-chip op-btn-chip--gold" style="padding:6px 14px;font-size:0.8rem;">إدارة الرواتب →</a>
+            </div>
             <div class="op-shell-card" style="padding:0;overflow:auto;">
               <table class="op-admin-table" style="width:100%;">
                 <thead><tr><th>الشهر</th><th>السنة</th><th>الأساسي</th><th>البدلات</th><th>الاستقطاعات</th><th>الصافي</th><th>الحالة</th></tr></thead>
-                <tbody id="salaryBody"></tbody>
+                <tbody id="payrollBody"></tbody>
               </table>
-              <div id="salaryEmpty" style="display:none;padding:2rem;text-align:center;color:var(--text-muted);font-weight:700;">لا يوجد سجل رواتب لهذا الموظف — <a href="/hr/payroll" style="color:var(--gold-soft);">إنشاء راتب من هنا</a></div>
+              <div id="payrollEmpty" style="display:none;padding:1.5rem;text-align:center;color:var(--text-muted);font-weight:700;">لا يوجد سجل رواتب لهذا الموظف</div>
             </div>
           </div>
-
-          <!-- تبويب: الحضور والانصراف -->
+          <div class="op-tab-panel" id="tab-advances" style="display:none;">
+            <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:end;margin-bottom:0.9rem;" id="advancesAddRow">
+<div class="op-tool-field" style="margin-bottom:0;"><label>المبلغ</label><input type="number" id="advAmount" step="0.01" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>السبب</label><input type="text" id="advReason"  /></div><div class="op-tool-field" style="margin-bottom:0;"><label>عدد الأقساط</label><input type="number" id="advInstallments" value="1" min="1" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>التاريخ</label><input type="date" id="advDate"  /></div><button type="button" class="op-btn-chip op-btn-chip--gold" id="advAddBtn" style="height:38px;">إضافة</button>
+            </div>
+            <div class="op-shell-card" style="padding:0;overflow:auto;">
+              <table class="op-admin-table" style="width:100%;" id="advancesTable"></table>
+              <div id="advancesEmpty" style="display:none;padding:1.5rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد سجلات بعد</div>
+            </div>
+          </div>
+          <div class="op-tab-panel" id="tab-deductions" style="display:none;">
+            <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:end;margin-bottom:0.9rem;" id="deductionsAddRow">
+<div class="op-tool-field" style="margin-bottom:0;"><label>النوع</label><input type="text" id="dedType" list="dedTypesEmp" /><datalist id="dedTypesEmp"><option value="غياب"></option><option value="تأخير"></option><option value="جزاء"></option><option value="مخالفة"></option></datalist></div><div class="op-tool-field" style="margin-bottom:0;"><label>القيمة</label><input type="number" id="dedAmount" step="0.01" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>السبب</label><input type="text" id="dedReason"  /></div><div class="op-tool-field" style="margin-bottom:0;"><label>التاريخ</label><input type="date" id="dedDate"  /></div><button type="button" class="op-btn-chip op-btn-chip--gold" id="dedAddBtn" style="height:38px;">إضافة</button>
+            </div>
+            <div class="op-shell-card" style="padding:0;overflow:auto;">
+              <table class="op-admin-table" style="width:100%;" id="deductionsTable"></table>
+              <div id="deductionsEmpty" style="display:none;padding:1.5rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد سجلات بعد</div>
+            </div>
+          </div>
+          <div class="op-tab-panel" id="tab-allowances" style="display:none;">
+            <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:end;margin-bottom:0.9rem;" id="allowancesAddRow">
+<div class="op-tool-field" style="margin-bottom:0;"><label>النوع</label><input type="text" id="allowType" list="allowTypesEmp" /><datalist id="allowTypesEmp"><option value="بدل سكن"></option><option value="بدل نقل"></option><option value="بدل هاتف"></option><option value="بدل معيشة"></option><option value="بدل خطر"></option><option value="بدل إضافي"></option></datalist></div><div class="op-tool-field" style="margin-bottom:0;"><label>القيمة</label><input type="number" id="allowAmount" step="0.01" /></div><div class="op-tool-field" style="margin-bottom:0;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="allowRecurring" style="width:auto;" checked /><label style="margin:0;">متكرر شهرياً</label></div><div class="op-tool-field" style="margin-bottom:0;"><label>التاريخ</label><input type="date" id="allowDate"  /></div><button type="button" class="op-btn-chip op-btn-chip--gold" id="allowAddBtn" style="height:38px;">إضافة</button>
+            </div>
+            <div class="op-shell-card" style="padding:0;overflow:auto;">
+              <table class="op-admin-table" style="width:100%;" id="allowancesTable"></table>
+              <div id="allowancesEmpty" style="display:none;padding:1.5rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد سجلات بعد</div>
+            </div>
+          </div>
+          <div class="op-tab-panel" id="tab-commissions" style="display:none;">
+            <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:end;margin-bottom:0.9rem;" id="commissionsAddRow">
+<div class="op-tool-field" style="margin-bottom:0;"><label>المبيعات</label><input type="number" id="commSales" step="0.01" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>النسبة % (اختياري)</label><input type="number" id="commPct" step="0.01" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>التاريخ</label><input type="date" id="commDate"  /></div><button type="button" class="op-btn-chip op-btn-chip--gold" id="commAddBtn" style="height:38px;">إضافة</button>
+            </div>
+            <div class="op-shell-card" style="padding:0;overflow:auto;">
+              <table class="op-admin-table" style="width:100%;" id="commissionsTable"></table>
+              <div id="commissionsEmpty" style="display:none;padding:1.5rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد سجلات بعد</div>
+            </div>
+          </div>
+          <div class="op-tab-panel" id="tab-leaves" style="display:none;">
+            <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:end;margin-bottom:0.9rem;" id="leavesAddRow">
+<div class="op-tool-field" style="margin-bottom:0;"><label>النوع</label><input type="text" id="leaveType"  /></div><div class="op-tool-field" style="margin-bottom:0;"><label>من</label><input type="date" id="leaveStart"  /></div><div class="op-tool-field" style="margin-bottom:0;"><label>إلى</label><input type="date" id="leaveEnd"  /></div><div class="op-tool-field" style="margin-bottom:0;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="leavePaid" style="width:auto;" checked /><label style="margin:0;">مدفوعة</label></div><button type="button" class="op-btn-chip op-btn-chip--gold" id="leaveAddBtn" style="height:38px;">إرسال الطلب</button>
+            </div>
+            <div class="op-shell-card" style="padding:0;overflow:auto;">
+              <table class="op-admin-table" style="width:100%;" id="leavesTable"></table>
+              <div id="leavesEmpty" style="display:none;padding:1.5rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد سجلات بعد</div>
+            </div>
+          </div>
           <div class="op-tab-panel" id="tab-attendance" style="display:none;">
-            <div class="op-shell-card" style="padding:2rem;text-align:center;">
-              <span class="simple-inv-oos-badge">قيد التطوير 🚧</span>
-              <p style="margin-top:0.75rem;color:var(--text-muted);">نظام الحضور والانصراف غير مُفعّل بعد في هذا الإصدار.</p>
+            <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:end;margin-bottom:0.9rem;" id="attendanceAddRow">
+<div class="op-tool-field" style="margin-bottom:0;"><label>التاريخ</label><input type="date" id="attDate"  /></div><div class="op-tool-field" style="margin-bottom:0;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="attAbsent" style="width:auto;" /><label style="margin:0;">غياب</label></div><div class="op-tool-field" style="margin-bottom:0;"><label>الدخول</label><input type="time" id="attCheckIn"  /></div><div class="op-tool-field" style="margin-bottom:0;"><label>الخروج</label><input type="time" id="attCheckOut"  /></div><div class="op-tool-field" style="margin-bottom:0;"><label>تأخير(د)</label><input type="number" id="attLate" value="0" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>إضافي(د)</label><input type="number" id="attOvertime" value="0" /></div><button type="button" class="op-btn-chip op-btn-chip--gold" id="attAddBtn" style="height:38px;">إضافة</button>
+            </div>
+            <div class="op-shell-card" style="padding:0;overflow:auto;">
+              <table class="op-admin-table" style="width:100%;" id="attendanceTable"></table>
+              <div id="attendanceEmpty" style="display:none;padding:1.5rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد سجلات بعد</div>
             </div>
           </div>
-
-          <!-- تبويب: العقود -->
-          <div class="op-tab-panel" id="tab-contracts" style="display:none;">
-            <div class="op-shell-card" style="padding:2rem;text-align:center;">
-              <span class="simple-inv-oos-badge">قيد التطوير 🚧</span>
-              <p style="margin-top:0.75rem;color:var(--text-muted);">إدارة العقود غير مُفعّلة بعد في هذا الإصدار.</p>
-            </div>
-          </div>
-
-          <!-- تبويب: الوثائق الرسمية والتنبيهات -->
           <div class="op-tab-panel" id="tab-docs" style="display:none;">
             <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:0.9rem;margin-bottom:1.1rem;">
               <div class="op-shell-card" style="padding:1rem;text-align:start;"><div style="font-size:0.75rem;color:var(--text-muted);font-weight:800;">الإجمالي</div><div id="docStatTotal" style="font-size:1.5rem;font-weight:800;">0</div></div>
@@ -528,19 +585,40 @@
             </div>
           </div>
 
-          <!-- تبويب: المستندات -->
-          <div class="op-tab-panel" id="tab-files" style="display:none;">
-            <div class="op-shell-card" style="padding:2rem;text-align:center;">
-              <span class="simple-inv-oos-badge">قيد التطوير 🚧</span>
-              <p style="margin-top:0.75rem;color:var(--text-muted);">أرشيف المستندات العامة (غير الرسمية) غير مُفعّل بعد.</p>
+          <div class="op-tab-panel" id="tab-contract" style="display:none;">
+            <div style="display:flex;justify-content:flex-end;margin-bottom:0.75rem;">
+              <a href="/hr/contracts" class="op-btn-chip op-btn-chip--gold" style="padding:6px 14px;font-size:0.8rem;">إدارة العقود →</a>
+            </div>
+            <div id="contractCard"></div>
+          </div>
+
+          <div class="op-tab-panel" id="tab-alerts" style="display:none;">
+            <div id="empAlertsWrap" style="display:flex;flex-direction:column;gap:8px;"></div>
+            <div id="empAlertsEmpty" style="display:none;padding:1.5rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد تنبيهات لهذا الموظف 🎉</div>
+          </div>
+
+          <div class="op-tab-panel" id="tab-reports" style="display:none;">
+            <div class="op-shell-card" style="padding:1.5rem;text-align:center;">
+              <p style="margin-bottom:1rem;">لعرض تقارير مفصّلة (رواتب، حضور، إجازات...) لهذا الموظف، استخدم صفحة التقارير العامة.</p>
+              <a href="/hr/reports" class="op-btn-chip op-btn-chip--gold" style="padding:8px 18px;">الذهاب إلى التقارير →</a>
             </div>
           </div>
 
-          <!-- تبويب: سجل النشاط -->
-          <div class="op-tab-panel" id="tab-activity" style="display:none;">
-            <div class="op-shell-card" style="padding:2rem;text-align:center;">
-              <span class="simple-inv-oos-badge">قيد التطوير 🚧</span>
-              <p style="margin-top:0.75rem;color:var(--text-muted);">سجل نشاط خاص بالموظف غير مُفعّل بعد.</p>
+          <div class="op-tab-panel" id="tab-eos" style="display:none;">
+            <div id="eosExisting" style="display:none;"></div>
+            <div class="op-shell-card" id="eosForm" style="padding:1.25rem;max-width:520px;">
+              <h3 style="font-weight:800;margin-bottom:0.9rem;">إنهاء خدمة الموظف</h3>
+              <div class="op-tool-field"><label>تاريخ نهاية الخدمة</label><input type="date" id="eosEndDate" /></div>
+              <div class="op-tool-field">
+                <label>السبب</label>
+                <select id="eosReason">
+                  <option value="resigned">مستقيل</option><option value="terminated">مفصول</option>
+                  <option value="contract_end">انتهاء عقد</option><option value="retirement">تقاعد</option>
+                </select>
+              </div>
+              <button type="button" class="op-tool-btn-secondary" id="eosPreviewBtn">حساب المستحقات</button>
+              <div id="eosPreviewBody" style="margin-top:1rem;"></div>
+              <button type="button" class="op-btn-chip op-btn-chip--gold" id="eosConfirmBtn" style="display:none;margin-top:1rem;">تأكيد إنهاء الخدمة وطباعة المخالصة</button>
             </div>
           </div>
         </div>
@@ -636,7 +714,290 @@
         var _editingDocId = null;
         var _renewDocId = null;
         var _historyDocId = null;
+        var MONTHS = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+        var STATUS_LABELS = {active:"🟢 نشط", on_leave:"🟡 إجازة", suspended:"🟠 موقوف", resigned:"⚪ مستقيل", terminated:"🔴 منتهي الخدمة"};
 
+        var _loadedTabs = {};
+        function switchTab(key) {
+          document.querySelectorAll(".op-tab-btn").forEach(function (b) {
+            b.classList.toggle("op-tab-btn--active", b.getAttribute("data-tab") === key);
+          });
+          ["basic","payroll","advances","deductions","allowances","commissions","leaves","attendance","docs","contract","alerts","reports","eos"].forEach(function (k) {
+            var el = document.getElementById("tab-" + k);
+            if (el) el.style.display = (k === key) ? "" : "none";
+          });
+          if (_loadedTabs[key]) return;
+          _loadedTabs[key] = true;
+          if (key === "payroll") loadPayrollTab();
+          if (key === "advances") loadAdvancesTab();
+          if (key === "deductions") loadDeductionsTab();
+          if (key === "allowances") loadAllowancesTab();
+          if (key === "commissions") loadCommissionsTab();
+          if (key === "leaves") loadLeavesTab();
+          if (key === "attendance") loadAttendanceTab();
+          if (key === "docs") loadDocsTab();
+          if (key === "contract") loadContractTab();
+          if (key === "alerts") loadAlertsTab();
+        }
+        document.querySelectorAll(".op-tab-btn").forEach(function (b) {
+          b.addEventListener("click", function () { switchTab(b.getAttribute("data-tab")); });
+        });
+
+        async function loadEmployeeHeader() {
+          if (!_empId) { showToast("لم يتم تحديد الموظف", "#dc2626"); return; }
+          try {
+            var e = await apiGet("/api/hr/employees/" + encodeURIComponent(_empId));
+            document.getElementById("empHeaderName").textContent = e.name;
+            document.getElementById("empHeaderNumber").textContent = e.employee_number;
+            document.getElementById("empHeaderSub").textContent = [e.position, e.department, e.branch_name].filter(Boolean).join(" • ") || "—";
+            var st = document.getElementById("empHeaderStatus");
+            st.textContent = STATUS_LABELS[e.status] || e.status;
+            if (e.photo_url) { var img = document.getElementById("empPhoto"); img.src = e.photo_url; img.style.display = "inline-block"; }
+            document.getElementById("basicName").value = e.name || "";
+            document.getElementById("basicNationality").value = e.nationality || "";
+            document.getElementById("basicNationalId").value = e.national_id || "";
+            document.getElementById("basicResidencyExpiry").value = e.residency_expiry || "";
+            document.getElementById("basicPassportNumber").value = e.passport_number || "";
+            document.getElementById("basicPassportExpiry").value = e.passport_expiry || "";
+            document.getElementById("basicPosition").value = e.position || "";
+            document.getElementById("basicDepartment").value = e.department || "";
+            document.getElementById("basicBranch").value = e.branch_name || "";
+            document.getElementById("basicBasicSalary").value = e.basic_salary || 0;
+            document.getElementById("basicCommissionPct").value = e.commission_percentage != null ? e.commission_percentage : "";
+            document.getElementById("basicHireDate").value = e.hire_date || "";
+            document.getElementById("basicBirthDate").value = e.birth_date || "";
+            document.getElementById("basicPhone").value = e.phone || "";
+            document.getElementById("basicEmail").value = e.email || "";
+            document.getElementById("basicStatus").value = e.status || "active";
+            document.getElementById("basicNotes").value = e.notes || "";
+          } catch (e) { showToast(e.message || "تعذر تحميل بيانات الموظف", "#dc2626"); }
+        }
+
+        document.getElementById("basicSaveBtn").addEventListener("click", async function () {
+          try {
+            await apiPatchJson("/api/hr/employees/" + encodeURIComponent(_empId), {
+              name: document.getElementById("basicName").value.trim(),
+              nationality: document.getElementById("basicNationality").value,
+              national_id: document.getElementById("basicNationalId").value,
+              residency_expiry: document.getElementById("basicResidencyExpiry").value,
+              passport_number: document.getElementById("basicPassportNumber").value,
+              passport_expiry: document.getElementById("basicPassportExpiry").value,
+              position: document.getElementById("basicPosition").value,
+              department: document.getElementById("basicDepartment").value,
+              branch_name: document.getElementById("basicBranch").value,
+              basic_salary: parseFloat(document.getElementById("basicBasicSalary").value || "0"),
+              commission_percentage: document.getElementById("basicCommissionPct").value ? parseFloat(document.getElementById("basicCommissionPct").value) : null,
+              hire_date: document.getElementById("basicHireDate").value,
+              birth_date: document.getElementById("basicBirthDate").value,
+              phone: document.getElementById("basicPhone").value,
+              email: document.getElementById("basicEmail").value,
+              status: document.getElementById("basicStatus").value,
+              notes: document.getElementById("basicNotes").value
+            });
+            showToast("تم حفظ البيانات ✔️", "#22c55e");
+            await loadEmployeeHeader();
+          } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
+        });
+
+        document.getElementById("basicPhoto").addEventListener("change", async function () {
+          var f = this.files[0];
+          if (!f) return;
+          try {
+            var fd = new FormData();
+            fd.append("file", f);
+            var res = await apiPostForm("/api/hr/employees/" + encodeURIComponent(_empId) + "/photo", fd);
+            var img = document.getElementById("empPhoto");
+            img.src = res.photo_url; img.style.display = "inline-block";
+            showToast("تم رفع الصورة ✔️", "#22c55e");
+          } catch (e) { showToast(e.message || "تعذر رفع الصورة", "#dc2626"); }
+        });
+
+        async function loadPayrollTab() {
+          try {
+            var res = await apiGet("/api/hr/payrolls?employee_id=" + encodeURIComponent(_empId));
+            var items = res.items || [];
+            var body = document.getElementById("payrollBody");
+            body.innerHTML = "";
+            var statusMap = {unpaid:"🟡 غير مدفوع", paid:"🟢 مدفوع", cancelled:"⚪ ملغى"};
+            items.forEach(function (p) {
+              var tr = document.createElement("tr");
+              tr.innerHTML = "<td>" + MONTHS[p.month-1] + "</td><td>" + p.year + "</td><td>" + p.base_salary.toLocaleString() + "</td>" +
+                "<td>" + p.total_allowances.toLocaleString() + "</td><td>" + p.total_deductions.toLocaleString() + "</td>" +
+                "<td style='font-weight:800;'>" + p.net_salary.toLocaleString() + "</td><td>" + (statusMap[p.status] || p.status) + "</td>";
+              body.appendChild(tr);
+            });
+            document.getElementById("payrollEmpty").style.display = items.length ? "none" : "block";
+          } catch (e) { showToast(e.message || "تعذر التحميل", "#dc2626"); }
+        }
+
+        async function loadAdvTab() {
+          try {
+            var res = await apiGet("/api/hr/advances?employee_id=" + encodeURIComponent(_empId));
+            var items = res.items || [];
+            var table = document.getElementById("advTable");
+            table.innerHTML = "<thead><tr><th>التاريخ</th><th>المبلغ</th><th>السبب</th><th>الأقساط</th><th>المتبقي</th><th>الحالة</th></tr></thead><tbody></tbody>";
+            var body = table.querySelector("tbody");
+            items.forEach(function (x) {
+              var tr = document.createElement("tr");
+              tr.innerHTML = x.date + "</td><td>" + x.amount.toLocaleString() + "</td><td>" + (x.reason||"—") + "</td><td>" + x.installments_count + "</td><td>" + x.remaining_amount.toLocaleString() + "</td><td>" + ({active:"نشطة",completed:"مكتملة",cancelled:"ملغاة"}[x.status]||x.status);
+              body.appendChild(tr);
+            });
+            document.getElementById("advEmpty").style.display = items.length ? "none" : "block";
+          } catch (e) { showToast(e.message || "تعذر التحميل", "#dc2626"); }
+        }
+        document.getElementById("advAddBtn").addEventListener("click", async function () {
+          try {
+            await apiPostJson("/api/hr/advances", { employee_id: _empId, date: document.getElementById("advDate").value, amount: parseFloat(document.getElementById("advAmount").value || "0"), reason: document.getElementById("advReason").value, installments_count: parseInt(document.getElementById("advInstallments").value || "1", 10) });
+            showToast("تمت الإضافة ✔️", "#22c55e");
+            document.getElementById("advAmount").value=""; document.getElementById("advReason").value="";
+            await loadAdvTab();
+          } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
+        });
+
+        async function loadDedTab() {
+          try {
+            var res = await apiGet("/api/hr/deductions?employee_id=" + encodeURIComponent(_empId));
+            var items = res.items || [];
+            var table = document.getElementById("dedTable");
+            table.innerHTML = "<thead><tr><th>النوع</th><th>القيمة</th><th>السبب</th><th>التاريخ</th><th>الحالة</th></tr></thead><tbody></tbody>";
+            var body = table.querySelector("tbody");
+            items.forEach(function (x) {
+              var tr = document.createElement("tr");
+              tr.innerHTML = (x.deduction_type||"—") + "</td><td>" + x.amount.toLocaleString() + "</td><td>" + (x.reason||"—") + "</td><td>" + x.date + "</td><td>" + (x.applied?"مطبّق":"بالانتظار");
+              body.appendChild(tr);
+            });
+            document.getElementById("dedEmpty").style.display = items.length ? "none" : "block";
+          } catch (e) { showToast(e.message || "تعذر التحميل", "#dc2626"); }
+        }
+        document.getElementById("dedAddBtn").addEventListener("click", async function () {
+          try {
+            await apiPostJson("/api/hr/deductions", { employee_id: _empId, deduction_type: document.getElementById("dedType").value, amount: parseFloat(document.getElementById("dedAmount").value || "0"), reason: document.getElementById("dedReason").value, date: document.getElementById("dedDate").value });
+            showToast("تمت الإضافة ✔️", "#22c55e");
+            document.getElementById("dedType").value=""; document.getElementById("dedAmount").value=""; document.getElementById("dedReason").value="";
+            await loadDedTab();
+          } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
+        });
+
+        async function loadAllowTab() {
+          try {
+            var res = await apiGet("/api/hr/allowances?employee_id=" + encodeURIComponent(_empId));
+            var items = res.items || [];
+            var table = document.getElementById("allowTable");
+            table.innerHTML = "<thead><tr><th>النوع</th><th>القيمة</th><th>متكرر</th><th>التاريخ</th><th>الحالة</th></tr></thead><tbody></tbody>";
+            var body = table.querySelector("tbody");
+            items.forEach(function (x) {
+              var tr = document.createElement("tr");
+              tr.innerHTML = (x.allowance_type||"—") + "</td><td>" + x.amount.toLocaleString() + "</td><td>" + (x.recurring?"نعم":"لا") + "</td><td>" + x.date + "</td><td>" + (x.recurring?"نشط دائم":(x.applied?"مطبّق":"بالانتظار"));
+              body.appendChild(tr);
+            });
+            document.getElementById("allowEmpty").style.display = items.length ? "none" : "block";
+          } catch (e) { showToast(e.message || "تعذر التحميل", "#dc2626"); }
+        }
+        document.getElementById("allowAddBtn").addEventListener("click", async function () {
+          try {
+            await apiPostJson("/api/hr/allowances", { employee_id: _empId, allowance_type: document.getElementById("allowType").value, amount: parseFloat(document.getElementById("allowAmount").value || "0"), recurring: document.getElementById("allowRecurring").checked, date: document.getElementById("allowDate").value });
+            showToast("تمت الإضافة ✔️", "#22c55e");
+            document.getElementById("allowType").value=""; document.getElementById("allowAmount").value="";
+            await loadAllowTab();
+          } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
+        });
+
+        async function loadCommTab() {
+          try {
+            var res = await apiGet("/api/hr/commissions?employee_id=" + encodeURIComponent(_empId));
+            var items = res.items || [];
+            var table = document.getElementById("commTable");
+            table.innerHTML = "<thead><tr><th>المبيعات</th><th>النسبة %</th><th>قيمة العمولة</th><th>التاريخ</th><th>الحالة</th></tr></thead><tbody></tbody>";
+            var body = table.querySelector("tbody");
+            items.forEach(function (x) {
+              var tr = document.createElement("tr");
+              tr.innerHTML = x.sales_amount.toLocaleString() + "</td><td>" + x.percentage + "</td><td style='font-weight:800;'>" + x.commission_value.toLocaleString() + "</td><td>" + x.date + "</td><td>" + (x.applied?"مطبّقة":"بالانتظار");
+              body.appendChild(tr);
+            });
+            document.getElementById("commEmpty").style.display = items.length ? "none" : "block";
+          } catch (e) { showToast(e.message || "تعذر التحميل", "#dc2626"); }
+        }
+        document.getElementById("commAddBtn").addEventListener("click", async function () {
+          try {
+            await apiPostJson("/api/hr/commissions", { employee_id: _empId, sales_amount: parseFloat(document.getElementById("commSales").value || "0"), percentage: document.getElementById("commPct").value ? parseFloat(document.getElementById("commPct").value) : null, date: document.getElementById("commDate").value });
+            showToast("تمت الإضافة ✔️", "#22c55e");
+            document.getElementById("commSales").value=""; document.getElementById("commPct").value="";
+            await loadCommTab();
+          } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
+        });
+
+        async function loadLeavesTab() {
+          try {
+            var res = await apiGet("/api/hr/leaves?employee_id=" + encodeURIComponent(_empId));
+            var items = res.items || [];
+            var table = document.getElementById("leavesTable");
+            table.innerHTML = "<thead><tr><th>النوع</th><th>من</th><th>إلى</th><th>الأيام</th><th>مدفوعة؟</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody></tbody>";
+            var body = table.querySelector("tbody");
+            items.forEach(function (l) {
+              var tr = document.createElement("tr");
+              tr.innerHTML = "<td>" + (l.leave_type||"—") + "</td><td>" + l.start_date + "</td><td>" + l.end_date + "</td><td>" + l.days_count + "</td>" +
+                "<td>" + (l.paid ? "مدفوعة" : "غير مدفوعة") + "</td><td>" + l.status_label + "</td><td></td>";
+              if (l.status === "pending") {
+                var td = tr.lastElementChild;
+                var mkBtn = function (label, fn) {
+                  var b = document.createElement("button"); b.type = "button"; b.className = "op-tool-btn-secondary";
+                  b.style.cssText = "padding:3px 8px;font-size:0.72rem;margin-inline-end:4px;"; b.textContent = label; b.addEventListener("click", fn);
+                  return b;
+                };
+                td.appendChild(mkBtn("قبول", function () { decideLeave(l.id, "accepted"); }));
+                td.appendChild(mkBtn("رفض", function () { decideLeave(l.id, "rejected"); }));
+              }
+              body.appendChild(tr);
+            });
+            document.getElementById("leavesEmpty").style.display = items.length ? "none" : "block";
+          } catch (e) { showToast(e.message || "تعذر التحميل", "#dc2626"); }
+        }
+        async function decideLeave(id, decision) {
+          try { await apiPostJson("/api/hr/leaves/" + id + "/decision", {decision: decision}); showToast("تم التحديث ✔️", "#22c55e"); await loadLeavesTab(); }
+          catch (e) { showToast(e.message || "تعذر التحديث", "#dc2626"); }
+        }
+        document.getElementById("leaveAddBtn").addEventListener("click", async function () {
+          var start = document.getElementById("leaveStart").value, end = document.getElementById("leaveEnd").value;
+          if (!start || !end) { showToast("أدخل تاريخ البداية والنهاية", "#dc2626"); return; }
+          try {
+            await apiPostJson("/api/hr/leaves", { employee_id: _empId, leave_type: document.getElementById("leaveType").value, start_date: start, end_date: end, paid: document.getElementById("leavePaid").checked });
+            showToast("تم إرسال الطلب ✔️", "#22c55e");
+            document.getElementById("leaveType").value = ""; document.getElementById("leaveStart").value = ""; document.getElementById("leaveEnd").value = "";
+            await loadLeavesTab();
+          } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
+        });
+
+        async function loadAttendanceTab() {
+          try {
+            var res = await apiGet("/api/hr/attendance?employee_id=" + encodeURIComponent(_empId));
+            var items = res.items || [];
+            var table = document.getElementById("attendanceTable");
+            table.innerHTML = "<thead><tr><th>التاريخ</th><th>الدخول</th><th>الخروج</th><th>تأخير(د)</th><th>إضافي(د)</th><th>الحالة</th></tr></thead><tbody></tbody>";
+            var body = table.querySelector("tbody");
+            items.forEach(function (a) {
+              var tr = document.createElement("tr");
+              tr.innerHTML = "<td>" + a.date + "</td><td>" + (a.check_in||"—") + "</td><td>" + (a.check_out||"—") + "</td>" +
+                "<td>" + a.late_minutes + "</td><td>" + a.overtime_minutes + "</td><td>" + (a.is_absent ? "🔴 غياب" : "🟢 حضور") + "</td>";
+              body.appendChild(tr);
+            });
+            document.getElementById("attendanceEmpty").style.display = items.length ? "none" : "block";
+          } catch (e) { showToast(e.message || "تعذر التحميل", "#dc2626"); }
+        }
+        document.getElementById("attAddBtn").addEventListener("click", async function () {
+          var date = document.getElementById("attDate").value;
+          if (!date) { showToast("أدخل التاريخ", "#dc2626"); return; }
+          try {
+            await apiPostJson("/api/hr/attendance", {
+              employee_id: _empId, date: date, check_in: document.getElementById("attCheckIn").value, check_out: document.getElementById("attCheckOut").value,
+              late_minutes: parseInt(document.getElementById("attLate").value || "0", 10), overtime_minutes: parseInt(document.getElementById("attOvertime").value || "0", 10),
+              is_absent: document.getElementById("attAbsent").checked
+            });
+            showToast("تم الحفظ ✔️", "#22c55e");
+            document.getElementById("attAbsent").checked = false; document.getElementById("attCheckIn").value = ""; document.getElementById("attCheckOut").value = "";
+            document.getElementById("attLate").value = "0"; document.getElementById("attOvertime").value = "0";
+            await loadAttendanceTab();
+          } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
+        });
         function sevMeta(status) {
           var map = {
             active: {emoji:"🟢", color:"#22c55e", label:"سارية"},
@@ -648,76 +1009,6 @@
           };
           return map[status] || {emoji:"⚪", color:"#6b7280", label:"—"};
         }
-
-        function switchTab(key) {
-          document.querySelectorAll(".op-tab-btn").forEach(function (b) {
-            b.classList.toggle("op-tab-btn--active", b.getAttribute("data-tab") === key);
-          });
-          ["basic","salary","attendance","contracts","docs","files","activity"].forEach(function (k) {
-            var el = document.getElementById("tab-" + k);
-            if (el) el.style.display = (k === key) ? "" : "none";
-          });
-          if (key === "salary") loadSalaryTab();
-          if (key === "docs") loadDocsTab();
-        }
-        document.querySelectorAll(".op-tab-btn").forEach(function (b) {
-          b.addEventListener("click", function () { switchTab(b.getAttribute("data-tab")); });
-        });
-
-        async function loadEmployeeHeader() {
-          if (!_empId) { showToast("لم يتم تحديد الموظف", "#dc2626"); return; }
-          try {
-            var e = await apiGet("/api/hr/employees/" + encodeURIComponent(_empId));
-            document.getElementById("empHeaderName").textContent = e.name;
-            document.getElementById("empHeaderSub").textContent = [e.position, e.department, e.branch_name].filter(Boolean).join(" • ") || "—";
-            var st = document.getElementById("empHeaderStatus");
-            st.textContent = e.is_active ? "🟢 نشط" : "⚪ موقوف";
-            st.style.background = e.is_active ? "rgba(34,197,94,0.15)" : "rgba(107,114,128,0.15)";
-            st.style.color = e.is_active ? "#22c55e" : "#6b7280";
-            document.getElementById("basicName").value = e.name || "";
-            document.getElementById("basicPosition").value = e.position || "";
-            document.getElementById("basicDepartment").value = e.department || "";
-            document.getElementById("basicBranch").value = e.branch_name || "";
-            document.getElementById("basicNotes").value = e.notes || "";
-            document.getElementById("basicActive").checked = !!e.is_active;
-          } catch (e) { showToast(e.message || "تعذر تحميل بيانات الموظف", "#dc2626"); }
-        }
-
-        document.getElementById("basicSaveBtn").addEventListener("click", async function () {
-          try {
-            await apiPatchJson("/api/hr/employees/" + encodeURIComponent(_empId), {
-              name: document.getElementById("basicName").value.trim(),
-              position: document.getElementById("basicPosition").value,
-              department: document.getElementById("basicDepartment").value,
-              branch_name: document.getElementById("basicBranch").value,
-              notes: document.getElementById("basicNotes").value,
-              is_active: document.getElementById("basicActive").checked
-            });
-            showToast("تم حفظ البيانات ✔️", "#22c55e");
-            await loadEmployeeHeader();
-          } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
-        });
-
-        async function loadSalaryTab() {
-          try {
-            var res = await apiGet("/api/hr/payrolls?employee_id=" + encodeURIComponent(_empId));
-            var items = res.items || [];
-            var body = document.getElementById("salaryBody");
-            body.innerHTML = "";
-            var MONTHS = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
-            items.forEach(function (p) {
-              var tr = document.createElement("tr");
-              tr.innerHTML =
-                "<td>" + (MONTHS[p.month-1] || p.month) + "</td><td>" + p.year + "</td><td>" + p.base_salary.toLocaleString() + "</td>" +
-                "<td>" + p.total_allowances.toLocaleString() + "</td><td>" + p.total_deductions.toLocaleString() + "</td>" +
-                "<td style=\'font-weight:800;\'>" + p.net_salary.toLocaleString() + "</td>" +
-                "<td>" + (p.status === "paid" ? "🟢 مدفوع" : "🟡 غير مدفوع") + "</td>";
-              body.appendChild(tr);
-            });
-            document.getElementById("salaryEmpty").style.display = items.length ? "none" : "block";
-          } catch (e) { showToast(e.message || "تعذر تحميل الرواتب", "#dc2626"); }
-        }
-
         function renderDocRow(d) {
           var sm = sevMeta(d.status);
           var tr = document.createElement("tr");
@@ -866,6 +1157,101 @@
         [document.getElementById("docModal"), document.getElementById("renewModal"), document.getElementById("historyModal")].forEach(function (ov) {
           ov.addEventListener("click", function (ev) { if (ev.target === ov) ov.style.display = "none"; });
         });
+
+        async function loadContractTab() {
+          try {
+            var res = await apiGet("/api/hr/contracts?employee_id=" + encodeURIComponent(_empId));
+            var items = res.items || [];
+            var wrap = document.getElementById("contractCard");
+            if (!items.length) {
+              wrap.innerHTML = "<div class='op-shell-card' style='padding:1.5rem;text-align:center;color:var(--text-muted);'>لا يوجد عقد مسجّل لهذا الموظف بعد</div>";
+              return;
+            }
+            var c = items[0];
+            var fileCell = c.file_url ? ("<a href='" + c.file_url + "' target='_blank' style='color:var(--gold-soft);'>📎 عرض الملف</a>") : "لا يوجد ملف مرفق";
+            wrap.innerHTML = "<div class='op-shell-card' style='padding:1.25rem;max-width:520px;'>" +
+              "<div style='font-weight:800;margin-bottom:0.5rem;'>" + (c.status === "active" ? "🟢 عقد ساري" : "⚪ عقد منتهي") + " — " + (c.contract_type || "—") + "</div>" +
+              "<table class='op-admin-table' style='width:100%;'>" +
+              "<tr><td>بداية العقد</td><td>" + (c.start_date||"—") + "</td></tr>" +
+              "<tr><td>نهاية العقد</td><td>" + (c.end_date||"—") + "</td></tr>" +
+              "<tr><td>الراتب</td><td>" + c.salary.toLocaleString() + "</td></tr>" +
+              "<tr><td>بدل السكن</td><td>" + c.housing_allowance.toLocaleString() + "</td></tr>" +
+              "<tr><td>بدل النقل</td><td>" + c.transport_allowance.toLocaleString() + "</td></tr>" +
+              "<tr><td>بدلات أخرى</td><td>" + c.other_allowances.toLocaleString() + "</td></tr>" +
+              "<tr><td>فترة التجربة</td><td>" + c.probation_days + " يوم</td></tr>" +
+              "<tr><td>أيام الإجازة السنوية</td><td>" + c.annual_leave_days + " يوم</td></tr>" +
+              "<tr><td>الملف</td><td>" + fileCell + "</td></tr>" +
+              "</table></div>";
+          } catch (e) { showToast(e.message || "تعذر تحميل العقد", "#dc2626"); }
+        }
+
+        var SEV_META = {
+          critical: {color:"#dc2626", bg:"rgba(220,38,38,0.12)", icon:"🔴"}, high: {color:"#f97316", bg:"rgba(249,115,22,0.12)", icon:"🟠"},
+          medium: {color:"#eab308", bg:"rgba(234,179,8,0.12)", icon:"🟡"}, notice: {color:"#22c55e", bg:"rgba(34,197,94,0.12)", icon:"🟢"}
+        };
+        async function loadAlertsTab() {
+          try {
+            var res = await apiGet("/api/hr/alerts/feed");
+            var items = (res.items || []).filter(function (it) { return it.employee_id === _empId; });
+            var wrap = document.getElementById("empAlertsWrap");
+            wrap.innerHTML = "";
+            items.forEach(function (it) {
+              var m = SEV_META[it.severity] || SEV_META.notice;
+              var card = document.createElement("div");
+              card.style.cssText = "padding:0.7rem 1rem;border-radius:10px;display:flex;align-items:center;gap:8px;background:" + m.bg + ";border-inline-start:3px solid " + m.color + ";";
+              card.innerHTML = "<span>" + m.icon + "</span><span style='font-weight:700;'>" + it.message + "</span>";
+              wrap.appendChild(card);
+            });
+            document.getElementById("empAlertsEmpty").style.display = items.length ? "none" : "block";
+          } catch (e) {}
+        }
+
+        document.getElementById("eosPreviewBtn").addEventListener("click", async function () {
+          var endDate = document.getElementById("eosEndDate").value;
+          if (!endDate) { showToast("أدخل تاريخ نهاية الخدمة", "#dc2626"); return; }
+          try {
+            var p = await apiGet("/api/hr/employees/" + encodeURIComponent(_empId) + "/end-of-service-preview?end_date=" + endDate);
+            document.getElementById("eosPreviewBody").innerHTML =
+              "<table class='op-admin-table' style='width:100%;'>" +
+              "<tr><td>الرواتب المتبقية غير المدفوعة</td><td>" + p.remaining_salaries.toLocaleString() + "</td></tr>" +
+              "<tr><td>السلف المتبقية (تُخصم)</td><td>-" + p.remaining_advances.toLocaleString() + "</td></tr>" +
+              "<tr><td>الاستقطاعات غير المطبّقة (تُخصم)</td><td>-" + p.deductions_total.toLocaleString() + "</td></tr>" +
+              "<tr><td>رصيد الإجازات (" + p.leave_balance_days + " يوم)</td><td>" + p.leave_balance_value.toLocaleString() + "</td></tr>" +
+              "<tr><td>مكافأة نهاية الخدمة</td><td>" + p.gratuity_amount.toLocaleString() + "</td></tr>" +
+              "<tr style='font-weight:800;'><td>إجمالي المستحقات</td><td>" + p.total_dues.toLocaleString() + "</td></tr>" +
+              "</table>";
+            document.getElementById("eosConfirmBtn").style.display = "inline-block";
+          } catch (e) { showToast(e.message || "تعذر الحساب", "#dc2626"); }
+        });
+
+        document.getElementById("eosConfirmBtn").addEventListener("click", async function () {
+          if (!confirm("تأكيد إنهاء خدمة الموظف؟ لا يمكن التراجع عن هذا الإجراء.")) return;
+          try {
+            var rec = await apiPostJson("/api/hr/employees/" + encodeURIComponent(_empId) + "/end-of-service", {
+              employee_id: _empId, end_date: document.getElementById("eosEndDate").value, reason: document.getElementById("eosReason").value
+            });
+            showToast("تم إنهاء الخدمة ✔️", "#22c55e");
+            printSettlement(rec);
+            await loadEmployeeHeader();
+          } catch (e) { showToast(e.message || "تعذر الإجراء", "#dc2626"); }
+        });
+
+        function printSettlement(r) {
+          var w = window.open("", "_blank");
+          var html = "<" + "!doctype html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>" +
+            "<" + "style>body{font-family:Arial,sans-serif;padding:30px;} table{width:100%;border-collapse:collapse;} td{padding:8px;border-bottom:1px solid #ddd;} .grand{font-weight:800;font-size:1.3rem;border-top:2px solid #b8863a;}<" + "/style></head><body>" +
+            "<h2>مخالصة نهاية الخدمة</h2><p>تاريخ الانتهاء: " + r.end_date + " — السبب: " + r.reason_label + "</p>" +
+            "<table>" +
+            "<tr><td>الرواتب المتبقية</td><td>" + r.remaining_salaries.toLocaleString() + "</td></tr>" +
+            "<tr><td>السلف المتبقية</td><td>-" + r.remaining_advances.toLocaleString() + "</td></tr>" +
+            "<tr><td>الاستقطاعات</td><td>-" + r.deductions_total.toLocaleString() + "</td></tr>" +
+            "<tr><td>رصيد الإجازات</td><td>" + r.leave_balance_value.toLocaleString() + "</td></tr>" +
+            "<tr><td>مكافأة نهاية الخدمة</td><td>" + r.gratuity_amount.toLocaleString() + "</td></tr>" +
+            "<tr class='grand'><td>إجمالي المستحقات</td><td>" + r.total_dues.toLocaleString() + "</td></tr></table>" +
+            "<div style='display:flex;justify-content:space-between;margin-top:60px;'><div style='width:45%;border-top:1px solid #333;padding-top:6px;text-align:center;'>توقيع الموظف</div><div style='width:45%;border-top:1px solid #333;padding-top:6px;text-align:center;'>توقيع الإدارة</div></div>" +
+            "</body></html>";
+          w.document.open(); w.document.write(html); w.document.close(); w.focus(); w.print();
+        }
 
         (async function () {
           await loadEmployeeHeader();

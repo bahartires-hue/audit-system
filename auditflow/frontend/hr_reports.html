@@ -428,38 +428,96 @@
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1rem;">
           <div>
             <a href="/hr" style="font-weight:800;color:var(--gold-soft);text-decoration:none;font-size:0.85rem;">→ رجوع للوحة الموارد البشرية</a>
-            <h1 style="margin-top:0.4rem;">⚠️ <b>التنبيهات</b></h1>
-            <p>لوحة تنبيهات تلقائية: الإقامات، الجوازات، العقود، فترات التجربة، أعياد الميلاد، ورواتب لم تُصرف بعد.</p>
+            <h1 style="margin-top:0.4rem;">📊 <b>التقارير</b></h1>
+            <p>تقارير جاهزة قابلة للتصدير Excel، وطباعة PDF مباشرة من المتصفح.</p>
           </div>
         </div>
 
-        <div id="feedWrap" style="display:flex;flex-direction:column;gap:8px;margin-bottom:1.25rem;"></div>
-        <div id="feedEmpty" style="display:none;padding:1.5rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد تنبيهات حالياً 🎉</div>
-
-        <div class="op-shell-card" style="padding:1rem 1.25rem;margin-bottom:1.1rem;">
-          <h3 style="font-weight:800;margin-bottom:0.75rem;">📁 تنبيهات الوثائق الرسمية</h3>
-          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:0.75rem;align-items:end;">
-            <div class="op-tool-field" style="margin-bottom:0;"><label>نوع الوثيقة</label><input type="text" id="flDocType" placeholder="الكل" /></div>
-            <div class="op-tool-field" style="margin-bottom:0;"><label>القسم</label><input type="text" id="flDepartment" placeholder="الكل" /></div>
-            <div class="op-tool-field" style="margin-bottom:0;"><label>الفرع</label><input type="text" id="flBranch" placeholder="الكل" /></div>
-            <div class="op-tool-field" style="margin-bottom:0;">
-              <label>الحالة</label>
-              <select id="flStatus">
-                <option value="">الكل</option><option value="active">🟢 سارية</option><option value="expiring_30">🟡 30 يوم</option>
-                <option value="expiring_15">🟠 15 يوم</option><option value="expiring_7">🔴 7 أيام</option><option value="expired">🔴 منتهية</option>
-              </select>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;">
+          <div class="op-shell-card" style="padding:1.25rem;text-align:start;">
+            <div style="font-weight:800;color:var(--text-heading);margin-bottom:0.75rem;">📄 رواتب الشهر</div>
+            <div style="display:flex;gap:8px;">
+              <a href="/api/hr/reports/payroll/export" class="op-btn-chip op-btn-chip--gold" style="padding:6px 14px;font-size:0.8rem;">⬇️ Excel</a>
+              <button type="button" class="op-tool-btn-secondary report-print-btn" data-title="رواتب الشهر" data-url="/api/hr/reports/payroll/export" style="padding:6px 14px;font-size:0.8rem;">🖨️ طباعة PDF</button>
             </div>
-            <div class="op-tool-field" style="margin-bottom:0;"><label>بحث</label><input type="text" id="flSearch" placeholder="اسم الموظف / رقم" /></div>
           </div>
-          <button type="button" class="op-btn-chip op-btn-chip--gold" id="flApplyBtn" style="margin-top:0.75rem;">تطبيق الفلاتر</button>
-        </div>
-
-        <div class="op-shell-card" style="padding:0;overflow:auto;">
-          <table class="op-admin-table" style="width:100%;">
-            <thead><tr><th>الحالة</th><th>الموظف</th><th>نوع الوثيقة</th><th>رقم الوثيقة</th><th>تاريخ الانتهاء</th><th>إجراء</th></tr></thead>
-            <tbody id="alertsBody"></tbody>
-          </table>
-          <div id="alertsEmpty" style="display:none;padding:2rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد وثائق مطابقة</div>
+          <div class="op-shell-card" style="padding:1.25rem;text-align:start;">
+            <div style="font-weight:800;color:var(--text-heading);margin-bottom:0.75rem;">📄 السلف</div>
+            <div style="display:flex;gap:8px;">
+              <a href="/api/hr/reports/advances/export" class="op-btn-chip op-btn-chip--gold" style="padding:6px 14px;font-size:0.8rem;">⬇️ Excel</a>
+              <button type="button" class="op-tool-btn-secondary report-print-btn" data-title="السلف" data-url="/api/hr/reports/advances/export" style="padding:6px 14px;font-size:0.8rem;">🖨️ طباعة PDF</button>
+            </div>
+          </div>
+          <div class="op-shell-card" style="padding:1.25rem;text-align:start;">
+            <div style="font-weight:800;color:var(--text-heading);margin-bottom:0.75rem;">📄 الاستقطاعات</div>
+            <div style="display:flex;gap:8px;">
+              <a href="/api/hr/reports/deductions/export" class="op-btn-chip op-btn-chip--gold" style="padding:6px 14px;font-size:0.8rem;">⬇️ Excel</a>
+              <button type="button" class="op-tool-btn-secondary report-print-btn" data-title="الاستقطاعات" data-url="/api/hr/reports/deductions/export" style="padding:6px 14px;font-size:0.8rem;">🖨️ طباعة PDF</button>
+            </div>
+          </div>
+          <div class="op-shell-card" style="padding:1.25rem;text-align:start;">
+            <div style="font-weight:800;color:var(--text-heading);margin-bottom:0.75rem;">📄 العمولات</div>
+            <div style="display:flex;gap:8px;">
+              <a href="/api/hr/reports/commissions/export" class="op-btn-chip op-btn-chip--gold" style="padding:6px 14px;font-size:0.8rem;">⬇️ Excel</a>
+              <button type="button" class="op-tool-btn-secondary report-print-btn" data-title="العمولات" data-url="/api/hr/reports/commissions/export" style="padding:6px 14px;font-size:0.8rem;">🖨️ طباعة PDF</button>
+            </div>
+          </div>
+          <div class="op-shell-card" style="padding:1.25rem;text-align:start;">
+            <div style="font-weight:800;color:var(--text-heading);margin-bottom:0.75rem;">📄 الحضور</div>
+            <div style="display:flex;gap:8px;">
+              <a href="/api/hr/reports/attendance/export" class="op-btn-chip op-btn-chip--gold" style="padding:6px 14px;font-size:0.8rem;">⬇️ Excel</a>
+              <button type="button" class="op-tool-btn-secondary report-print-btn" data-title="الحضور" data-url="/api/hr/reports/attendance/export" style="padding:6px 14px;font-size:0.8rem;">🖨️ طباعة PDF</button>
+            </div>
+          </div>
+          <div class="op-shell-card" style="padding:1.25rem;text-align:start;">
+            <div style="font-weight:800;color:var(--text-heading);margin-bottom:0.75rem;">📄 الإجازات</div>
+            <div style="display:flex;gap:8px;">
+              <a href="/api/hr/reports/leaves/export" class="op-btn-chip op-btn-chip--gold" style="padding:6px 14px;font-size:0.8rem;">⬇️ Excel</a>
+              <button type="button" class="op-tool-btn-secondary report-print-btn" data-title="الإجازات" data-url="/api/hr/reports/leaves/export" style="padding:6px 14px;font-size:0.8rem;">🖨️ طباعة PDF</button>
+            </div>
+          </div>
+          <div class="op-shell-card" style="padding:1.25rem;text-align:start;">
+            <div style="font-weight:800;color:var(--text-heading);margin-bottom:0.75rem;">📄 انتهاء الإقامات</div>
+            <div style="display:flex;gap:8px;">
+              <a href="/api/hr/reports/residency-expiry/export" class="op-btn-chip op-btn-chip--gold" style="padding:6px 14px;font-size:0.8rem;">⬇️ Excel</a>
+              <button type="button" class="op-tool-btn-secondary report-print-btn" data-title="انتهاء الإقامات" data-url="/api/hr/reports/residency-expiry/export" style="padding:6px 14px;font-size:0.8rem;">🖨️ طباعة PDF</button>
+            </div>
+          </div>
+          <div class="op-shell-card" style="padding:1.25rem;text-align:start;">
+            <div style="font-weight:800;color:var(--text-heading);margin-bottom:0.75rem;">📄 انتهاء الجوازات</div>
+            <div style="display:flex;gap:8px;">
+              <a href="/api/hr/reports/passport-expiry/export" class="op-btn-chip op-btn-chip--gold" style="padding:6px 14px;font-size:0.8rem;">⬇️ Excel</a>
+              <button type="button" class="op-tool-btn-secondary report-print-btn" data-title="انتهاء الجوازات" data-url="/api/hr/reports/passport-expiry/export" style="padding:6px 14px;font-size:0.8rem;">🖨️ طباعة PDF</button>
+            </div>
+          </div>
+          <div class="op-shell-card" style="padding:1.25rem;text-align:start;">
+            <div style="font-weight:800;color:var(--text-heading);margin-bottom:0.75rem;">📄 انتهاء العقود</div>
+            <div style="display:flex;gap:8px;">
+              <a href="/api/hr/reports/contracts-expiry/export" class="op-btn-chip op-btn-chip--gold" style="padding:6px 14px;font-size:0.8rem;">⬇️ Excel</a>
+              <button type="button" class="op-tool-btn-secondary report-print-btn" data-title="انتهاء العقود" data-url="/api/hr/reports/contracts-expiry/export" style="padding:6px 14px;font-size:0.8rem;">🖨️ طباعة PDF</button>
+            </div>
+          </div>
+          <div class="op-shell-card" style="padding:1.25rem;text-align:start;">
+            <div style="font-weight:800;color:var(--text-heading);margin-bottom:0.75rem;">📄 تكلفة الموظفين</div>
+            <div style="display:flex;gap:8px;">
+              <a href="/api/hr/reports/employee-cost/export" class="op-btn-chip op-btn-chip--gold" style="padding:6px 14px;font-size:0.8rem;">⬇️ Excel</a>
+              <button type="button" class="op-tool-btn-secondary report-print-btn" data-title="تكلفة الموظفين" data-url="/api/hr/reports/employee-cost/export" style="padding:6px 14px;font-size:0.8rem;">🖨️ طباعة PDF</button>
+            </div>
+          </div>
+          <div class="op-shell-card" style="padding:1.25rem;text-align:start;">
+            <div style="font-weight:800;color:var(--text-heading);margin-bottom:0.75rem;">📄 الموظفين حسب الفرع</div>
+            <div style="display:flex;gap:8px;">
+              <a href="/api/hr/reports/employees-by-branch/export" class="op-btn-chip op-btn-chip--gold" style="padding:6px 14px;font-size:0.8rem;">⬇️ Excel</a>
+              <button type="button" class="op-tool-btn-secondary report-print-btn" data-title="الموظفين حسب الفرع" data-url="/api/hr/reports/employees-by-branch/export" style="padding:6px 14px;font-size:0.8rem;">🖨️ طباعة PDF</button>
+            </div>
+          </div>
+          <div class="op-shell-card" style="padding:1.25rem;text-align:start;">
+            <div style="font-weight:800;color:var(--text-heading);margin-bottom:0.75rem;">📄 الموظفين حسب القسم</div>
+            <div style="display:flex;gap:8px;">
+              <a href="/api/hr/reports/employees-by-department/export" class="op-btn-chip op-btn-chip--gold" style="padding:6px 14px;font-size:0.8rem;">⬇️ Excel</a>
+              <button type="button" class="op-tool-btn-secondary report-print-btn" data-title="الموظفين حسب القسم" data-url="/api/hr/reports/employees-by-department/export" style="padding:6px 14px;font-size:0.8rem;">🖨️ طباعة PDF</button>
+            </div>
+          </div>
         </div>
       </main>
     </div>
@@ -508,76 +566,18 @@
     </script>
     <script>
 
-        var SEV_META = {
-          critical: {color:"#dc2626", bg:"rgba(220,38,38,0.12)", icon:"🔴"},
-          high: {color:"#f97316", bg:"rgba(249,115,22,0.12)", icon:"🟠"},
-          medium: {color:"#eab308", bg:"rgba(234,179,8,0.12)", icon:"🟡"},
-          notice: {color:"#22c55e", bg:"rgba(34,197,94,0.12)", icon:"🟢"}
-        };
-
-        async function loadFeed() {
-          try {
-            var res = await apiGet("/api/hr/alerts/feed");
-            var items = res.items || [];
-            var wrap = document.getElementById("feedWrap");
-            wrap.innerHTML = "";
-            items.forEach(function (it) {
-              var m = SEV_META[it.severity] || SEV_META.notice;
-              var card = document.createElement("div");
-              card.className = "op-shell-card";
-              card.style.cssText = "padding:0.85rem 1.1rem;display:flex;align-items:center;gap:10px;background:" + m.bg + ";border-inline-start:4px solid " + m.color + ";";
-              card.innerHTML = "<span style='font-size:1.1rem;'>" + m.icon + "</span><span style='font-weight:700;'>" + it.message + "</span>" +
-                "<a href='/hr/employee?id=" + encodeURIComponent(it.employee_id) + "' style='margin-inline-start:auto;color:var(--gold-soft);font-weight:800;font-size:0.8rem;text-decoration:none;'>عرض الملف →</a>";
-              wrap.appendChild(card);
-            });
-            document.getElementById("feedEmpty").style.display = items.length ? "none" : "block";
-          } catch (e) { showToast(e.message || "تعذر تحميل التنبيهات", "#dc2626"); }
-        }
-
-        function sevMetaDoc(status) {
-          var map = {
-            active: {emoji:"🟢", color:"#22c55e", label:"سارية"}, expiring_60: {emoji:"🟢", color:"#22c55e", label:"تنتهي قريبًا"},
-            expiring_30: {emoji:"🟡", color:"#eab308", label:"تنتهي قريبًا"}, expiring_15: {emoji:"🟠", color:"#f97316", label:"تنتهي قريبًا"},
-            expiring_7: {emoji:"🔴", color:"#dc2626", label:"تنتهي قريبًا"}, expired: {emoji:"🔴", color:"#991b1b", label:"منتهية"}
-          };
-          return map[status] || {emoji:"⚪", color:"#6b7280", label:"—"};
-        }
-
-        function renderAlertsRow(x) {
-          var sm = sevMetaDoc(x.status);
-          var tr = document.createElement("tr");
-          tr.innerHTML =
-            "<td>" + sm.emoji + " <span style='color:" + sm.color + ";font-weight:800;'>" + (x.status_label || sm.label) + "</span></td>" +
-            "<td style='font-weight:800;'>" + (x.employee_name || "") + "</td>" +
-            "<td>" + (x.doc_type || "") + "</td>" + "<td>" + (x.doc_number || "—") + "</td>" + "<td>" + (x.expiry_date || "—") + "</td>" +
-            "<td><a href='/hr/employee?id=" + encodeURIComponent(x.employee_id) + "&tab=docs' class='op-btn-chip' style='padding:5px 12px;font-size:0.78rem;'>عرض الملف</a></td>";
-          return tr;
-        }
-
-        async function loadDocAlerts() {
-          var params = new URLSearchParams();
-          var docType = document.getElementById("flDocType").value.trim();
-          var dept = document.getElementById("flDepartment").value.trim();
-          var branch = document.getElementById("flBranch").value.trim();
-          var status = document.getElementById("flStatus").value;
-          var q = document.getElementById("flSearch").value.trim();
-          if (docType) params.set("doc_type", docType);
-          if (dept) params.set("department", dept);
-          if (branch) params.set("branch_name", branch);
-          if (status) params.set("status", status);
-          if (q) params.set("q", q);
-          try {
-            var res = await apiGet("/api/hr/documents/alerts?" + params.toString());
-            var items = res.items || [];
-            var body = document.getElementById("alertsBody");
-            body.innerHTML = "";
-            items.forEach(function (x) { body.appendChild(renderAlertsRow(x)); });
-            document.getElementById("alertsEmpty").style.display = items.length ? "none" : "block";
-          } catch (e) { showToast(e.message || "تعذر تحميل الوثائق", "#dc2626"); }
-        }
-        document.getElementById("flApplyBtn").addEventListener("click", loadDocAlerts);
-
-        (async function () { await loadFeed(); await loadDocAlerts(); })();
+        document.querySelectorAll(".report-print-btn").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var title = btn.getAttribute("data-title");
+            var w = window.open("", "_blank");
+            var html = "<" + "!doctype html><html lang='ar' dir='rtl'><head><meta charset='utf-8'><title>" + title + "</title></head>" +
+              "<body style='font-family:Arial,sans-serif;padding:30px;'>" +
+              "<h2>تقرير: " + title + "</h2>" +
+              "<p style='color:#666;'>لعرض التقرير التفصيلي، افتح ملف Excel المُصدَّر عبر زر ⬇️ Excel، ثم استخدم أمر الطباعة (Ctrl+P) من داخل برنامج الجداول لحفظه كـ PDF.</p>" +
+              "</body></html>";
+            w.document.open(); w.document.write(html); w.document.close(); w.focus();
+          });
+        });
     </script>
 
   </body>

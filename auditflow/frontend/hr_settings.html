@@ -428,38 +428,68 @@
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1rem;">
           <div>
             <a href="/hr" style="font-weight:800;color:var(--gold-soft);text-decoration:none;font-size:0.85rem;">→ رجوع للوحة الموارد البشرية</a>
-            <h1 style="margin-top:0.4rem;">⚠️ <b>التنبيهات</b></h1>
-            <p>لوحة تنبيهات تلقائية: الإقامات، الجوازات، العقود، فترات التجربة، أعياد الميلاد، ورواتب لم تُصرف بعد.</p>
+            <h1 style="margin-top:0.4rem;">⚙️ <b>إعدادات الموارد البشرية</b></h1>
+            <p>الأقسام، الوظائف، أنواع الإجازات والبدلات والاستقطاعات، الفروع، الضريبة والعملة.</p>
           </div>
         </div>
 
-        <div id="feedWrap" style="display:flex;flex-direction:column;gap:8px;margin-bottom:1.25rem;"></div>
-        <div id="feedEmpty" style="display:none;padding:1.5rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد تنبيهات حالياً 🎉</div>
+        <div class="op-shell-card" style="padding:1.25rem;margin-bottom:1.1rem;max-width:520px;">
+          <h3 style="font-weight:800;margin-bottom:0.9rem;">💰 الضريبة والعملة</h3>
+          <div class="op-tool-field" style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="taxEnabled" style="width:auto;" /><label style="margin:0;">تفعيل خصم الضريبة من الرواتب</label></div>
+          <div class="op-tool-field"><label>نسبة الضريبة %</label><input type="number" id="taxPct" step="0.01" /></div>
+          <div class="op-tool-field"><label>عملة النظام</label><input type="text" id="currency" /></div>
+          <button type="button" class="op-btn-chip op-btn-chip--gold" id="saveSettingsBtn">حفظ</button>
+        </div>
 
-        <div class="op-shell-card" style="padding:1rem 1.25rem;margin-bottom:1.1rem;">
-          <h3 style="font-weight:800;margin-bottom:0.75rem;">📁 تنبيهات الوثائق الرسمية</h3>
-          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:0.75rem;align-items:end;">
-            <div class="op-tool-field" style="margin-bottom:0;"><label>نوع الوثيقة</label><input type="text" id="flDocType" placeholder="الكل" /></div>
-            <div class="op-tool-field" style="margin-bottom:0;"><label>القسم</label><input type="text" id="flDepartment" placeholder="الكل" /></div>
-            <div class="op-tool-field" style="margin-bottom:0;"><label>الفرع</label><input type="text" id="flBranch" placeholder="الكل" /></div>
-            <div class="op-tool-field" style="margin-bottom:0;">
-              <label>الحالة</label>
-              <select id="flStatus">
-                <option value="">الكل</option><option value="active">🟢 سارية</option><option value="expiring_30">🟡 30 يوم</option>
-                <option value="expiring_15">🟠 15 يوم</option><option value="expiring_7">🔴 7 أيام</option><option value="expired">🔴 منتهية</option>
-              </select>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;">
+          <div class="op-shell-card" style="padding:1.1rem;">
+            <h4 style="font-weight:800;margin-bottom:0.6rem;">🏢 الأقسام</h4>
+            <div style="display:flex;gap:6px;margin-bottom:0.75rem;">
+              <input type="text" id="new-department" placeholder="إضافة..." style="flex:1;padding:6px 10px;border-radius:8px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);" />
+              <button type="button" class="op-btn-chip op-btn-chip--gold" style="padding:6px 12px;" data-cat="department" onclick="addConfigItem(this)">➕</button>
             </div>
-            <div class="op-tool-field" style="margin-bottom:0;"><label>بحث</label><input type="text" id="flSearch" placeholder="اسم الموظف / رقم" /></div>
+            <div id="list-department" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;"></div>
           </div>
-          <button type="button" class="op-btn-chip op-btn-chip--gold" id="flApplyBtn" style="margin-top:0.75rem;">تطبيق الفلاتر</button>
-        </div>
-
-        <div class="op-shell-card" style="padding:0;overflow:auto;">
-          <table class="op-admin-table" style="width:100%;">
-            <thead><tr><th>الحالة</th><th>الموظف</th><th>نوع الوثيقة</th><th>رقم الوثيقة</th><th>تاريخ الانتهاء</th><th>إجراء</th></tr></thead>
-            <tbody id="alertsBody"></tbody>
-          </table>
-          <div id="alertsEmpty" style="display:none;padding:2rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد وثائق مطابقة</div>
+          <div class="op-shell-card" style="padding:1.1rem;">
+            <h4 style="font-weight:800;margin-bottom:0.6rem;">💼 الوظائف</h4>
+            <div style="display:flex;gap:6px;margin-bottom:0.75rem;">
+              <input type="text" id="new-position" placeholder="إضافة..." style="flex:1;padding:6px 10px;border-radius:8px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);" />
+              <button type="button" class="op-btn-chip op-btn-chip--gold" style="padding:6px 12px;" data-cat="position" onclick="addConfigItem(this)">➕</button>
+            </div>
+            <div id="list-position" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;"></div>
+          </div>
+          <div class="op-shell-card" style="padding:1.1rem;">
+            <h4 style="font-weight:800;margin-bottom:0.6rem;">🏖 أنواع الإجازات</h4>
+            <div style="display:flex;gap:6px;margin-bottom:0.75rem;">
+              <input type="text" id="new-leave_type" placeholder="إضافة..." style="flex:1;padding:6px 10px;border-radius:8px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);" />
+              <button type="button" class="op-btn-chip op-btn-chip--gold" style="padding:6px 12px;" data-cat="leave_type" onclick="addConfigItem(this)">➕</button>
+            </div>
+            <div id="list-leave_type" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;"></div>
+          </div>
+          <div class="op-shell-card" style="padding:1.1rem;">
+            <h4 style="font-weight:800;margin-bottom:0.6rem;">🎁 أنواع البدلات</h4>
+            <div style="display:flex;gap:6px;margin-bottom:0.75rem;">
+              <input type="text" id="new-allowance_type" placeholder="إضافة..." style="flex:1;padding:6px 10px;border-radius:8px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);" />
+              <button type="button" class="op-btn-chip op-btn-chip--gold" style="padding:6px 12px;" data-cat="allowance_type" onclick="addConfigItem(this)">➕</button>
+            </div>
+            <div id="list-allowance_type" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;"></div>
+          </div>
+          <div class="op-shell-card" style="padding:1.1rem;">
+            <h4 style="font-weight:800;margin-bottom:0.6rem;">📉 أنواع الاستقطاعات</h4>
+            <div style="display:flex;gap:6px;margin-bottom:0.75rem;">
+              <input type="text" id="new-deduction_type" placeholder="إضافة..." style="flex:1;padding:6px 10px;border-radius:8px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);" />
+              <button type="button" class="op-btn-chip op-btn-chip--gold" style="padding:6px 12px;" data-cat="deduction_type" onclick="addConfigItem(this)">➕</button>
+            </div>
+            <div id="list-deduction_type" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;"></div>
+          </div>
+          <div class="op-shell-card" style="padding:1.1rem;">
+            <h4 style="font-weight:800;margin-bottom:0.6rem;">🏬 الفروع</h4>
+            <div style="display:flex;gap:6px;margin-bottom:0.75rem;">
+              <input type="text" id="new-branch" placeholder="إضافة..." style="flex:1;padding:6px 10px;border-radius:8px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);" />
+              <button type="button" class="op-btn-chip op-btn-chip--gold" style="padding:6px 12px;" data-cat="branch" onclick="addConfigItem(this)">➕</button>
+            </div>
+            <div id="list-branch" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;"></div>
+          </div>
         </div>
       </main>
     </div>
@@ -508,76 +538,67 @@
     </script>
     <script>
 
-        var SEV_META = {
-          critical: {color:"#dc2626", bg:"rgba(220,38,38,0.12)", icon:"🔴"},
-          high: {color:"#f97316", bg:"rgba(249,115,22,0.12)", icon:"🟠"},
-          medium: {color:"#eab308", bg:"rgba(234,179,8,0.12)", icon:"🟡"},
-          notice: {color:"#22c55e", bg:"rgba(34,197,94,0.12)", icon:"🟢"}
+        var CATEGORIES = ["department","position","leave_type","allowance_type","deduction_type","branch"];
+
+        function renderConfigList(cat, items) {
+          var el = document.getElementById("list-" + cat);
+          el.innerHTML = "";
+          items.forEach(function (it) {
+            var row = document.createElement("div");
+            row.style.cssText = "display:flex;justify-content:space-between;align-items:center;padding:5px 8px;border-radius:8px;background:var(--surface-soft);";
+            row.innerHTML = "<span>" + it.name + "</span>";
+            var delBtn = document.createElement("button");
+            delBtn.type = "button"; delBtn.textContent = "✕"; delBtn.style.cssText = "background:none;border:none;color:#dc2626;cursor:pointer;font-weight:800;";
+            delBtn.addEventListener("click", async function () {
+              try { await apiDelete("/api/hr/config/" + it.id); await loadConfigList(cat); } catch (e) { showToast(e.message || "تعذر الحذف", "#dc2626"); }
+            });
+            row.appendChild(delBtn);
+            el.appendChild(row);
+          });
+        }
+
+        async function loadConfigList(cat) {
+          try {
+            var res = await apiGet("/api/hr/config?category=" + cat);
+            renderConfigList(cat, res.items || []);
+          } catch (e) {}
+        }
+
+        window.addConfigItem = async function (btn) {
+          var cat = btn.getAttribute("data-cat");
+          var input = document.getElementById("new-" + cat);
+          var name = input.value.trim();
+          if (!name) return;
+          try {
+            await apiPostJson("/api/hr/config", { category: cat, name: name });
+            input.value = "";
+            await loadConfigList(cat);
+          } catch (e) { showToast(e.message || "تعذر الإضافة", "#dc2626"); }
         };
 
-        async function loadFeed() {
+        async function loadHrSettings() {
           try {
-            var res = await apiGet("/api/hr/alerts/feed");
-            var items = res.items || [];
-            var wrap = document.getElementById("feedWrap");
-            wrap.innerHTML = "";
-            items.forEach(function (it) {
-              var m = SEV_META[it.severity] || SEV_META.notice;
-              var card = document.createElement("div");
-              card.className = "op-shell-card";
-              card.style.cssText = "padding:0.85rem 1.1rem;display:flex;align-items:center;gap:10px;background:" + m.bg + ";border-inline-start:4px solid " + m.color + ";";
-              card.innerHTML = "<span style='font-size:1.1rem;'>" + m.icon + "</span><span style='font-weight:700;'>" + it.message + "</span>" +
-                "<a href='/hr/employee?id=" + encodeURIComponent(it.employee_id) + "' style='margin-inline-start:auto;color:var(--gold-soft);font-weight:800;font-size:0.8rem;text-decoration:none;'>عرض الملف →</a>";
-              wrap.appendChild(card);
+            var s = await apiGet("/api/hr/settings");
+            document.getElementById("taxEnabled").checked = !!s.tax_enabled;
+            document.getElementById("taxPct").value = s.tax_percentage || 0;
+            document.getElementById("currency").value = s.currency || "SAR";
+          } catch (e) {}
+        }
+        document.getElementById("saveSettingsBtn").addEventListener("click", async function () {
+          try {
+            await apiPatchJson("/api/hr/settings", {
+              tax_enabled: document.getElementById("taxEnabled").checked,
+              tax_percentage: parseFloat(document.getElementById("taxPct").value || "0"),
+              currency: document.getElementById("currency").value || "SAR"
             });
-            document.getElementById("feedEmpty").style.display = items.length ? "none" : "block";
-          } catch (e) { showToast(e.message || "تعذر تحميل التنبيهات", "#dc2626"); }
-        }
+            showToast("تم حفظ الإعدادات ✔️", "#22c55e");
+          } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
+        });
 
-        function sevMetaDoc(status) {
-          var map = {
-            active: {emoji:"🟢", color:"#22c55e", label:"سارية"}, expiring_60: {emoji:"🟢", color:"#22c55e", label:"تنتهي قريبًا"},
-            expiring_30: {emoji:"🟡", color:"#eab308", label:"تنتهي قريبًا"}, expiring_15: {emoji:"🟠", color:"#f97316", label:"تنتهي قريبًا"},
-            expiring_7: {emoji:"🔴", color:"#dc2626", label:"تنتهي قريبًا"}, expired: {emoji:"🔴", color:"#991b1b", label:"منتهية"}
-          };
-          return map[status] || {emoji:"⚪", color:"#6b7280", label:"—"};
-        }
-
-        function renderAlertsRow(x) {
-          var sm = sevMetaDoc(x.status);
-          var tr = document.createElement("tr");
-          tr.innerHTML =
-            "<td>" + sm.emoji + " <span style='color:" + sm.color + ";font-weight:800;'>" + (x.status_label || sm.label) + "</span></td>" +
-            "<td style='font-weight:800;'>" + (x.employee_name || "") + "</td>" +
-            "<td>" + (x.doc_type || "") + "</td>" + "<td>" + (x.doc_number || "—") + "</td>" + "<td>" + (x.expiry_date || "—") + "</td>" +
-            "<td><a href='/hr/employee?id=" + encodeURIComponent(x.employee_id) + "&tab=docs' class='op-btn-chip' style='padding:5px 12px;font-size:0.78rem;'>عرض الملف</a></td>";
-          return tr;
-        }
-
-        async function loadDocAlerts() {
-          var params = new URLSearchParams();
-          var docType = document.getElementById("flDocType").value.trim();
-          var dept = document.getElementById("flDepartment").value.trim();
-          var branch = document.getElementById("flBranch").value.trim();
-          var status = document.getElementById("flStatus").value;
-          var q = document.getElementById("flSearch").value.trim();
-          if (docType) params.set("doc_type", docType);
-          if (dept) params.set("department", dept);
-          if (branch) params.set("branch_name", branch);
-          if (status) params.set("status", status);
-          if (q) params.set("q", q);
-          try {
-            var res = await apiGet("/api/hr/documents/alerts?" + params.toString());
-            var items = res.items || [];
-            var body = document.getElementById("alertsBody");
-            body.innerHTML = "";
-            items.forEach(function (x) { body.appendChild(renderAlertsRow(x)); });
-            document.getElementById("alertsEmpty").style.display = items.length ? "none" : "block";
-          } catch (e) { showToast(e.message || "تعذر تحميل الوثائق", "#dc2626"); }
-        }
-        document.getElementById("flApplyBtn").addEventListener("click", loadDocAlerts);
-
-        (async function () { await loadFeed(); await loadDocAlerts(); })();
+        (async function () {
+          await loadHrSettings();
+          for (var i = 0; i < CATEGORIES.length; i++) { await loadConfigList(CATEGORIES[i]); }
+        })();
     </script>
 
   </body>

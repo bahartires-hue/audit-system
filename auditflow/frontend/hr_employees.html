@@ -428,38 +428,75 @@
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1rem;">
           <div>
             <a href="/hr" style="font-weight:800;color:var(--gold-soft);text-decoration:none;font-size:0.85rem;">→ رجوع للوحة الموارد البشرية</a>
-            <h1 style="margin-top:0.4rem;">⚠️ <b>التنبيهات</b></h1>
-            <p>لوحة تنبيهات تلقائية: الإقامات، الجوازات، العقود، فترات التجربة، أعياد الميلاد، ورواتب لم تُصرف بعد.</p>
+            <h1 style="margin-top:0.4rem;">👤 <b>الموظفون</b></h1>
+            <p>إدارة كاملة لبيانات الموظفين — إضافة، تعديل، حذف، وعرض الملف الكامل.</p>
           </div>
         </div>
 
-        <div id="feedWrap" style="display:flex;flex-direction:column;gap:8px;margin-bottom:1.25rem;"></div>
-        <div id="feedEmpty" style="display:none;padding:1.5rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد تنبيهات حالياً 🎉</div>
-
         <div class="op-shell-card" style="padding:1rem 1.25rem;margin-bottom:1.1rem;">
-          <h3 style="font-weight:800;margin-bottom:0.75rem;">📁 تنبيهات الوثائق الرسمية</h3>
-          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:0.75rem;align-items:end;">
-            <div class="op-tool-field" style="margin-bottom:0;"><label>نوع الوثيقة</label><input type="text" id="flDocType" placeholder="الكل" /></div>
-            <div class="op-tool-field" style="margin-bottom:0;"><label>القسم</label><input type="text" id="flDepartment" placeholder="الكل" /></div>
+          <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:end;">
+            <div class="op-tool-field" style="margin-bottom:0;flex:1;min-width:180px;"><label>بحث</label><input type="text" id="flSearch" placeholder="الاسم أو الرقم الوظيفي" /></div>
+            <div class="op-tool-field" style="margin-bottom:0;"><label>القسم</label><input type="text" id="flDept" placeholder="الكل" /></div>
             <div class="op-tool-field" style="margin-bottom:0;"><label>الفرع</label><input type="text" id="flBranch" placeholder="الكل" /></div>
             <div class="op-tool-field" style="margin-bottom:0;">
               <label>الحالة</label>
               <select id="flStatus">
-                <option value="">الكل</option><option value="active">🟢 سارية</option><option value="expiring_30">🟡 30 يوم</option>
-                <option value="expiring_15">🟠 15 يوم</option><option value="expiring_7">🔴 7 أيام</option><option value="expired">🔴 منتهية</option>
+                <option value="">الكل</option>
+                <option value="active">نشط</option>
+                <option value="on_leave">إجازة</option>
+                <option value="suspended">موقوف</option>
+                <option value="resigned">مستقيل</option>
+                <option value="terminated">منتهي الخدمة</option>
               </select>
             </div>
-            <div class="op-tool-field" style="margin-bottom:0;"><label>بحث</label><input type="text" id="flSearch" placeholder="اسم الموظف / رقم" /></div>
+            <button type="button" class="op-btn-chip op-btn-chip--gold" id="addEmpBtn">➕ إضافة موظف</button>
           </div>
-          <button type="button" class="op-btn-chip op-btn-chip--gold" id="flApplyBtn" style="margin-top:0.75rem;">تطبيق الفلاتر</button>
         </div>
 
         <div class="op-shell-card" style="padding:0;overflow:auto;">
           <table class="op-admin-table" style="width:100%;">
-            <thead><tr><th>الحالة</th><th>الموظف</th><th>نوع الوثيقة</th><th>رقم الوثيقة</th><th>تاريخ الانتهاء</th><th>إجراء</th></tr></thead>
-            <tbody id="alertsBody"></tbody>
+            <thead><tr><th>الاسم</th><th>الوظيفة</th><th>الفرع</th><th>الراتب</th><th>الإقامة</th><th>العقد</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+            <tbody id="empBody"></tbody>
           </table>
-          <div id="alertsEmpty" style="display:none;padding:2rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد وثائق مطابقة</div>
+          <div id="empEmpty" style="display:none;padding:2rem;text-align:center;color:var(--text-muted);font-weight:700;">لا يوجد موظفون بعد</div>
+        </div>
+
+        <div class="op-tool-modal-overlay" id="empModal" style="display:none;">
+          <div class="op-tool-modal" style="max-width:640px;">
+            <div class="op-tool-modal-head"><div><h3 id="empModalTitle">موظف جديد</h3></div><button type="button" id="empModalClose">✕</button></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 1rem;">
+              <div class="op-tool-field"><label>الاسم</label><input type="text" id="fName" /></div>
+              <div class="op-tool-field"><label>الجنسية</label><input type="text" id="fNationality" /></div>
+              <div class="op-tool-field"><label>رقم الهوية / الإقامة</label><input type="text" id="fNationalId" /></div>
+              <div class="op-tool-field"><label>تاريخ انتهاء الإقامة</label><input type="date" id="fResidencyExpiry" /></div>
+              <div class="op-tool-field"><label>رقم الجواز</label><input type="text" id="fPassportNumber" /></div>
+              <div class="op-tool-field"><label>تاريخ انتهاء الجواز</label><input type="date" id="fPassportExpiry" /></div>
+              <div class="op-tool-field"><label>الوظيفة</label><input type="text" id="fPosition" /></div>
+              <div class="op-tool-field"><label>القسم</label><input type="text" id="fDepartment" /></div>
+              <div class="op-tool-field"><label>الفرع</label><input type="text" id="fBranch" /></div>
+              <div class="op-tool-field"><label>الراتب الأساسي</label><input type="number" id="fBasicSalary" step="0.01" /></div>
+              <div class="op-tool-field"><label>نسبة العمولة % (اختياري)</label><input type="number" id="fCommissionPct" step="0.01" /></div>
+              <div class="op-tool-field"><label>تاريخ التعيين</label><input type="date" id="fHireDate" /></div>
+              <div class="op-tool-field"><label>تاريخ الميلاد (اختياري)</label><input type="date" id="fBirthDate" /></div>
+              <div class="op-tool-field"><label>رقم الجوال</label><input type="text" id="fPhone" /></div>
+              <div class="op-tool-field"><label>البريد الإلكتروني</label><input type="email" id="fEmail" /></div>
+              <div class="op-tool-field">
+                <label>الحالة</label>
+                <select id="fStatus">
+                  <option value="active">نشط</option>
+                  <option value="on_leave">إجازة</option>
+                  <option value="suspended">موقوف</option>
+                  <option value="resigned">مستقيل</option>
+                  <option value="terminated">منتهي الخدمة</option>
+                </select>
+              </div>
+            </div>
+            <div class="op-tool-field"><label>ملاحظات</label><input type="text" id="fNotes" /></div>
+            <div class="op-tool-modal-actions">
+              <button type="button" class="op-tool-btn-secondary" id="empModalCancel">إلغاء</button>
+              <button type="button" class="op-btn-chip op-btn-chip--gold" id="empModalSave">حفظ</button>
+            </div>
+          </div>
         </div>
       </main>
     </div>
@@ -508,76 +545,139 @@
     </script>
     <script>
 
-        var SEV_META = {
-          critical: {color:"#dc2626", bg:"rgba(220,38,38,0.12)", icon:"🔴"},
-          high: {color:"#f97316", bg:"rgba(249,115,22,0.12)", icon:"🟠"},
-          medium: {color:"#eab308", bg:"rgba(234,179,8,0.12)", icon:"🟡"},
-          notice: {color:"#22c55e", bg:"rgba(34,197,94,0.12)", icon:"🟢"}
-        };
+        var _empEditingId = null;
+        var _empAll = [];
+        var STATUS_LABELS = {active:"🟢 نشط", on_leave:"🟡 إجازة", suspended:"🟠 موقوف", resigned:"⚪ مستقيل", terminated:"🔴 منتهي الخدمة"};
 
-        async function loadFeed() {
-          try {
-            var res = await apiGet("/api/hr/alerts/feed");
-            var items = res.items || [];
-            var wrap = document.getElementById("feedWrap");
-            wrap.innerHTML = "";
-            items.forEach(function (it) {
-              var m = SEV_META[it.severity] || SEV_META.notice;
-              var card = document.createElement("div");
-              card.className = "op-shell-card";
-              card.style.cssText = "padding:0.85rem 1.1rem;display:flex;align-items:center;gap:10px;background:" + m.bg + ";border-inline-start:4px solid " + m.color + ";";
-              card.innerHTML = "<span style='font-size:1.1rem;'>" + m.icon + "</span><span style='font-weight:700;'>" + it.message + "</span>" +
-                "<a href='/hr/employee?id=" + encodeURIComponent(it.employee_id) + "' style='margin-inline-start:auto;color:var(--gold-soft);font-weight:800;font-size:0.8rem;text-decoration:none;'>عرض الملف →</a>";
-              wrap.appendChild(card);
-            });
-            document.getElementById("feedEmpty").style.display = items.length ? "none" : "block";
-          } catch (e) { showToast(e.message || "تعذر تحميل التنبيهات", "#dc2626"); }
-        }
-
-        function sevMetaDoc(status) {
-          var map = {
-            active: {emoji:"🟢", color:"#22c55e", label:"سارية"}, expiring_60: {emoji:"🟢", color:"#22c55e", label:"تنتهي قريبًا"},
-            expiring_30: {emoji:"🟡", color:"#eab308", label:"تنتهي قريبًا"}, expiring_15: {emoji:"🟠", color:"#f97316", label:"تنتهي قريبًا"},
-            expiring_7: {emoji:"🔴", color:"#dc2626", label:"تنتهي قريبًا"}, expired: {emoji:"🔴", color:"#991b1b", label:"منتهية"}
-          };
-          return map[status] || {emoji:"⚪", color:"#6b7280", label:"—"};
-        }
-
-        function renderAlertsRow(x) {
-          var sm = sevMetaDoc(x.status);
+        function renderEmpRow(e) {
           var tr = document.createElement("tr");
+          var residency = e.residency_days_left == null ? "—" : (e.residency_days_left < 0 ? "منتهية" : e.residency_days_left + " يوم");
           tr.innerHTML =
-            "<td>" + sm.emoji + " <span style='color:" + sm.color + ";font-weight:800;'>" + (x.status_label || sm.label) + "</span></td>" +
-            "<td style='font-weight:800;'>" + (x.employee_name || "") + "</td>" +
-            "<td>" + (x.doc_type || "") + "</td>" + "<td>" + (x.doc_number || "—") + "</td>" + "<td>" + (x.expiry_date || "—") + "</td>" +
-            "<td><a href='/hr/employee?id=" + encodeURIComponent(x.employee_id) + "&tab=docs' class='op-btn-chip' style='padding:5px 12px;font-size:0.78rem;'>عرض الملف</a></td>";
+            "<td style='font-weight:800;'>" + e.name + " <span style='color:var(--text-muted);font-size:0.75rem;'>(" + e.employee_number + ")</span></td>" +
+            "<td>" + (e.position || "—") + "</td>" +
+            "<td>" + (e.branch_name || "—") + "</td>" +
+            "<td>" + e.basic_salary.toLocaleString() + "</td>" +
+            "<td>" + residency + "</td>" +
+            "<td>" + (e.contract_status || "لا يوجد") + "</td>" +
+            "<td>" + (STATUS_LABELS[e.status] || e.status) + "</td>" +
+            "<td style='white-space:nowrap;'></td>";
+          var td = tr.lastElementChild;
+          var mk = function (label, fn) {
+            var b = document.createElement("button");
+            b.type = "button"; b.className = "op-tool-btn-secondary"; b.style.cssText = "padding:4px 9px;font-size:0.72rem;margin-inline-end:4px;";
+            b.textContent = label; b.addEventListener("click", fn);
+            return b;
+          };
+          var viewLink = document.createElement("a");
+          viewLink.href = "/hr/employee?id=" + encodeURIComponent(e.id);
+          viewLink.className = "op-btn-chip"; viewLink.style.cssText = "padding:4px 10px;font-size:0.72rem;margin-inline-end:4px;";
+          viewLink.textContent = "عرض الملف";
+          td.appendChild(viewLink);
+          td.appendChild(mk("تعديل", function () { openEmpModal(e); }));
+          td.appendChild(mk("حذف", function () { deleteEmp(e.id); }));
           return tr;
         }
 
-        async function loadDocAlerts() {
+        function renderEmpList() {
+          var body = document.getElementById("empBody");
+          body.innerHTML = "";
+          _empAll.forEach(function (e) { body.appendChild(renderEmpRow(e)); });
+          document.getElementById("empEmpty").style.display = _empAll.length ? "none" : "block";
+        }
+
+        async function loadEmployees() {
           var params = new URLSearchParams();
-          var docType = document.getElementById("flDocType").value.trim();
-          var dept = document.getElementById("flDepartment").value.trim();
+          var q = document.getElementById("flSearch").value.trim();
+          var dept = document.getElementById("flDept").value.trim();
           var branch = document.getElementById("flBranch").value.trim();
           var status = document.getElementById("flStatus").value;
-          var q = document.getElementById("flSearch").value.trim();
-          if (docType) params.set("doc_type", docType);
+          if (q) params.set("q", q);
           if (dept) params.set("department", dept);
           if (branch) params.set("branch_name", branch);
           if (status) params.set("status", status);
-          if (q) params.set("q", q);
           try {
-            var res = await apiGet("/api/hr/documents/alerts?" + params.toString());
-            var items = res.items || [];
-            var body = document.getElementById("alertsBody");
-            body.innerHTML = "";
-            items.forEach(function (x) { body.appendChild(renderAlertsRow(x)); });
-            document.getElementById("alertsEmpty").style.display = items.length ? "none" : "block";
-          } catch (e) { showToast(e.message || "تعذر تحميل الوثائق", "#dc2626"); }
+            var res = await apiGet("/api/hr/employees?" + params.toString());
+            _empAll = res.items || [];
+            renderEmpList();
+          } catch (e) { showToast(e.message || "تعذر تحميل الموظفين", "#dc2626"); }
         }
-        document.getElementById("flApplyBtn").addEventListener("click", loadDocAlerts);
 
-        (async function () { await loadFeed(); await loadDocAlerts(); })();
+        [document.getElementById("flSearch"), document.getElementById("flDept"), document.getElementById("flBranch")].forEach(function (el) {
+          el.addEventListener("keydown", function (ev) { if (ev.key === "Enter") loadEmployees(); });
+        });
+        document.getElementById("flStatus").addEventListener("change", loadEmployees);
+
+        function openEmpModal(e) {
+          _empEditingId = e ? e.id : null;
+          document.getElementById("empModalTitle").textContent = e ? "تعديل بيانات الموظف" : "موظف جديد";
+          document.getElementById("fName").value = e ? e.name : "";
+          document.getElementById("fNationality").value = e ? e.nationality : "";
+          document.getElementById("fNationalId").value = e ? e.national_id : "";
+          document.getElementById("fResidencyExpiry").value = e ? e.residency_expiry : "";
+          document.getElementById("fPassportNumber").value = e ? e.passport_number : "";
+          document.getElementById("fPassportExpiry").value = e ? e.passport_expiry : "";
+          document.getElementById("fPosition").value = e ? e.position : "";
+          document.getElementById("fDepartment").value = e ? e.department : "";
+          document.getElementById("fBranch").value = e ? e.branch_name : "";
+          document.getElementById("fBasicSalary").value = e ? e.basic_salary : "";
+          document.getElementById("fCommissionPct").value = e && e.commission_percentage != null ? e.commission_percentage : "";
+          document.getElementById("fHireDate").value = e ? e.hire_date : "";
+          document.getElementById("fBirthDate").value = e ? e.birth_date : "";
+          document.getElementById("fPhone").value = e ? e.phone : "";
+          document.getElementById("fEmail").value = e ? e.email : "";
+          document.getElementById("fStatus").value = e ? e.status : "active";
+          document.getElementById("fNotes").value = e ? e.notes : "";
+          document.getElementById("empModal").style.display = "flex";
+        }
+        document.getElementById("addEmpBtn").addEventListener("click", function () { openEmpModal(null); });
+        document.getElementById("empModalClose").addEventListener("click", function () { document.getElementById("empModal").style.display = "none"; });
+        document.getElementById("empModalCancel").addEventListener("click", function () { document.getElementById("empModal").style.display = "none"; });
+        document.getElementById("empModal").addEventListener("click", function (ev) { if (ev.target === this) this.style.display = "none"; });
+
+        document.getElementById("empModalSave").addEventListener("click", async function () {
+          var name = document.getElementById("fName").value.trim();
+          if (!name) { showToast("اكتب اسم الموظف", "#dc2626"); return; }
+          var payload = {
+            name: name,
+            nationality: document.getElementById("fNationality").value,
+            national_id: document.getElementById("fNationalId").value,
+            residency_expiry: document.getElementById("fResidencyExpiry").value,
+            passport_number: document.getElementById("fPassportNumber").value,
+            passport_expiry: document.getElementById("fPassportExpiry").value,
+            position: document.getElementById("fPosition").value,
+            department: document.getElementById("fDepartment").value,
+            branch_name: document.getElementById("fBranch").value,
+            basic_salary: parseFloat(document.getElementById("fBasicSalary").value || "0"),
+            commission_percentage: document.getElementById("fCommissionPct").value ? parseFloat(document.getElementById("fCommissionPct").value) : null,
+            hire_date: document.getElementById("fHireDate").value,
+            birth_date: document.getElementById("fBirthDate").value,
+            phone: document.getElementById("fPhone").value,
+            email: document.getElementById("fEmail").value,
+            status: document.getElementById("fStatus").value,
+            notes: document.getElementById("fNotes").value
+          };
+          try {
+            if (_empEditingId) {
+              await apiPatchJson("/api/hr/employees/" + _empEditingId, payload);
+            } else {
+              await apiPostJson("/api/hr/employees", payload);
+            }
+            showToast("تم الحفظ ✔️", "#22c55e");
+            document.getElementById("empModal").style.display = "none";
+            await loadEmployees();
+          } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
+        });
+
+        async function deleteEmp(id) {
+          if (!confirm("هل تريد حذف هذا الموظف؟")) return;
+          try {
+            await apiDelete("/api/hr/employees/" + id);
+            showToast("تم الحذف", "#22c55e");
+            await loadEmployees();
+          } catch (e) { showToast(e.message || "تعذر الحذف", "#dc2626"); }
+        }
+
+        loadEmployees();
     </script>
 
   </body>

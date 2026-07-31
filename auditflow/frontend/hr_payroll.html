@@ -425,114 +425,56 @@
       </header>
 
       <main class="op-main">
-        <div class="hr-nav" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-radius:14px;background:linear-gradient(90deg, rgba(180,140,60,0.14), rgba(180,140,60,0.03));border:1px solid var(--gold-dim);margin-bottom:14px;">
-          <span style="font-weight:800;color:var(--gold-soft);">👥 الموارد البشرية</span>
-          <a href="/hr" style="padding:7px 14px;border-radius:999px;font-weight:800;font-size:0.85rem;border:1px solid var(--gold-dim);color:var(--text-heading);">🏠 الرئيسية</a>
-          <a href="/hr/payroll" style="padding:7px 14px;border-radius:999px;font-weight:800;font-size:0.85rem;background:linear-gradient(270deg, #8a6a1f 0%, var(--gold) 45%, var(--gold-soft) 100%);color:#1a1406;border:none;">💰 الرواتب</a>
-          <a href="/hr/alerts" style="padding:7px 14px;border-radius:999px;font-weight:800;font-size:0.85rem;border:1px solid var(--gold-dim);color:var(--text-heading);">🔔 التنبيهات والوثائق</a>
-        </div>
-        <div class="op-content-panel">
-          <div class="op-hero" style="margin-bottom:1.25rem;">
-            <h1>👥 <b>الرواتب</b></h1>
-            <p>نظام رواتب بسيط: أنشئ راتب الموظف، أضف البدلات والاستقطاعات، واصرف الراتب بضغطة واحدة.</p>
-          </div>
-
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.25rem;">
-            <div class="op-shell-card" style="padding:1.25rem;text-align:start;"><div style="font-size:0.8rem;color:var(--text-muted);font-weight:800;">عدد الموظفين</div><div id="statEmployees" style="font-size:1.8rem;font-weight:800;color:var(--text-heading);">0</div></div>
-            <div class="op-shell-card" style="padding:1.25rem;text-align:start;"><div style="font-size:0.8rem;color:var(--text-muted);font-weight:800;">إجمالي رواتب هذا الشهر</div><div id="statTotal" style="font-size:1.8rem;font-weight:800;color:var(--text-heading);">0.00</div></div>
-            <div class="op-shell-card" style="padding:1.25rem;text-align:start;"><div style="font-size:0.8rem;color:var(--text-muted);font-weight:800;">الرواتب المصروفة</div><div id="statPaid" style="font-size:1.8rem;font-weight:800;color:#1f9d63;">0.00</div></div>
-            <div class="op-shell-card" style="padding:1.25rem;text-align:start;"><div style="font-size:0.8rem;color:var(--text-muted);font-weight:800;">الرواتب غير المصروفة</div><div id="statUnpaid" style="font-size:1.8rem;font-weight:800;color:#dc2626;">0.00</div></div>
-          </div>
-
-          <div class="op-shell-card" style="text-align:start;padding:1.5rem;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
-              <h2 style="font-weight:800;color:var(--text-heading);margin:0;">📋 جدول الرواتب</h2>
-              <button type="button" class="op-btn-chip op-btn-chip--gold" id="newPayrollBtn">➕ إنشاء راتب جديد</button>
-            </div>
-            <div style="overflow-x:auto;">
-              <table class="op-admin-table" style="width:100%;border-collapse:collapse;">
-                <thead><tr>
-                  <th style="padding:0.5rem;">الموظف</th><th style="padding:0.5rem;">الشهر</th><th style="padding:0.5rem;">السنة</th><th style="padding:0.5rem;">الراتب الأساسي</th><th style="padding:0.5rem;">الإضافات</th><th style="padding:0.5rem;">الاستقطاعات</th><th style="padding:0.5rem;">صافي الراتب</th><th style="padding:0.5rem;">الحالة</th><th style="padding:0.5rem;"></th>
-                </tr></thead>
-                <tbody id="payrollBody"></tbody>
-              </table>
-              <div id="payrollEmpty" style="text-align:center;color:var(--text-muted);padding:1.5rem 0;">لا توجد رواتب مسجّلة بعد.</div>
-            </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1rem;">
+          <div>
+            <a href="/hr" style="font-weight:800;color:var(--gold-soft);text-decoration:none;font-size:0.85rem;">→ رجوع للوحة الموارد البشرية</a>
+            <h1 style="margin-top:0.4rem;">💰 <b>الرواتب</b></h1>
+            <p>الرواتب مترابطة تلقائياً مع السلف والبدلات والاستقطاعات والعمولات والحضور والإجازات — بدون إدخال يدوي مكرر.</p>
           </div>
         </div>
 
-        <div class="op-tool-modal-overlay" id="createPayrollModal" style="display:none;">
-          <div class="op-tool-modal" style="max-width:640px;">
-            <div class="op-tool-modal-head">
-              <div><h3>➕ إنشاء راتب جديد</h3><p>اختر الموظف والشهر ثم أضف البدلات والاستقطاعات إن وجدت</p></div>
-              <button type="button" id="createPayrollClose">✕</button>
-            </div>
-            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0.8rem;">
-              <div class="op-tool-field" style="grid-column:1/-1;">
-                <label>الموظف</label>
-                <div style="display:flex;gap:0.5rem;">
-                  <select id="pfEmployee" style="flex:1;padding:0.6rem 0.75rem;border-radius:10px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);font-weight:600;"></select>
-                  <button type="button" class="op-btn-chip" id="quickAddEmployeeBtn">+ موظف جديد</button>
-                </div>
-              </div>
-              <div class="op-tool-field"><label>الشهر</label><select id="pfMonth"></select></div>
-              <div class="op-tool-field"><label>السنة</label><input type="number" id="pfYear" /></div>
-              <div class="op-tool-field" style="grid-column:1/-1;"><label>الراتب الأساسي</label><input type="number" step="0.01" id="pfBase" value="0" /></div>
-            </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;justify-content:space-between;margin-bottom:0.9rem;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <select id="flMonth" style="padding:8px 12px;border-radius:10px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);"></select>
+            <input type="number" id="flYear" style="width:100px;padding:8px 12px;border-radius:10px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);" />
+            <select id="flStatus" style="padding:8px 12px;border-radius:10px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);">
+              <option value="">كل الحالات</option><option value="unpaid">غير مدفوع</option><option value="paid">مدفوع</option><option value="cancelled">ملغى</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="op-tool-btn-secondary" id="bulkCreateBtn">⚡ إنشاء رواتب الشهر لجميع النشطين</button>
+            <button type="button" class="op-btn-chip op-btn-chip--gold" id="addBtn">➕ راتب لموظف واحد</button>
+          </div>
+        </div>
 
-            <div style="margin-top:0.5rem;">
-              <div style="font-weight:800;color:var(--text-heading);margin-bottom:0.5rem;">➕ الإضافات</div>
-              <datalist id="allowPresets"><option value="بدل سكن"><option value="بدل نقل"><option value="مكافأة"><option value="عمولة"><option value="أخرى"></datalist>
-              <div id="allowRows"></div>
-              <button type="button" class="op-btn-chip" id="addAllowRowBtn" style="margin-top:0.4rem;">+ إضافة بند</button>
-            </div>
-            <div style="margin-top:1rem;">
-              <div style="font-weight:800;color:var(--text-heading);margin-bottom:0.5rem;">➖ الاستقطاعات</div>
-              <datalist id="dedPresets"><option value="سلفة"><option value="خصم"><option value="غياب"><option value="تأخير"><option value="أخرى"></datalist>
-              <div id="dedRows"></div>
-              <button type="button" class="op-btn-chip" id="addDedRowBtn" style="margin-top:0.4rem;">+ إضافة بند</button>
-            </div>
+        <div class="op-shell-card" style="padding:0;overflow:auto;">
+          <table class="op-admin-table" style="width:100%;">
+            <thead><tr><th>الموظف</th><th>الشهر</th><th>السنة</th><th>الأساسي</th><th>البدلات</th><th>الاستقطاعات</th><th>الضريبة</th><th>الصافي</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+            <tbody id="listBody"></tbody>
+          </table>
+          <div id="listEmpty" style="display:none;padding:2rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد رواتب لهذا الشهر</div>
+        </div>
 
-            <div style="border-top:1px dashed var(--gold-dim);margin:1rem 0;padding-top:0.75rem;">
-              <div style="display:flex;justify-content:space-between;font-weight:700;color:var(--text-body);"><span>إجمالي الإضافات</span><span id="pfAllowTotal">0.00</span></div>
-              <div style="display:flex;justify-content:space-between;font-weight:700;color:var(--text-body);"><span>إجمالي الاستقطاعات</span><span id="pfDedTotal">0.00</span></div>
-              <div style="display:flex;justify-content:space-between;font-weight:800;font-size:1.3rem;color:var(--gold-soft);"><span>صافي الراتب</span><span id="pfNetTotal">0.00</span></div>
-            </div>
+        <div class="op-tool-modal-overlay" id="addModal" style="display:none;">
+          <div class="op-tool-modal">
+            <div class="op-tool-modal-head"><div><h3>راتب جديد</h3></div><button type="button" id="modalClose">✕</button></div>
+            <div class="op-tool-field"><label>الموظف</label><select id="fEmployee"></select></div>
+            <div class="op-tool-field"><label>الشهر</label><select id="fMonth"></select></div>
+            <div class="op-tool-field"><label>السنة</label><input type="number" id="fYear" /></div>
+            <div class="op-tool-field"><label>الراتب الأساسي (اتركه فارغاً لاستخدام راتب الموظف الافتراضي)</label><input type="number" id="fBaseSalary" step="0.01" /></div>
+            <p style="font-size:0.78rem;color:var(--text-muted);margin:0.5rem 0;">سيتم سحب البدلات المتكررة، العمولات، الاستقطاعات، وقسط السلفة النشطة تلقائياً عند الحفظ.</p>
             <div class="op-tool-modal-actions">
-              <button type="button" class="op-tool-btn-secondary" id="createPayrollCancel">إلغاء</button>
-              <button type="button" class="op-btn-chip op-btn-chip--gold" id="createPayrollSave">💾 حفظ الراتب</button>
+              <button type="button" class="op-tool-btn-secondary" id="modalCancel">إلغاء</button>
+              <button type="button" class="op-btn-chip op-btn-chip--gold" id="modalSave">إنشاء الراتب</button>
             </div>
           </div>
         </div>
 
         <div class="op-tool-modal-overlay" id="detailsModal" style="display:none;">
-          <div class="op-tool-modal" style="max-width:600px;">
-            <div class="op-tool-modal-head">
-              <div><h3 id="detailsTitle">تفاصيل الراتب</h3><p id="detailsSub"></p></div>
-              <button type="button" id="detailsClose">✕</button>
-            </div>
+          <div class="op-tool-modal">
+            <div class="op-tool-modal-head"><div><h3>تفاصيل الراتب</h3></div><button type="button" id="detailsClose">✕</button></div>
             <div id="detailsBody"></div>
-            <div class="op-tool-modal-actions" style="justify-content:space-between;">
-              <button type="button" class="op-btn-chip op-btn-chip--danger" id="detailsDeleteBtn">حذف</button>
-              <div style="display:flex;gap:0.6rem;">
-                <button type="button" class="op-tool-btn-secondary" id="detailsPrintBtn">🖨️ طباعة / PDF</button>
-                <button type="button" class="op-btn-chip op-btn-chip--gold" id="detailsPayBtn">💰 صرف الراتب</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="op-tool-modal-overlay" id="empModal" style="display:none;">
-          <div class="op-tool-modal" style="max-width:420px;">
-            <div class="op-tool-modal-head"><div><h3>موظف جديد</h3></div><button type="button" id="empModalClose">✕</button></div>
-            <div class="op-tool-field"><label>اسم الموظف</label><input type="text" id="empName" /></div>
-            <div class="op-tool-field"><label>الوظيفة (اختياري)</label><input type="text" id="empPosition" /></div>
-            <div class="op-tool-field"><label>القسم (اختياري)</label><input type="text" id="empDepartment" /></div>
-            <div class="op-tool-field"><label>الفرع (اختياري)</label><input type="text" id="empBranch" /></div>
-            <div class="op-tool-modal-actions">
-              <button type="button" class="op-tool-btn-secondary" id="empModalCancel">إلغاء</button>
-              <button type="button" class="op-btn-chip op-btn-chip--gold" id="empModalSave">حفظ</button>
-            </div>
+            <div class="op-tool-modal-actions" id="detailsActions"></div>
           </div>
         </div>
       </main>
@@ -581,254 +523,166 @@
       
     </script>
     <script>
-      (async function () {
-        await initAuthUI();
-        var employees = [];
-        var payrolls = [];
-        var allowRows = [];
-        var dedRows = [];
-        var companyProfile = {};
-        var currentDetailsId = null;
+
         var MONTHS = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+        var _employeesCache = [];
+        var _now = new Date();
 
-        function esc(s){return String(s==null?"":s).replace(/[&<>"']/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]; });}
-        function round2(v){return Math.round((Number(v)||0)*100)/100;}
-        function money(v){return round2(v).toFixed(2);}
+        ["flMonth","fMonth"].forEach(function (id) {
+          document.getElementById(id).innerHTML = MONTHS.map(function (m, i) { return '<option value="' + (i+1) + '">' + m + '</option>'; }).join("");
+        });
+        document.getElementById("flMonth").insertAdjacentHTML("afterbegin", '<option value="0">كل الشهور</option>');
+        document.getElementById("flMonth").value = _now.getMonth() + 1;
+        document.getElementById("flYear").value = _now.getFullYear();
+        document.getElementById("fMonth").value = _now.getMonth() + 1;
+        document.getElementById("fYear").value = _now.getFullYear();
 
-        async function loadCompanyProfile() {
-          try { companyProfile = await apiGet("/api/company-profile"); } catch (e) { companyProfile = {}; }
-        }
-
-        async function loadStats() {
+        async function loadEmployeeOptions() {
           try {
-            var d = await apiGet("/api/hr/dashboard-summary");
-            document.getElementById("statEmployees").textContent = d.employees_count;
-            document.getElementById("statTotal").textContent = money(d.total_this_month);
-            document.getElementById("statPaid").textContent = money(d.paid_amount);
-            document.getElementById("statUnpaid").textContent = money(d.unpaid_amount);
+            var res = await apiGet("/api/hr/employees?status=active");
+            _employeesCache = res.items || [];
+            var fSel = document.getElementById("fEmployee");
+            _employeesCache.forEach(function (e) { fSel.appendChild(new Option(e.name, e.id)); });
           } catch (e) {}
         }
 
-        async function loadEmployees() {
-          var d = await apiGet("/api/hr/employees");
-          employees = (d.items || []).filter(function (x) { return x.is_active; });
-          var sel = document.getElementById("pfEmployee");
-          sel.innerHTML = employees.map(function (x) { return '<option value="'+esc(x.id)+'">'+esc(x.name)+(x.position?(' — '+esc(x.position)):'')+'</option>'; }).join("") || '<option value="">لا يوجد موظفون بعد</option>';
+        function renderRow(p) {
+          var tr = document.createElement("tr");
+          var statusMap = {unpaid:"🟡 غير مدفوع", paid:"🟢 مدفوع", cancelled:"⚪ ملغى"};
+          tr.innerHTML =
+            "<td style='font-weight:800;'>" + p.employee_name + "</td>" +
+            "<td>" + MONTHS[p.month-1] + "</td>" + "<td>" + p.year + "</td>" +
+            "<td>" + p.base_salary.toLocaleString() + "</td>" + "<td>" + p.total_allowances.toLocaleString() + "</td>" +
+            "<td>" + p.total_deductions.toLocaleString() + "</td>" + "<td>" + p.tax_amount.toLocaleString() + "</td>" +
+            "<td style='font-weight:800;'>" + p.net_salary.toLocaleString() + "</td>" +
+            "<td>" + (statusMap[p.status] || p.status) + "</td>" + "<td></td>";
+          var td = tr.lastElementChild;
+          var mk = function (label, fn) {
+            var b = document.createElement("button");
+            b.type = "button"; b.className = "op-tool-btn-secondary"; b.style.cssText = "padding:4px 9px;font-size:0.72rem;margin-inline-end:4px;";
+            b.textContent = label; b.addEventListener("click", fn);
+            return b;
+          };
+          td.appendChild(mk("تفاصيل", function () { openDetails(p); }));
+          return tr;
         }
 
-        function renderPayrollRow(x) {
-          var badge = x.status === "paid"
-            ? '<span style="background:rgba(31,157,99,0.15);color:#1f9d63;font-weight:800;font-size:0.72rem;padding:3px 10px;border-radius:999px;">مدفوع</span>'
-            : '<span style="background:rgba(220,38,38,0.12);color:#dc2626;font-weight:800;font-size:0.72rem;padding:3px 10px;border-radius:999px;">غير مدفوع</span>';
-          return '<tr>' +
-            '<td style="padding:0.5rem;font-weight:800;color:var(--text-heading);">'+esc(x.employee_name)+'</td>' +
-            '<td style="padding:0.5rem;">'+esc(MONTHS[x.month-1]||x.month)+'</td>' +
-            '<td style="padding:0.5rem;">'+esc(x.year)+'</td>' +
-            '<td style="padding:0.5rem;">'+money(x.base_salary)+'</td>' +
-            '<td style="padding:0.5rem;color:#1f9d63;">+'+money(x.total_allowances)+'</td>' +
-            '<td style="padding:0.5rem;color:#dc2626;">-'+money(x.total_deductions)+'</td>' +
-            '<td style="padding:0.5rem;font-weight:800;color:var(--gold-soft);">'+money(x.net_salary)+'</td>' +
-            '<td style="padding:0.5rem;">'+badge+'</td>' +
-            '<td style="padding:0.5rem;"><button class="op-btn-chip" data-view="'+esc(x.id)+'" style="padding:5px 12px;">عرض</button></td>' +
-            '</tr>';
-        }
-
-        async function loadPayrolls() {
-          var d = await apiGet("/api/hr/payrolls");
-          payrolls = d.items || [];
-          var body = document.getElementById("payrollBody");
-          var empty = document.getElementById("payrollEmpty");
-          if (!payrolls.length) { body.innerHTML = ""; empty.style.display = "block"; return; }
-          empty.style.display = "none";
-          body.innerHTML = payrolls.map(renderPayrollRow).join("");
-          body.querySelectorAll("[data-view]").forEach(function (btn) {
-            btn.addEventListener("click", function () { openDetails(btn.getAttribute("data-view")); });
-          });
-        }
-
-        function renderRows(hostId, rows, listId) {
-          var host = document.getElementById(hostId);
-          var st = "padding:0.5rem 0.6rem;border-radius:8px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);font-weight:600;";
-          host.innerHTML = rows.map(function (r, i) {
-            return '<div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;">' +
-              '<input list="'+listId+'" data-i="'+i+'" data-f="label" value="'+esc(r.label)+'" placeholder="اسم البند" style="flex:1;'+st+'" />' +
-              '<input type="number" step="0.01" data-i="'+i+'" data-f="amount" value="'+esc(r.amount)+'" placeholder="القيمة" style="width:120px;'+st+'" />' +
-              '<button type="button" data-i="'+i+'" data-del="1" class="op-btn-chip op-btn-chip--danger" style="padding:6px 10px;">✕</button>' +
-              '</div>';
-          }).join("") || '<div style="color:var(--text-muted);font-size:0.8rem;">لا توجد بنود بعد</div>';
-          host.querySelectorAll("input").forEach(function (inp) {
-            inp.addEventListener("input", function () {
-              var i = Number(inp.getAttribute("data-i"));
-              var f = inp.getAttribute("data-f");
-              rows[i][f] = f === "amount" ? Number(inp.value)||0 : inp.value;
-              computeTotals();
-            });
-          });
-          host.querySelectorAll("[data-del]").forEach(function (btn) {
-            btn.addEventListener("click", function () {
-              rows.splice(Number(btn.getAttribute("data-i")), 1);
-              if (hostId === "allowRows") renderAllowRows(); else renderDedRows();
-              computeTotals();
-            });
-          });
-        }
-        function renderAllowRows() { renderRows("allowRows", allowRows, "allowPresets"); }
-        function renderDedRows() { renderRows("dedRows", dedRows, "dedPresets"); }
-
-        function computeTotals() {
-          var base = Number(document.getElementById("pfBase").value) || 0;
-          var allowTotal = allowRows.reduce(function (s,r) { return s + (Number(r.amount)||0); }, 0);
-          var dedTotal = dedRows.reduce(function (s,r) { return s + (Number(r.amount)||0); }, 0);
-          document.getElementById("pfAllowTotal").textContent = money(allowTotal);
-          document.getElementById("pfDedTotal").textContent = money(dedTotal);
-          document.getElementById("pfNetTotal").textContent = money(base + allowTotal - dedTotal);
-        }
-
-        function openCreateModal() {
-          allowRows = []; dedRows = [];
-          renderAllowRows(); renderDedRows();
-          document.getElementById("pfBase").value = 0;
-          document.getElementById("pfYear").value = new Date().getFullYear();
-          document.getElementById("pfMonth").value = String(new Date().getMonth()+1);
-          computeTotals();
-          document.getElementById("createPayrollModal").style.display = "flex";
-        }
-        function closeCreateModal() { document.getElementById("createPayrollModal").style.display = "none"; }
-
-        async function saveCreatePayroll() {
-          var employeeId = document.getElementById("pfEmployee").value;
-          if (!employeeId) { showToast("اختر موظفًا أولاً", "#dc2626"); return; }
+        async function loadList() {
+          var month = document.getElementById("flMonth").value;
+          var year = document.getElementById("flYear").value;
+          var status = document.getElementById("flStatus").value;
+          var params = new URLSearchParams();
+          if (month && month !== "0") params.set("month", month);
+          if (year) params.set("year", year);
+          if (status) params.set("status", status);
           try {
-            var payload = {
-              employee_id: employeeId,
-              month: Number(document.getElementById("pfMonth").value),
-              year: Number(document.getElementById("pfYear").value),
-              base_salary: Number(document.getElementById("pfBase").value) || 0,
-              allowances: allowRows.filter(function(r){return r.label && Number(r.amount)>0;}).map(function(r){return {label:r.label, amount:Number(r.amount)};}),
-              deductions: dedRows.filter(function(r){return r.label && Number(r.amount)>0;}).map(function(r){return {label:r.label, amount:Number(r.amount)};}),
-            };
+            var res = await apiGet("/api/hr/payrolls?" + params.toString());
+            var items = res.items || [];
+            var body = document.getElementById("listBody");
+            body.innerHTML = "";
+            items.forEach(function (p) { body.appendChild(renderRow(p)); });
+            document.getElementById("listEmpty").style.display = items.length ? "none" : "block";
+          } catch (e) { showToast(e.message || "تعذر التحميل", "#dc2626"); }
+        }
+        ["flMonth","flYear","flStatus"].forEach(function (id) { document.getElementById(id).addEventListener("change", loadList); });
+
+        document.getElementById("addBtn").addEventListener("click", function () {
+          document.getElementById("fEmployee").value = "";
+          document.getElementById("fBaseSalary").value = "";
+          document.getElementById("addModal").style.display = "flex";
+        });
+        document.getElementById("modalClose").addEventListener("click", function () { document.getElementById("addModal").style.display = "none"; });
+        document.getElementById("modalCancel").addEventListener("click", function () { document.getElementById("addModal").style.display = "none"; });
+        document.getElementById("addModal").addEventListener("click", function (ev) { if (ev.target === this) this.style.display = "none"; });
+
+        async function createOne(employeeId, month, year, baseSalary, silent) {
+          var payload = { employee_id: employeeId, month: month, year: year };
+          if (baseSalary) payload.base_salary = baseSalary;
+          try {
             await apiPostJson("/api/hr/payrolls", payload);
-            showToast("تم إنشاء الراتب بنجاح ✔️", "#22c55e");
-            closeCreateModal();
-            await Promise.all([loadPayrolls(), loadStats()]);
-          } catch (e) { showToast(e.message || "تعذر إنشاء الراتب", "#dc2626"); }
+            return true;
+          } catch (e) {
+            if (!silent) showToast(e.message || "تعذر إنشاء الراتب", "#dc2626");
+            return false;
+          }
         }
 
-        async function openDetails(id) {
-          try {
-            var d = await apiGet("/api/hr/payrolls/" + encodeURIComponent(id));
-            currentDetailsId = id;
-            document.getElementById("detailsTitle").textContent = "راتب " + d.employee_name;
-            document.getElementById("detailsSub").textContent = (MONTHS[d.month-1]||d.month) + " " + d.year + (d.employee_position ? (" — " + d.employee_position) : "");
-            var rowsHtml = function (label, val, color) {
-              return '<div style="display:flex;justify-content:space-between;padding:0.3rem 0;font-weight:700;'+(color?('color:'+color+';'):'')+'"><span>'+esc(label)+'</span><span>'+money(val)+'</span></div>';
-            };
-            var html = '<div style="font-weight:800;color:var(--text-heading);margin:0.5rem 0;">المستحقات</div>';
-            html += rowsHtml("الراتب الأساسي", d.base_salary);
-            (d.allowances||[]).forEach(function (a) { html += rowsHtml(a.label, a.amount, "#1f9d63"); });
-            html += '<div style="font-weight:800;color:var(--text-heading);margin:0.75rem 0 0.5rem;">الاستقطاعات</div>';
-            if (!(d.deductions||[]).length) html += '<div style="color:var(--text-muted);font-size:0.8rem;">لا توجد استقطاعات</div>';
-            (d.deductions||[]).forEach(function (x) { html += rowsHtml(x.label, x.amount, "#dc2626"); });
-            html += '<div style="border-top:1px dashed var(--gold-dim);margin-top:0.75rem;padding-top:0.6rem;">';
-            html += rowsHtml("إجمالي المستحقات", d.base_salary + d.total_allowances);
-            html += rowsHtml("إجمالي الاستقطاعات", d.total_deductions);
-            html += '<div style="display:flex;justify-content:space-between;font-weight:800;font-size:1.6rem;color:var(--gold-soft);margin-top:0.4rem;"><span>صافي الراتب</span><span>'+money(d.net_salary)+'</span></div>';
-            html += '</div>';
-            if (d.status === "paid") html += '<div style="margin-top:0.6rem;color:#1f9d63;font-weight:800;">✔️ تم الصرف بتاريخ '+esc(d.paid_at)+'</div>';
-            document.getElementById("detailsBody").innerHTML = html;
-            document.getElementById("detailsPayBtn").style.display = d.status === "paid" ? "none" : "inline-block";
-            document.getElementById("detailsDeleteBtn").style.display = d.status === "paid" ? "none" : "inline-block";
-            document.getElementById("detailsModal").style.display = "flex";
-            document.getElementById("detailsModal").dataset.payload = JSON.stringify(d);
-          } catch (e) { showToast(e.message || "تعذر تحميل تفاصيل الراتب", "#dc2626"); }
-        }
-        function closeDetails() { document.getElementById("detailsModal").style.display = "none"; currentDetailsId = null; }
-
-        async function payCurrentPayroll() {
-          if (!currentDetailsId) return;
-          if (!confirm("هل تريد صرف هذا الراتب؟ لا يمكن التراجع بعد الصرف.")) return;
-          try {
-            await apiPostJson("/api/hr/payrolls/" + encodeURIComponent(currentDetailsId) + "/pay", {});
-            showToast("تم صرف الراتب ✔️", "#22c55e");
-            await openDetails(currentDetailsId);
-            await Promise.all([loadPayrolls(), loadStats()]);
-          } catch (e) { showToast(e.message || "تعذر صرف الراتب", "#dc2626"); }
-        }
-
-        async function deleteCurrentPayroll() {
-          if (!currentDetailsId) return;
-          if (!confirm("هل تريد حذف هذا الراتب؟")) return;
-          try {
-            await apiDelete("/api/hr/payrolls/" + encodeURIComponent(currentDetailsId));
-            showToast("تم حذف الراتب ✔️", "#22c55e");
-            closeDetails();
-            await Promise.all([loadPayrolls(), loadStats()]);
-          } catch (e) { showToast(e.message || "تعذر حذف الراتب", "#dc2626"); }
-        }
-
-        function printCurrentPayroll() {
-          if (!currentDetailsId) return;
-          var d = JSON.parse(document.getElementById("detailsModal").dataset.payload || "{}");
-          var logoHtml = companyProfile.logo_url ? '<img src="'+esc(companyProfile.logo_url)+'" style="max-width:110px;max-height:70px;object-fit:contain;" />' : "";
-          var rowsHtml = "";
-          rowsHtml += "<tr><td>الراتب الأساسي</td><td>"+money(d.base_salary)+"</td></tr>";
-          (d.allowances||[]).forEach(function(a){ rowsHtml += "<tr><td>"+esc(a.label)+"</td><td>"+money(a.amount)+"</td></tr>"; });
-          var dedHtml = (d.deductions||[]).length
-            ? (d.deductions||[]).map(function(x){return "<tr><td>"+esc(x.label)+"</td><td>"+money(x.amount)+"</td></tr>";}).join("")
-            : "<tr><td colspan='2'>لا توجد استقطاعات</td></tr>";
-          var html = "<!doctype html><html lang=\"ar\" dir=\"rtl\"><head><meta charset=\"UTF-8\"><title>مسير راتب "+esc(d.employee_name)+"</title>" +
-            "<style>body{font-family:Arial,sans-serif;padding:20px;color:#111;} .slip{max-width:700px;margin:0 auto;} .head{display:flex;justify-content:space-between;border-bottom:2px solid #b8863a;padding-bottom:10px;margin-bottom:14px;} " +
-            "table{width:100%;border-collapse:collapse;margin-top:8px;} th,td{border:1px solid #ccc;padding:6px 10px;text-align:right;font-size:13px;} th{background:#f6f1e4;} " +
-            ".grand{font-weight:800;font-size:1.4rem;border-top:2px solid #b8863a;margin-top:10px;padding-top:8px;text-align:left;} .sign{display:flex;justify-content:space-between;margin-top:60px;} .sign div{width:45%;border-top:1px solid #333;padding-top:6px;text-align:center;font-size:13px;}</style></head><body>" +
-            "<div class=\"slip\"><div class=\"head\"><div>"+logoHtml+"<h2 style=\"margin:6px 0;\">"+esc(companyProfile.company_name||"")+"</h2></div>" +
-            "<div style=\"text-align:left;font-size:13px;\"><div><b>الموظف:</b> "+esc(d.employee_name)+"</div><div><b>الوظيفة:</b> "+esc(d.employee_position||"")+"</div><div><b>الشهر:</b> "+esc(MONTHS[d.month-1]||d.month)+" "+esc(d.year)+"</div></div></div>" +
-            "<h3>المستحقات</h3><table><thead><tr><th>البند</th><th>القيمة</th></tr></thead><tbody>"+rowsHtml+"</tbody></table>" +
-            "<h3>الاستقطاعات</h3><table><thead><tr><th>البند</th><th>القيمة</th></tr></thead><tbody>"+dedHtml+"</tbody></table>" +
-            "<div class=\"grand\">صافي الراتب: "+money(d.net_salary)+"</div>" +
-            "<div class=\"sign\"><div>توقيع الموظف</div><div>توقيع الإدارة</div></div>" +
-            "</div>" + "<" + "script>window.onload=function(){setTimeout(function(){window.print();},300);};<" + "/script>" +
-            "</body></html>";
-          var w = window.open("", "_blank");
-          if (!w) { showToast("يرجى السماح بالنوافذ المنبثقة للطباعة", "#dc2626"); return; }
-          w.document.open(); w.document.write(html); w.document.close(); w.focus();
-        }
-
-        function openEmpModal() { document.getElementById("empName").value=""; document.getElementById("empPosition").value=""; document.getElementById("empDepartment").value=""; document.getElementById("empBranch").value=""; document.getElementById("empModal").style.display = "flex"; }
-        function closeEmpModal() { document.getElementById("empModal").style.display = "none"; }
-        async function saveEmployee() {
-          var name = document.getElementById("empName").value.trim();
-          if (!name) { showToast("اكتب اسم الموظف", "#dc2626"); return; }
-          try {
-            var res = await apiPostJson("/api/hr/employees", { name: name, position: document.getElementById("empPosition").value || "", department: document.getElementById("empDepartment").value || "", branch_name: document.getElementById("empBranch").value || "" });
-            showToast("تمت إضافة الموظف ✔️", "#22c55e");
-            closeEmpModal();
-            await loadEmployees();
-            document.getElementById("pfEmployee").value = res.id;
-          } catch (e) { showToast(e.message || "تعذر إضافة الموظف", "#dc2626"); }
-        }
-
-        document.getElementById("pfMonth").innerHTML = MONTHS.map(function(m,i){return '<option value="'+(i+1)+'">'+m+'</option>';}).join("");
-        document.getElementById("newPayrollBtn").addEventListener("click", openCreateModal);
-        document.getElementById("createPayrollClose").addEventListener("click", closeCreateModal);
-        document.getElementById("createPayrollCancel").addEventListener("click", closeCreateModal);
-        document.getElementById("createPayrollSave").addEventListener("click", saveCreatePayroll);
-        document.getElementById("addAllowRowBtn").addEventListener("click", function () { allowRows.push({label:"",amount:0}); renderAllowRows(); });
-        document.getElementById("addDedRowBtn").addEventListener("click", function () { dedRows.push({label:"",amount:0}); renderDedRows(); });
-        document.getElementById("pfBase").addEventListener("input", computeTotals);
-        document.getElementById("detailsClose").addEventListener("click", closeDetails);
-        document.getElementById("detailsPayBtn").addEventListener("click", payCurrentPayroll);
-        document.getElementById("detailsDeleteBtn").addEventListener("click", deleteCurrentPayroll);
-        document.getElementById("detailsPrintBtn").addEventListener("click", printCurrentPayroll);
-        document.getElementById("quickAddEmployeeBtn").addEventListener("click", openEmpModal);
-        document.getElementById("empModalClose").addEventListener("click", closeEmpModal);
-        document.getElementById("empModalCancel").addEventListener("click", closeEmpModal);
-        document.getElementById("empModalSave").addEventListener("click", saveEmployee);
-        [document.getElementById("createPayrollModal"), document.getElementById("detailsModal"), document.getElementById("empModal")].forEach(function (ov) {
-          ov.addEventListener("click", function (ev) { if (ev.target === ov) ov.style.display = "none"; });
+        document.getElementById("modalSave").addEventListener("click", async function () {
+          var employee_id = document.getElementById("fEmployee").value;
+          if (!employee_id) { showToast("اختر الموظف", "#dc2626"); return; }
+          var ok = await createOne(employee_id, parseInt(document.getElementById("fMonth").value, 10), parseInt(document.getElementById("fYear").value, 10), parseFloat(document.getElementById("fBaseSalary").value || "0") || null, false);
+          if (ok) {
+            showToast("تم إنشاء الراتب ✔️", "#22c55e");
+            document.getElementById("addModal").style.display = "none";
+            await loadList();
+          }
         });
 
-        await Promise.all([loadCompanyProfile(), loadEmployees(), loadPayrolls(), loadStats()]);
-      })();
+        document.getElementById("bulkCreateBtn").addEventListener("click", async function () {
+          if (!confirm("سيتم إنشاء رواتب لكل الموظفين النشطين للشهر/السنة المحددين أعلاه (سيتم تخطي من لديه راتب بالفعل). متابعة؟")) return;
+          var month = parseInt(document.getElementById("flMonth").value || (new Date().getMonth()+1), 10) || (new Date().getMonth()+1);
+          var year = parseInt(document.getElementById("flYear").value, 10);
+          await loadEmployeeOptions();
+          var created = 0, skipped = 0;
+          for (var i = 0; i < _employeesCache.length; i++) {
+            var ok = await createOne(_employeesCache[i].id, month, year, null, true);
+            if (ok) created++; else skipped++;
+          }
+          showToast("تم إنشاء " + created + " راتب، وتخطي " + skipped + " (موجود مسبقاً)", "#22c55e");
+          await loadList();
+        });
+
+        function openDetails(p) {
+          document.getElementById("detailsBody").innerHTML =
+            "<div style='margin-bottom:0.75rem;'><b>" + p.employee_name + "</b> — " + MONTHS[p.month-1] + " " + p.year + "</div>" +
+            "<table class='op-admin-table' style='width:100%;margin-bottom:0.75rem;'>" +
+            "<tr><td>الراتب الأساسي</td><td>" + p.base_salary.toLocaleString() + "</td></tr>" +
+            p.allowances.map(function (a) { return "<tr><td>+ " + a.label + "</td><td>" + a.amount.toLocaleString() + "</td></tr>"; }).join("") +
+            p.deductions.map(function (d) { return "<tr><td>- " + d.label + "</td><td>" + d.amount.toLocaleString() + "</td></tr>"; }).join("") +
+            "<tr><td>الإجمالي قبل الضريبة</td><td>" + p.gross_before_tax.toLocaleString() + "</td></tr>" +
+            "<tr><td>الضريبة</td><td>" + p.tax_amount.toLocaleString() + "</td></tr>" +
+            "<tr style='font-weight:800;'><td>صافي الراتب</td><td>" + p.net_salary.toLocaleString() + "</td></tr>" +
+            "</table>";
+          var actions = document.getElementById("detailsActions");
+          actions.innerHTML = "";
+          var mk = function (label, cls, fn) {
+            var b = document.createElement("button"); b.type = "button"; b.className = cls; b.textContent = label; b.addEventListener("click", fn);
+            return b;
+          };
+          actions.appendChild(mk("طباعة المسير", "op-tool-btn-secondary", function () { printPayslip(p); }));
+          if (p.status === "unpaid") {
+            actions.appendChild(mk("صرف الراتب", "op-btn-chip op-btn-chip--gold", async function () {
+              try { await apiPostJson("/api/hr/payrolls/" + p.id + "/pay", {}); showToast("تم صرف الراتب ✔️", "#22c55e"); document.getElementById("detailsModal").style.display = "none"; await loadList(); }
+              catch (e) { showToast(e.message || "تعذر الصرف", "#dc2626"); }
+            }));
+            actions.appendChild(mk("حذف", "op-tool-btn-secondary", async function () {
+              if (!confirm("حذف هذا الراتب؟ سيتم استرجاع السلف/الاستقطاعات المرتبطة.")) return;
+              try { await apiDelete("/api/hr/payrolls/" + p.id); showToast("تم الحذف", "#22c55e"); document.getElementById("detailsModal").style.display = "none"; await loadList(); }
+              catch (e) { showToast(e.message || "تعذر الحذف", "#dc2626"); }
+            }));
+          }
+          document.getElementById("detailsModal").style.display = "flex";
+        }
+        document.getElementById("detailsClose").addEventListener("click", function () { document.getElementById("detailsModal").style.display = "none"; });
+        document.getElementById("detailsModal").addEventListener("click", function (ev) { if (ev.target === this) this.style.display = "none"; });
+
+        function printPayslip(p) {
+          var w = window.open("", "_blank");
+          var rows = p.allowances.map(function (a) { return "<tr><td>+ " + a.label + "</td><td>" + a.amount.toLocaleString() + "</td></tr>"; }).join("") +
+            p.deductions.map(function (d) { return "<tr><td>- " + d.label + "</td><td>" + d.amount.toLocaleString() + "</td></tr>"; }).join("");
+          var html = "<" + "!doctype html><html lang='ar' dir='rtl'><head><meta charset='utf-8'>" +
+            "<" + "style>body{font-family:Arial,sans-serif;padding:30px;} .slip{max-width:650px;margin:0 auto;} table{width:100%;border-collapse:collapse;} td{padding:8px;border-bottom:1px solid #ddd;} .grand{font-weight:800;font-size:1.3rem;border-top:2px solid #b8863a;}<" + "/style></head><body>" +
+            "<div class='slip'><h2>مسير راتب — " + p.employee_name + "</h2><p>" + MONTHS[p.month-1] + " " + p.year + "</p>" +
+            "<table><tr><td>الراتب الأساسي</td><td>" + p.base_salary.toLocaleString() + "</td></tr>" + rows +
+            "<tr><td>الإجمالي قبل الضريبة</td><td>" + p.gross_before_tax.toLocaleString() + "</td></tr>" +
+            "<tr><td>الضريبة</td><td>" + p.tax_amount.toLocaleString() + "</td></tr>" +
+            "<tr class='grand'><td>صافي الراتب</td><td>" + p.net_salary.toLocaleString() + "</td></tr></table>" +
+            "<div style='display:flex;justify-content:space-between;margin-top:60px;'><div style='width:45%;border-top:1px solid #333;padding-top:6px;text-align:center;'>توقيع الموظف</div><div style='width:45%;border-top:1px solid #333;padding-top:6px;text-align:center;'>توقيع الإدارة</div></div>" +
+            "</div></body></html>";
+          w.document.open(); w.document.write(html); w.document.close(); w.focus(); w.print();
+        }
+
+        (async function () { await loadEmployeeOptions(); await loadList(); })();
     </script>
 
   </body>
