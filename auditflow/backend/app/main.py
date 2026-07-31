@@ -275,8 +275,8 @@ def ui_brand_scan_redirect():
 
 
 @app.get("/trade", response_class=HTMLResponse)
-def ui_trade_dashboard(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_dashboard.html", "op-inventory")
+def ui_trade_dashboard():
+    return RedirectResponse(url="/inventory-management", status_code=302)
 
 
 @app.get("/trade/items", response_class=HTMLResponse)
@@ -285,48 +285,48 @@ def ui_trade_items(request: Request):
 
 
 @app.get("/trade/purchases", response_class=HTMLResponse)
-def ui_trade_purchases(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_purchases.html", "op-inventory")
+def ui_trade_purchases():
+    return RedirectResponse(url="/inventory-management", status_code=302)
 
 
 @app.get("/trade/sales", response_class=HTMLResponse)
-def ui_trade_sales(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_sales.html", "op-inventory")
+def ui_trade_sales():
+    return RedirectResponse(url="/inventory-management", status_code=302)
 
 
 @app.get("/trade/pos", response_class=HTMLResponse)
-def ui_trade_pos(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_pos.html", "op-inventory")
+def ui_trade_pos():
+    return RedirectResponse(url="/inventory-management", status_code=302)
 
 
 @app.get("/trade/inventory", response_class=HTMLResponse)
-def ui_trade_inventory(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_inventory.html", "op-inventory")
+def ui_trade_inventory():
+    return RedirectResponse(url="/inventory-management", status_code=302)
 
 
 @app.get("/trade/reports", response_class=HTMLResponse)
-def ui_trade_reports(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_reports.html", "op-inventory")
+def ui_trade_reports():
+    return RedirectResponse(url="/inventory-management", status_code=302)
 
 
 @app.get("/trade/master-data", response_class=HTMLResponse)
-def ui_trade_master_data(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_master_data.html", "op-inventory")
+def ui_trade_master_data():
+    return RedirectResponse(url="/inventory-management", status_code=302)
 
 
 @app.get("/trade/settings", response_class=HTMLResponse)
-def ui_trade_settings(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_settings.html", "op-inventory")
+def ui_trade_settings():
+    return RedirectResponse(url="/inventory-management", status_code=302)
 
 
 @app.get("/trade/users", response_class=HTMLResponse)
-def ui_trade_users(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_users.html", "op-inventory")
+def ui_trade_users():
+    return RedirectResponse(url="/inventory-management", status_code=302)
 
 
 @app.get("/trade/transfers", response_class=HTMLResponse)
-def ui_trade_transfers(request: Request):
-    return _require_login_page(request, FRONTEND_DIR / "trade_transfers.html", "op-inventory")
+def ui_trade_transfers():
+    return RedirectResponse(url="/inventory-management", status_code=302)
 
 
 @app.get("/settings", response_class=HTMLResponse)
