@@ -4,7 +4,11 @@ import datetime as dt
 import uuid
 from typing import Any, Optional
 
-from fastapi import APIRouter, Body, HTTPException, Query, Request
+import io
+
+from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
+from fastapi.responses import StreamingResponse
+from openpyxl import Workbook, load_workbook
 from pydantic import BaseModel, Field
 
 from ..auth_core import log_event, require_csrf, require_user
@@ -36,6 +40,7 @@ class ItemCreate(BaseModel):
     is_active: bool = True
     notes: str = ""
     image_url: str = ""
+    default_purchase_price: float = 0.0
 
 
 class ItemUpdate(BaseModel):
@@ -57,6 +62,7 @@ class ItemUpdate(BaseModel):
     is_active: Optional[bool] = None
     notes: Optional[str] = None
     image_url: Optional[str] = None
+    default_purchase_price: Optional[float] = None
 
 
 class PurchaseLineIn(BaseModel):
@@ -339,7 +345,7 @@ def create_item(request: Request, body: ItemCreate = Body(...)):
             is_taxable=1 if body.is_taxable else 0,
             tax_rate=round(abs(float(body.tax_rate or 0.0)), 4),
             is_active=1 if body.is_active else 0,
-            last_cost=0.0,
+            last_cost=round(abs(float(body.default_purchase_price or 0.0)), 2),
             notes=(body.notes or "").strip() or None,
             image_url=(body.image_url or "").strip() or None,
         )
@@ -389,6 +395,8 @@ def update_item(item_id: str, request: Request, body: ItemUpdate = Body(...)):
             rec.tax_rate = round(abs(float(body.tax_rate or 0.0)), 4)
         if body.is_active is not None:
             rec.is_active = 1 if body.is_active else 0
+        if body.default_purchase_price is not None:
+            rec.last_cost = round(abs(float(body.default_purchase_price or 0.0)), 2)
         db.commit()
         return {"ok": True}
     finally:
@@ -813,6 +821,35 @@ def delete_suspended_sale(suspended_id: str, request: Request):
         db.delete(s)
         db.commit()
         return {"deleted": True}
+    finally:
+        db.close()
+
+
+@router.get("/sales/export")
+def export_sales(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = db.query(Sale).filter(Sale.user_id == user.id).order_by(Sale.sale_date.desc()).all()
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "المبيعات"
+        ws.append(["رقم الفاتورة", "العميل", "التاريخ", "طريقة الدفع", "الخصم", "الضريبة", "الإجمالي", "المدفوع", "المتبقي"])
+        for r in rows:
+            ws.append(
+                [
+                    r.invoice_no,
+                    r.customer_name,
+                    _fmt_date(r.sale_date),
+                    r.payment_type,
+                    round(float(r.discount or 0.0), 2),
+                    round(float(r.tax_amount or 0.0), 2),
+                    round(float(r.total_amount or 0.0), 2),
+                    round(float(r.paid_amount or 0.0), 2),
+                    round(float(r.due_amount or 0.0), 2),
+                ]
+            )
+        return _xlsx_response(wb, "sales.xlsx")
     finally:
         db.close()
 
@@ -1731,3 +1768,353 @@ def dashboard_summary(request: Request, date_from: str = Query(""), date_to: str
         }
     finally:
         db.close()
+
+
+# ============================================================
+# استيراد وتصدير Excel — الأصناف، المشتريات، المبيعات، التقارير
+# ============================================================
+
+def _xlsx_response(wb: Workbook, filename: str) -> StreamingResponse:
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
+
+
+def _new_item_code() -> str:
+    return "ITM-" + uuid.uuid4().hex[:10].upper()
+
+
+def _find_header_index(header: list[str], *names: str) -> int:
+    for n in names:
+        for i, h in enumerate(header):
+            if h == n:
+                return i
+    return -1
+
+
+@router.get("/items/export")
+def export_items(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = db.query(Item).filter(Item.user_id == user.id).order_by(Item.created_at.desc()).all()
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "الأصناف"
+        ws.append(["الكود", "اسم الصنف", "سعر الشراء الافتراضي", "سعر البيع الافتراضي", "الكمية الحالية", "ملاحظات"])
+        for r in rows:
+            ws.append(
+                [
+                    r.code,
+                    r.name,
+                    round(float(r.last_cost or 0.0), 2),
+                    round(float(r.default_sale_price or 0.0), 2),
+                    round(float(r.quantity or 0.0), 4),
+                    r.notes or "",
+                ]
+            )
+        return _xlsx_response(wb, "items.xlsx")
+    finally:
+        db.close()
+
+
+@router.post("/items/import")
+async def import_items(request: Request, file: UploadFile = File(...)):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        content = await file.read()
+        wb = load_workbook(io.BytesIO(content), data_only=True)
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            raise HTTPException(400, "الملف فارغ")
+        header = [str(c or "").strip() for c in rows[0]]
+        idx_name = _find_header_index(header, "اسم الصنف", "الاسم", "name")
+        idx_purchase = _find_header_index(header, "سعر الشراء الافتراضي", "سعر الشراء", "purchase_price")
+        idx_sale = _find_header_index(header, "سعر البيع الافتراضي", "سعر البيع", "sale_price")
+        idx_notes = _find_header_index(header, "ملاحظات", "notes")
+        if idx_name == -1:
+            raise HTTPException(400, "لم يتم العثور على عمود اسم الصنف في الملف")
+        created = 0
+        updated = 0
+        errors: list[str] = []
+        for rn, row in enumerate(rows[1:], start=2):
+            name = str(row[idx_name] or "").strip() if idx_name < len(row) and row[idx_name] is not None else ""
+            if not name:
+                continue
+            purchase_price = 0.0
+            sale_price = 0.0
+            notes = ""
+            try:
+                if idx_purchase != -1 and idx_purchase < len(row) and row[idx_purchase] is not None:
+                    purchase_price = float(row[idx_purchase])
+                if idx_sale != -1 and idx_sale < len(row) and row[idx_sale] is not None:
+                    sale_price = float(row[idx_sale])
+                if idx_notes != -1 and idx_notes < len(row) and row[idx_notes] is not None:
+                    notes = str(row[idx_notes]).strip()
+            except (TypeError, ValueError):
+                errors.append(f"صف {rn}: قيمة سعر غير صالحة")
+                continue
+            existing = db.query(Item).filter(Item.user_id == user.id, Item.name == name).first()
+            if existing:
+                existing.last_cost = round(abs(purchase_price), 2)
+                existing.default_sale_price = round(abs(sale_price), 2)
+                if notes:
+                    existing.notes = notes
+                updated += 1
+            else:
+                db.add(
+                    Item(
+                        id=uuid.uuid4().hex,
+                        user_id=user.id,
+                        code=_new_item_code(),
+                        name=name,
+                        category="rim",
+                        unit="قطعة",
+                        quantity=0.0,
+                        default_sale_price=round(abs(sale_price), 2),
+                        is_taxable=1,
+                        tax_rate=0.0,
+                        is_active=1,
+                        last_cost=round(abs(purchase_price), 2),
+                        notes=notes or None,
+                    )
+                )
+                created += 1
+        db.commit()
+        log_event(db, "trade.items.import", user.id, {"created": created, "updated": updated, "errors": len(errors)})
+        return {"created": created, "updated": updated, "errors": errors}
+    finally:
+        db.close()
+
+
+@router.get("/purchases/export")
+def export_purchases(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = db.query(Purchase).filter(Purchase.user_id == user.id).order_by(Purchase.purchase_date.desc()).all()
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "المشتريات"
+        ws.append(["رقم الفاتورة", "المورد", "التاريخ", "طريقة الدفع", "الضريبة", "الخصم", "المدفوع", "المتبقي", "الإجمالي"])
+        for r in rows:
+            ws.append(
+                [
+                    r.invoice_no,
+                    r.supplier_name,
+                    _fmt_date(r.purchase_date),
+                    r.payment_type,
+                    round(float(r.tax_amount or 0.0), 2),
+                    round(float(r.discount or 0.0), 2),
+                    round(float(r.paid_amount or 0.0), 2),
+                    round(float(r.due_amount or 0.0), 2),
+                    round(float(r.total_amount or 0.0), 2),
+                ]
+            )
+        ws2 = wb.create_sheet("تفاصيل الأصناف")
+        ws2.append(["رقم الفاتورة", "الصنف", "الكمية", "سعر الشراء", "الإجمالي"])
+        lines = (
+            db.query(PurchaseLine, Item, Purchase)
+            .join(Item, Item.id == PurchaseLine.item_id)
+            .join(Purchase, Purchase.id == PurchaseLine.purchase_id)
+            .filter(Purchase.user_id == user.id)
+            .all()
+        )
+        for ln, item, pur in lines:
+            ws2.append(
+                [
+                    pur.invoice_no,
+                    item.name,
+                    round(float(ln.qty or 0.0), 4),
+                    round(float(ln.unit_cost or 0.0), 2),
+                    round(float(ln.total_cost or 0.0), 2),
+                ]
+            )
+        return _xlsx_response(wb, "purchases.xlsx")
+    finally:
+        db.close()
+
+
+@router.post("/purchases/import")
+async def import_purchases(request: Request, file: UploadFile = File(...)):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        content = await file.read()
+        wb = load_workbook(io.BytesIO(content), data_only=True)
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            raise HTTPException(400, "الملف فارغ")
+        header = [str(c or "").strip() for c in rows[0]]
+        idx_item = _find_header_index(header, "الصنف", "اسم الصنف", "الكود", "item")
+        idx_qty = _find_header_index(header, "الكمية", "qty")
+        idx_price = _find_header_index(header, "سعر الشراء", "price")
+        idx_date = _find_header_index(header, "التاريخ", "date")
+        idx_notes = _find_header_index(header, "الملاحظات", "ملاحظات", "notes")
+        if idx_item == -1 or idx_qty == -1 or idx_price == -1:
+            raise HTTPException(400, "الأعمدة المطلوبة: الصنف، الكمية، سعر الشراء")
+        created = 0
+        errors: list[str] = []
+        for rn, row in enumerate(rows[1:], start=2):
+            raw_item = str(row[idx_item] or "").strip() if idx_item < len(row) and row[idx_item] is not None else ""
+            if not raw_item:
+                continue
+            item = (
+                db.query(Item)
+                .filter(Item.user_id == user.id)
+                .filter((Item.name == raw_item) | (Item.code == raw_item))
+                .first()
+            )
+            if not item:
+                errors.append(f"صف {rn}: الصنف '{raw_item}' غير موجود")
+                continue
+            try:
+                qty = round(abs(float(row[idx_qty])), 4) if idx_qty < len(row) else 0.0
+                price = round(abs(float(row[idx_price])), 4) if idx_price < len(row) else 0.0
+            except (TypeError, ValueError):
+                errors.append(f"صف {rn}: كمية أو سعر غير صالح")
+                continue
+            if qty <= 0:
+                errors.append(f"صف {rn}: الكمية يجب أن تكون أكبر من صفر")
+                continue
+            raw_date = row[idx_date] if idx_date != -1 and idx_date < len(row) else None
+            p_date = None
+            if raw_date:
+                try:
+                    if hasattr(raw_date, "strftime"):
+                        p_date = raw_date if isinstance(raw_date, dt.datetime) else dt.datetime.combine(raw_date, dt.time())
+                    else:
+                        p_date = _parse_date(str(raw_date), "date")
+                except Exception:
+                    p_date = None
+            if p_date is None:
+                p_date = dt.datetime.utcnow()
+            notes_val = ""
+            if idx_notes != -1 and idx_notes < len(row) and row[idx_notes] is not None:
+                notes_val = str(row[idx_notes]).strip()
+            rec = Purchase(
+                id=uuid.uuid4().hex,
+                user_id=user.id,
+                invoice_no=f"IMP-{uuid.uuid4().hex[:8].upper()}",
+                supplier_name="مستورد من Excel",
+                purchase_date=p_date,
+                payment_type="cash",
+                tax_amount=0.0,
+                discount=0.0,
+                paid_amount=0.0,
+                due_amount=0.0,
+                notes=notes_val or None,
+                total_amount=round(qty * price, 2),
+            )
+            db.add(rec)
+            db.flush()
+            db.add(
+                PurchaseLine(
+                    purchase_id=rec.id,
+                    item_id=item.id,
+                    qty=qty,
+                    unit_cost=price,
+                    extra_cost=0.0,
+                    total_cost=round(qty * price, 2),
+                )
+            )
+            db.add(
+                StockMovement(
+                    id=uuid.uuid4().hex,
+                    user_id=user.id,
+                    item_id=item.id,
+                    movement_type="purchase",
+                    qty_in=qty,
+                    qty_out=0.0,
+                    unit_cost=price,
+                    reference_type="purchase",
+                    reference_id=rec.id,
+                    movement_date=p_date,
+                )
+            )
+            item.quantity = round(float(item.quantity or 0.0) + qty, 4)
+            item.last_cost = price
+            created += 1
+        db.commit()
+        log_event(db, "trade.purchases.import", user.id, {"created": created, "errors": len(errors)})
+        return {"created": created, "errors": errors}
+    finally:
+        db.close()
+
+
+@router.get("/reports/item-movement/export")
+def export_item_movement(request: Request, item_id: str = Query(...), date_from: str = Query(""), date_to: str = Query("")):
+    data = item_movement_report(request, item_id=item_id, date_from=date_from, date_to=date_to)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "حركة الصنف"
+    ws.append(["الصنف", data["item"]["name"]])
+    ws.append([])
+    ws.append(["التاريخ", "نوع الحركة", "وارد", "صادر", "تكلفة الوحدة", "الرصيد بعد الحركة"])
+    for x in data["items"]:
+        ws.append([x["date"], x["movement_type"], x["qty_in"], x["qty_out"], x["unit_cost"], x["balance_after"]])
+    return _xlsx_response(wb, f"item_movement_{item_id}.xlsx")
+
+
+@router.get("/reports/export-all")
+def export_all_reports(request: Request, date_from: str = Query(""), date_to: str = Query("")):
+    profit_data = profit_report(request, date_from=date_from, date_to=date_to)
+    top_data = top_items_report(request, date_from=date_from, date_to=date_to, limit=20)
+    stock_data = stock_status_report(request)
+    inv_data = inventory_report(request)
+
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        purchases = db.query(Purchase).filter(Purchase.user_id == user.id).order_by(Purchase.purchase_date.desc()).all()
+    finally:
+        db.close()
+
+    wb = Workbook()
+    ws1 = wb.active
+    ws1.title = "المخزون الحالي"
+    ws1.append(["الكود", "اسم الصنف", "الكمية", "تكلفة الوحدة", "سعر البيع", "قيمة المخزون"])
+    for r in inv_data["items"]:
+        ws1.append([r["code"], r["name"], r["quantity"], r["cost_price"], r["sale_price"], r["stock_value"]])
+
+    ws2 = wb.create_sheet("المبيعات والأرباح")
+    ws2.append(["التاريخ", "رقم الفاتورة", "الصنف", "الكمية", "صافي المبيعات", "التكلفة", "الربح"])
+    for r in profit_data["items"]:
+        ws2.append([r["date"], r["invoice_no"], r["item"], r["qty"], r["net_sales"], r["cost_total"], r["profit"]])
+    ws2.append([])
+    t = profit_data["totals"]
+    ws2.append(["الإجمالي", "", "", "", t["net_sales"], t["cost_total"], t["profit"]])
+
+    ws3 = wb.create_sheet("المشتريات")
+    ws3.append(["رقم الفاتورة", "المورد", "التاريخ", "الإجمالي"])
+    for r in purchases:
+        ws3.append([r.invoice_no, r.supplier_name, _fmt_date(r.purchase_date), round(float(r.total_amount or 0.0), 2)])
+
+    ws4 = wb.create_sheet("الأكثر والأقل مبيعاً")
+    ws4.append(["الأكثر مبيعاً"])
+    ws4.append(["الصنف", "الكمية", "المبيعات", "الربح"])
+    for r in top_data["best_selling"]:
+        ws4.append([r["item"], r["qty"], r["sales"], r["profit"]])
+    ws4.append([])
+    ws4.append(["الأقل مبيعاً"])
+    ws4.append(["الصنف", "الكمية", "المبيعات", "الربح"])
+    for r in top_data["worst_selling"]:
+        ws4.append([r["item"], r["qty"], r["sales"], r["profit"]])
+
+    ws5 = wb.create_sheet("المخزون المنخفض")
+    ws5.append(["الكود", "اسم الصنف", "الكمية", "الحد الأدنى"])
+    for r in stock_data["low_stock"]:
+        ws5.append([r["code"], r["name"], r["quantity"], r["min_qty"]])
+
+    return _xlsx_response(wb, "all_reports.xlsx")
