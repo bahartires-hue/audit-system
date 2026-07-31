@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>المشتريات | المالية</title><link rel="stylesheet" href="/static/tailwind.css?v=9" /><link rel="stylesheet" href="/static/dark.css?v=9" />
+  <style>
+    .fin-nav { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 14px; border-radius:14px; background:linear-gradient(90deg, rgba(180,140,60,0.14), rgba(180,140,60,0.03)); border:1px solid rgba(180,140,60,0.35); margin-bottom:14px; }
+    .fin-nav a { padding:7px 14px; border-radius:999px; font-weight:800; font-size:0.85rem; border:1px solid rgba(180,140,60,0.35); color:#8a6a1f; }
+    html.dark .fin-nav a { color:#e8cd85; }
+    .fin-nav a.active { background:linear-gradient(270deg, #8a6a1f 0%, #c9a24d 45%, #b8863a 100%); color:#1a1406 !important; border:none; }
+    .fin-nav .fin-label { font-weight:800; color:#8a6a1f; }
+    html.dark .fin-nav .fin-label { color:#e8cd85; }
+  </style>
+  </head>
+  <body class="bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
+    <div class="max-w-7xl mx-auto p-4 space-y-4">
+      <div class="fin-nav">
+        <span class="fin-label">💰 المالية</span>
+        <a href="/trade/items">📦 الأصناف</a>
+        <a href="/trade/purchases" class="active">📥 المشتريات</a>
+        <a href="/inventory-management">🧾 نقطة البيع</a>
+        <a href="/trade/reports">📊 التقارير</a>
+      </div>
+
+      <div class="rounded-xl border p-4 bg-white dark:bg-slate-950">
+        <h1 class="text-xl font-extrabold mb-3">📥 فاتورة شراء جديدة</h1>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
+          <input id="pInvoiceNo" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" readonly />
+          <input id="pDate" type="date" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" />
+          <input id="pNotes" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="ملاحظات (اختياري)" />
+        </div>
+        <div style="position:relative;" class="mb-3">
+          <input id="itemSearch" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950 w-full" placeholder="🔍 ابحث عن صنف بالاسم أو الكود لإضافته للفاتورة..." autocomplete="off" />
+          <div id="itemResults" style="display:none;position:absolute;z-index:50;top:100%;right:0;left:0;margin-top:4px;max-height:260px;overflow-y:auto;" class="rounded-xl border bg-white dark:bg-slate-950 shadow-lg"></div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100 dark:bg-slate-800"><tr><th class="px-2 py-2">الصنف</th><th class="px-2 py-2">الكمية</th><th class="px-2 py-2">سعر الشراء</th><th class="px-2 py-2">الإجمالي</th><th class="px-2 py-2"></th></tr></thead>
+            <tbody id="cartBody"></tbody>
+          </table>
+          <div id="cartEmpty" class="opacity-70 text-center py-4">لم تتم إضافة أصناف بعد للفاتورة.</div>
+        </div>
+        <div class="flex justify-between items-center mt-3 rounded-xl border px-4 py-3 bg-slate-50 dark:bg-slate-900">
+          <div class="font-extrabold">إجمالي فاتورة الشراء</div>
+          <div id="pGrandTotal" class="font-extrabold text-2xl">0.00</div>
+        </div>
+        <button id="saveBtn" class="mt-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-5 py-3 w-full md:w-auto">💾 حفظ عملية الشراء</button>
+      </div>
+
+      <div class="rounded-xl border p-4 bg-white dark:bg-slate-950">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h2 class="font-extrabold">📋 آخر عمليات الشراء</h2>
+          <div class="flex flex-wrap gap-2">
+            <a id="exportBtn" href="/api/trade/purchases/export" class="rounded-xl border font-extrabold px-4 py-2">⬇️ تصدير Excel</a>
+            <button id="importBtn" class="rounded-xl border font-extrabold px-4 py-2">⬆️ استيراد من Excel</button>
+            <input type="file" id="importFile" accept=".xlsx,.xls" style="display:none" />
+          </div>
+        </div>
+        <div id="purchasesHost"></div>
+      </div>
+    </div>
+    <script src="/static/app.js?v=18"></script>
+    <script>
+      (async function () {
+        await initAuthUI();
+        var cart = [];
+        var searchResults = [];
+        var searchDebounce = null;
+
+        function esc(s){return String(s==null?"":s).replace(/[&<>"']/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]; });}
+        function round2(v){return Math.round((Number(v)||0)*100)/100;}
+        function money(v){return round2(v).toFixed(2);}
+
+        function genInvoiceNo() {
+          var d = new Date();
+          return "PUR-" + d.getFullYear() + String(d.getMonth()+1).padStart(2,"0") + String(d.getDate()).padStart(2,"0") + "-" + Date.now().toString().slice(-5);
+        }
+
+        function renderResults(list) {
+          var host = document.getElementById("itemResults");
+          searchResults = list || [];
+          if (!searchResults.length) { host.style.display = "none"; host.innerHTML=""; return; }
+          host.innerHTML = searchResults.map(function (x, i) {
+            return '<div data-pick="'+i+'" class="px-3 py-2 border-b cursor-pointer flex justify-between hover:bg-slate-50 dark:hover:bg-slate-900"><div><div class="font-bold">'+esc(x.name)+'</div><div class="text-xs opacity-70">'+esc(x.code)+' · متاح حالياً: '+esc(x.quantity)+'</div></div><div class="font-bold">'+money(x.last_cost)+'</div></div>';
+          }).join("");
+          host.style.display = "block";
+          host.querySelectorAll("[data-pick]").forEach(function (el) {
+            el.addEventListener("click", function () {
+              addToCart(searchResults[Number(el.getAttribute("data-pick"))]);
+              document.getElementById("itemSearch").value = "";
+              host.style.display = "none";
+            });
+          });
+        }
+
+        async function searchItems(q) {
+          try {
+            var d = await apiGet("/api/trade/items?q=" + encodeURIComponent(q||""));
+            renderResults((d.items||[]).slice(0,8));
+          } catch (e) { renderResults([]); }
+        }
+
+        function addToCart(item) {
+          var existing = cart.find(function (r) { return r.item_id === item.id; });
+          if (existing) { existing.qty = round2(Number(existing.qty)+1); }
+          else { cart.push({ item_id: item.id, name: item.name, code: item.code, qty: 1, unit_cost: Number(item.last_cost)||0 }); }
+          renderCart();
+        }
+
+        function renderCart() {
+          var body = document.getElementById("cartBody");
+          var empty = document.getElementById("cartEmpty");
+          if (!cart.length) { body.innerHTML=""; empty.style.display="block"; renderTotals(); return; }
+          empty.style.display = "none";
+          var st = "width:90px;padding:4px 6px;border-radius:6px;border:1px solid #ccc;text-align:center;";
+          body.innerHTML = cart.map(function (row, i) {
+            return '<tr data-row="'+i+'"><td class="px-2 py-2"><div class="font-bold">'+esc(row.name)+'</div><div class="text-xs opacity-70">'+esc(row.code)+'</div></td>'+
+              '<td class="px-2 py-2"><input type="number" step="0.01" min="0.01" value="'+esc(row.qty)+'" data-f="qty" style="'+st+'" class="bg-white dark:bg-slate-950" /></td>'+
+              '<td class="px-2 py-2"><input type="number" step="0.01" min="0" value="'+esc(row.unit_cost)+'" data-f="unit_cost" style="'+st+'" class="bg-white dark:bg-slate-950" /></td>'+
+              '<td class="px-2 py-2 font-bold">'+money(row.qty*row.unit_cost)+'</td>'+
+              '<td class="px-2 py-2"><button data-del="'+i+'" class="rounded-lg border px-2 py-1 text-red-600">✕</button></td></tr>';
+          }).join("");
+          body.querySelectorAll("input[data-f]").forEach(function (inp) {
+            inp.addEventListener("input", function () {
+              var idx = Number(inp.closest("tr").getAttribute("data-row"));
+              cart[idx][inp.getAttribute("data-f")] = Number(inp.value)||0;
+              renderCart();
+            });
+          });
+          body.querySelectorAll("[data-del]").forEach(function (btn) {
+            btn.addEventListener("click", function () { cart.splice(Number(btn.getAttribute("data-del")),1); renderCart(); });
+          });
+          renderTotals();
+        }
+
+        function renderTotals() {
+          var total = cart.reduce(function (s,r) { return s + Number(r.qty)*Number(r.unit_cost); }, 0);
+          document.getElementById("pGrandTotal").textContent = money(total);
+        }
+
+        function resetForm() {
+          cart = [];
+          document.getElementById("pInvoiceNo").value = genInvoiceNo();
+          document.getElementById("pDate").value = new Date().toISOString().slice(0,10);
+          document.getElementById("pNotes").value = "";
+          renderCart();
+        }
+
+        async function loadPurchases() {
+          var d = await apiGet("/api/trade/purchases?limit=50");
+          var rows = d.items || [];
+          var host = document.getElementById("purchasesHost");
+          host.innerHTML = rows.length ? '<div class="grid gap-1">' + rows.map(function (x) {
+            return '<div class="rounded-lg border px-3 py-2 flex justify-between"><div><span class="font-bold">'+esc(x.invoice_no)+'</span> — '+esc(x.supplier_name)+' — '+esc(x.purchase_date)+'</div><div class="font-bold">'+money(x.total_amount)+'</div></div>';
+          }).join("") + '</div>' : '<div class="opacity-70">لا توجد مشتريات بعد</div>';
+        }
+
+        document.getElementById("itemSearch").addEventListener("input", function () {
+          var q = this.value;
+          if (searchDebounce) clearTimeout(searchDebounce);
+          if (!q.trim()) { renderResults([]); return; }
+          searchDebounce = setTimeout(function () { searchItems(q); }, 220);
+        });
+
+        document.getElementById("saveBtn").addEventListener("click", async function () {
+          if (!cart.length) { showToast("أضف صنفًا واحدًا على الأقل", "#ef4444"); return; }
+          try {
+            var payload = {
+              invoice_no: document.getElementById("pInvoiceNo").value || genInvoiceNo(),
+              supplier_name: "مورد عام",
+              purchase_date: document.getElementById("pDate").value || new Date().toISOString().slice(0,10),
+              payment_type: "cash",
+              tax_amount: 0,
+              discount: 0,
+              paid_amount: 0,
+              notes: document.getElementById("pNotes").value || "",
+              lines: cart.map(function (r) { return { item_id: r.item_id, qty: Number(r.qty), unit_cost: Number(r.unit_cost) }; }),
+            };
+            await apiPostJson("/api/trade/purchases", payload);
+            showToast("تم حفظ عملية الشراء وزيادة المخزون ✔️", "#10b981");
+            resetForm();
+            await loadPurchases();
+          } catch (e) { showToast(e.message || "تعذر حفظ عملية الشراء", "#ef4444"); }
+        });
+
+        document.getElementById("importBtn").addEventListener("click", function () { document.getElementById("importFile").click(); });
+        document.getElementById("importFile").addEventListener("change", async function () {
+          var f = this.files && this.files[0];
+          if (!f) return;
+          try {
+            var fd = new FormData();
+            fd.append("file", f);
+            var res = await apiPostForm("/api/trade/purchases/import", fd);
+            showToast("تم استيراد " + res.created + " عملية شراء" + (res.errors && res.errors.length ? ("، " + res.errors.length + " خطأ") : ""), "#10b981");
+            await loadPurchases();
+          } catch (e) { showToast(e.message || "فشل الاستيراد", "#ef4444"); }
+          this.value = "";
+        });
+
+        document.addEventListener("click", function (ev) {
+          var host = document.getElementById("itemResults");
+          if (host && !host.contains(ev.target) && ev.target.id !== "itemSearch") host.style.display = "none";
+        });
+
+        resetForm();
+        await loadPurchases();
+      })();
+    </script>
+  </body>
+</html>

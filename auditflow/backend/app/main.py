@@ -285,8 +285,8 @@ def ui_trade_items(request: Request):
 
 
 @app.get("/trade/purchases", response_class=HTMLResponse)
-def ui_trade_purchases():
-    return RedirectResponse(url="/inventory-management", status_code=302)
+def ui_trade_purchases(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "trade_purchases.html", "op-inventory")
 
 
 @app.get("/trade/sales", response_class=HTMLResponse)
@@ -305,8 +305,8 @@ def ui_trade_inventory():
 
 
 @app.get("/trade/reports", response_class=HTMLResponse)
-def ui_trade_reports():
-    return RedirectResponse(url="/inventory-management", status_code=302)
+def ui_trade_reports(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "trade_reports.html", "op-inventory")
 
 
 @app.get("/trade/master-data", response_class=HTMLResponse)

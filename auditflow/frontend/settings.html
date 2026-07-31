@@ -427,6 +427,45 @@
         </div>
       </div>
 
+
+      <div class="op-shell-card" style="text-align:start;padding:1.5rem;">
+        <div class="op-hero" style="margin-bottom:1.25rem;text-align:start;">
+          <h1 style="font-size:1.4rem;">🏢 <b>بيانات الشركة</b></h1>
+          <p>هذه البيانات تُستخدم تلقائيًا في فواتير البيع، التقارير، وصفحة الطباعة.</p>
+        </div>
+
+        <div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start;">
+          <div style="flex:0 0 160px;text-align:center;">
+            <div id="companyLogoPreviewWrap" style="width:140px;height:140px;border-radius:16px;border:2px dashed var(--gold-dim);display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--bg-2);margin:0 auto 0.6rem;">
+              <img id="companyLogoPreview" src="" style="display:none;max-width:100%;max-height:100%;object-fit:contain;" alt="شعار الشركة" />
+              <span id="companyLogoPlaceholder" style="font-size:2rem;">🏢</span>
+            </div>
+            <button type="button" class="op-btn-chip" id="companyLogoUploadBtn">📷 رفع الشعار</button>
+            <input type="file" id="companyLogoInput" accept=".png,.jpg,.jpeg,.svg" style="display:none;" />
+          </div>
+
+          <div style="flex:1;min-width:280px;display:grid;grid-template-columns:repeat(2,1fr);gap:0.9rem;">
+            <div class="op-tool-field"><label>اسم الشركة</label><input type="text" id="cpCompanyName" /></div>
+            <div class="op-tool-field"><label>الاسم التجاري (اختياري)</label><input type="text" id="cpTradeName" /></div>
+            <div class="op-tool-field"><label>السجل التجاري</label><input type="text" id="cpCommercialRegister" /></div>
+            <div class="op-tool-field"><label>الرقم الضريبي</label><input type="text" id="cpTaxNumber" /></div>
+            <div class="op-tool-field" style="grid-column:1 / -1;"><label>عنوان الشركة</label><input type="text" id="cpAddress" /></div>
+            <div class="op-tool-field"><label>المدينة</label><input type="text" id="cpCity" /></div>
+            <div class="op-tool-field"><label>الدولة</label><input type="text" id="cpCountry" /></div>
+            <div class="op-tool-field"><label>رقم الجوال</label><input type="text" id="cpPhone" dir="ltr" /></div>
+            <div class="op-tool-field"><label>البريد الإلكتروني</label><input type="email" id="cpEmail" dir="ltr" /></div>
+            <div class="op-tool-field"><label>الموقع الإلكتروني</label><input type="text" id="cpWebsite" dir="ltr" /></div>
+            <div class="op-tool-field"><label>نسبة الضريبة الافتراضية (%)</label><input type="number" id="cpVat" value="15" step="0.1" /></div>
+            <div class="op-tool-field" style="grid-column:1 / -1;"><label>رسالة أسفل الفاتورة</label><input type="text" id="cpFooterMsg" placeholder="شكراً لزيارتكم" /></div>
+          </div>
+        </div>
+
+        <div id="companyProfileResult" style="display:none;margin-top:1rem;"></div>
+        <div style="margin-top:1.25rem;">
+          <button type="button" class="op-btn-chip op-btn-chip--gold" id="companySaveBtn">💾 حفظ بيانات الشركة</button>
+        </div>
+      </div>
+
       <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 shadow-sm">
         <details id="activityPanel" class="group">
           <summary class="cursor-pointer list-none flex items-center justify-between gap-3">
@@ -556,6 +595,97 @@
         });
       })();
     
+      (async function () {
+        var cpFields = {
+          company_name: document.getElementById("cpCompanyName"),
+          trade_name: document.getElementById("cpTradeName"),
+          commercial_register: document.getElementById("cpCommercialRegister"),
+          tax_number: document.getElementById("cpTaxNumber"),
+          address: document.getElementById("cpAddress"),
+          city: document.getElementById("cpCity"),
+          country: document.getElementById("cpCountry"),
+          phone: document.getElementById("cpPhone"),
+          email: document.getElementById("cpEmail"),
+          website: document.getElementById("cpWebsite"),
+        };
+        var cpVatInput = document.getElementById("cpVat");
+        var cpFooterInput = document.getElementById("cpFooterMsg");
+        var logoPreview = document.getElementById("companyLogoPreview");
+        var logoPlaceholder = document.getElementById("companyLogoPlaceholder");
+        var logoUploadBtn = document.getElementById("companyLogoUploadBtn");
+        var logoInput = document.getElementById("companyLogoInput");
+        var companySaveBtn = document.getElementById("companySaveBtn");
+        var companyProfileResult = document.getElementById("companyProfileResult");
+        if (!companySaveBtn) return;
+
+        function applyLogoUrl(url) {
+          if (!logoPreview || !logoPlaceholder) return;
+          if (url) {
+            logoPreview.src = url;
+            logoPreview.style.display = "block";
+            logoPlaceholder.style.display = "none";
+          } else {
+            logoPreview.style.display = "none";
+            logoPlaceholder.style.display = "block";
+          }
+        }
+
+        async function loadCompanyProfile() {
+          try {
+            var data = await apiGet("/api/company-profile");
+            Object.keys(cpFields).forEach(function (key) {
+              if (cpFields[key]) cpFields[key].value = data[key] || "";
+            });
+            if (cpVatInput) cpVatInput.value = data.vat_percentage != null ? data.vat_percentage : 15;
+            applyLogoUrl(data.logo_url);
+          } catch (e) {
+            showToast(e.message || "تعذر تحميل بيانات الشركة", "#dc2626");
+          }
+          try {
+            var s = await apiGet("/api/cashierko/settings");
+            if (cpFooterInput) cpFooterInput.value = (s.settings || {}).thermal_header || "";
+          } catch (e) {}
+        }
+
+        if (logoUploadBtn) logoUploadBtn.addEventListener("click", function () { logoInput && logoInput.click(); });
+        if (logoInput) {
+          logoInput.addEventListener("change", async function () {
+            var f = logoInput.files && logoInput.files[0];
+            if (!f) return;
+            try {
+              var fd = new FormData();
+              fd.append("file", f);
+              var data = await apiPostForm("/api/company-profile/logo", fd);
+              applyLogoUrl(data.logo_url);
+              showToast("تم تحديث الشعار بنجاح", "#22c55e");
+            } catch (e) {
+              showToast(e.message || "تعذر رفع الشعار", "#dc2626");
+            }
+          });
+        }
+
+        companySaveBtn.addEventListener("click", async function () {
+          var payload = {};
+          Object.keys(cpFields).forEach(function (key) {
+            if (cpFields[key]) payload[key] = cpFields[key].value.trim();
+          });
+          payload.vat_percentage = Number(cpVatInput ? cpVatInput.value : 15) || 0;
+          try {
+            await apiPatchJson("/api/company-profile", payload);
+            await apiPatchJson("/api/cashierko/settings", { thermal_header: cpFooterInput ? cpFooterInput.value.trim() : "" });
+            if (companyProfileResult) {
+              companyProfileResult.style.display = "block";
+              companyProfileResult.textContent = "تم تحديث بيانات الشركة بنجاح.";
+            }
+            showToast("تم تحديث بيانات الشركة بنجاح", "#22c55e");
+          } catch (e) {
+            showToast(e.message || "تعذر حفظ بيانات الشركة", "#dc2626");
+          }
+        });
+
+        await loadCompanyProfile();
+      })();
+
     </script>
   </body>
 </html>

@@ -1,44 +1,46 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
-  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>الأصناف</title><link rel="stylesheet" href="/static/tailwind.css?v=9" /><link rel="stylesheet" href="/static/dark.css?v=9" /></head>
+  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>الأصناف | المالية</title><link rel="stylesheet" href="/static/tailwind.css?v=9" /><link rel="stylesheet" href="/static/dark.css?v=9" />
+  <style>
+    .fin-nav { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 14px; border-radius:14px; background:linear-gradient(90deg, rgba(180,140,60,0.14), rgba(180,140,60,0.03)); border:1px solid rgba(180,140,60,0.35); margin-bottom:14px; }
+    .fin-nav a { padding:7px 14px; border-radius:999px; font-weight:800; font-size:0.85rem; border:1px solid rgba(180,140,60,0.35); color:#8a6a1f; }
+    html.dark .fin-nav a { color:#e8cd85; }
+    .fin-nav a.active { background:linear-gradient(270deg, #8a6a1f 0%, #c9a24d 45%, #b8863a 100%); color:#1a1406 !important; border:none; }
+    .fin-nav .fin-label { font-weight:800; color:#8a6a1f; }
+    html.dark .fin-nav .fin-label { color:#e8cd85; }
+  </style>
+  </head>
   <body class="bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
     <div class="max-w-7xl mx-auto p-4 space-y-4">
-      <div class="flex flex-wrap gap-2">
-        <a class="px-3 py-2 rounded-xl border font-bold" href="/trade">الرئيسية</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/sales">المبيعات</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/purchases">المشتريات</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/inventory">المخزون</a><a class="px-3 py-2 rounded-xl border font-bold bg-blue-600 text-white border-blue-600" href="/trade/items">الأصناف</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/master-data">البيانات الأساسية</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/reports">التقارير</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/users">المستخدمين</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/settings">الإعدادات</a><a class="px-3 py-2 rounded-xl border font-bold" href="/trade/transfers">التحويلات</a>
+      <div class="fin-nav">
+        <span class="fin-label">💰 المالية</span>
+        <a href="/trade/items" class="active">📦 الأصناف</a>
+        <a href="/trade/purchases">📥 المشتريات</a>
+        <a href="/inventory-management">🧾 نقطة البيع</a>
+        <a href="/trade/reports">📊 التقارير</a>
       </div>
+
       <div class="rounded-xl border p-4 bg-white dark:bg-slate-950">
-        <h1 class="text-xl font-extrabold mb-2">إضافة صنف</h1>
-        <div class="grid grid-cols-1 md:grid-cols-10 gap-2">
-          <input id="code" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الكود" />
-          <input id="barcode" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الباركود" />
+        <h1 class="text-xl font-extrabold mb-3">➕ إضافة صنف جديد</h1>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
           <input id="name" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="اسم الصنف" />
-          <input id="brand" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="الماركة" />
-          <input id="size" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="المقاس" />
-          <select id="unit" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"></select>
-          <select id="isTaxable" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"><option value="1">خاضع ضريبة</option><option value="0">غير خاضع</option></select>
-          <input id="taxRate" type="number" step="0.01" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="نسبة الضريبة %" />
-          <select id="isActive" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"><option value="1">نشط</option><option value="0">معطل</option></select>
-          <select id="category" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950"><option value="rim">جنط</option><option value="set">طقم</option><option value="accessory">اكسسوار</option></select>
-          <button id="addBtn" class="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2">إضافة</button>
+          <input id="purchasePrice" type="number" step="0.01" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="سعر الشراء الافتراضي" />
+          <input id="salePrice" type="number" step="0.01" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="سعر البيع الافتراضي" />
+          <input id="notes" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="ملاحظات (اختياري)" />
         </div>
+        <button id="addBtn" class="mt-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-5 py-2">💾 إضافة الصنف</button>
       </div>
+
       <div class="rounded-xl border p-4 bg-white dark:bg-slate-950">
-        <h2 class="font-extrabold mb-2">قائمة الأصناف</h2>
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
-          <input id="searchQ" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950" placeholder="بحث: كود / باركود / اسم" />
-          <select id="filterCategory" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
-            <option value="">كل التصنيفات</option>
-            <option value="rim">جنط</option>
-            <option value="set">طقم</option>
-            <option value="accessory">اكسسوار</option>
-          </select>
-          <select id="filterActive" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950">
-            <option value="">كل الحالات</option>
-            <option value="1">نشط فقط</option>
-            <option value="0">معطل فقط</option>
-          </select>
-          <button id="applyFiltersBtn" class="rounded-xl border font-extrabold px-4 py-2">تطبيق الفلاتر</button>
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h2 class="font-extrabold">📋 قائمة الأصناف</h2>
+          <div class="flex flex-wrap gap-2">
+            <a id="exportBtn" href="/api/trade/items/export" class="rounded-xl border font-extrabold px-4 py-2">⬇️ تصدير Excel</a>
+            <button id="importBtn" class="rounded-xl border font-extrabold px-4 py-2">⬆️ استيراد من Excel</button>
+            <input type="file" id="importFile" accept=".xlsx,.xls" style="display:none" />
+          </div>
         </div>
+        <input id="searchQ" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950 w-full mb-3" placeholder="بحث بالاسم أو الكود..." />
         <div id="host"></div>
       </div>
     </div>
@@ -46,64 +48,123 @@
     <script>
       (async function () {
         await initAuthUI();
+        var rows = [];
+        var editingId = null;
         function esc(s){return String(s==null?"":s).replace(/[&<>"']/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]; });}
-        async function loadUnits(){
-          const d = await apiGet("/api/cashierko/units");
-          const rows = d.items || [];
-          const opts = rows.length ? rows : [{name:"قطعة"}];
-          document.getElementById("unit").innerHTML = opts.map((x)=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join("");
+        function money(v){return (Math.round((Number(v)||0)*100)/100).toFixed(2);}
+
+        function renderRow(x) {
+          if (editingId === x.id) {
+            return '<div class="rounded-lg border px-3 py-2">' +
+              '<div class="grid grid-cols-1 md:grid-cols-4 gap-2">' +
+              '<input class="rounded-lg border px-2 py-1 bg-white dark:bg-slate-950" data-ef="name" value="' + esc(x.name) + '" />' +
+              '<input type="number" step="0.01" class="rounded-lg border px-2 py-1 bg-white dark:bg-slate-950" data-ef="purchase" value="' + esc(x.last_cost) + '" />' +
+              '<input type="number" step="0.01" class="rounded-lg border px-2 py-1 bg-white dark:bg-slate-950" data-ef="sale" value="' + esc(x.default_sale_price) + '" />' +
+              '<input class="rounded-lg border px-2 py-1 bg-white dark:bg-slate-950" data-ef="notes" value="' + esc(x.notes||"") + '" />' +
+              '</div>' +
+              '<div class="flex gap-2 mt-2">' +
+              '<button class="rounded-lg bg-emerald-600 text-white px-3 py-1 font-bold" data-save="' + esc(x.id) + '">حفظ</button>' +
+              '<button class="rounded-lg border px-3 py-1 font-bold" data-cancel="1">إلغاء</button>' +
+              '</div></div>';
+          }
+          return '<div class="rounded-lg border px-3 py-2 flex flex-wrap items-center justify-between gap-2">' +
+            '<div><div class="font-bold">' + esc(x.name) + '</div>' +
+            '<div class="text-sm mt-1 opacity-80">شراء: ' + money(x.last_cost) + ' | بيع: ' + money(x.default_sale_price) + ' | الكمية الحالية: ' + esc(x.quantity) + (x.notes ? (' | ' + esc(x.notes)) : "") + '</div></div>' +
+            '<div class="flex gap-2">' +
+            '<button class="rounded-lg border px-3 py-1 font-bold" data-edit="' + esc(x.id) + '">تعديل</button>' +
+            '<button class="rounded-lg border px-3 py-1 font-bold text-red-600" data-del="' + esc(x.id) + '">حذف</button>' +
+            '</div></div>';
         }
-        async function apiPatchJson(url, body){
-          const csrf = localStorage.getItem("csrf_token") || "";
-          const r = await fetch(url, { method:"PATCH", credentials:"include", headers:{ Accept:"application/json", "Content-Type":"application/json", "X-CSRF-Token":csrf }, body: JSON.stringify(body||{}) });
-          if(!r.ok) throw new Error(await readErrorMessage(r));
-          return r.json();
-        }
-        async function load(){
-          const q = document.getElementById("searchQ").value || "";
-          const c = document.getElementById("filterCategory").value || "";
-          const a = document.getElementById("filterActive").value || "";
-          const d=await apiGet(`/api/trade/items?q=${encodeURIComponent(q)}&category=${encodeURIComponent(c)}&is_active=${encodeURIComponent(a)}`); const rows=d.items||[];
-          document.getElementById("host").innerHTML=rows.length?`<div class="grid gap-1">${rows.map(x=>`<div class="rounded-lg border px-3 py-2"><div class="font-bold">${esc(x.code)} — ${esc(x.name)} ${x.is_active?"":"<span class='text-red-600'>(معطل)</span>"}</div><div class="text-sm mt-1">باركود ${esc(x.barcode||"-")} | ${esc(x.brand||"")} ${esc(x.size||"")} | الوحدة ${esc(x.unit||"قطعة")} | ضريبة ${x.is_taxable?"نعم":"لا"} ${esc(x.tax_rate||0)}% | الكمية ${esc(x.quantity)}</div><div class="flex gap-2 mt-2"><button class="rounded-lg border px-3 py-1 font-bold" data-edit="${esc(x.id)}">تعديل</button><button class="rounded-lg border px-3 py-1 font-bold ${x.is_active?"text-amber-700":"text-emerald-700"}" data-toggle="${esc(x.id)}" data-active="${x.is_active?1:0}">${x.is_active?"تعطيل":"تفعيل"}</button></div></div>`).join("")}</div>`:`<div class="opacity-70">لا توجد أصناف</div>`;
-          document.querySelectorAll("[data-toggle]").forEach((btn)=>{
-            btn.addEventListener("click", async ()=>{
-              try{
-                const id = btn.getAttribute("data-toggle");
-                const current = btn.getAttribute("data-active")==="1";
-                await apiPatchJson(`/api/trade/items/${encodeURIComponent(id)}`, { is_active: !current });
-                showToast(current?"تم تعطيل الصنف ✔️":"تم تفعيل الصنف ✔️","#10b981");
+
+        function renderList() {
+          var host = document.getElementById("host");
+          host.innerHTML = rows.length ? '<div class="grid gap-2">' + rows.map(renderRow).join("") + '</div>' : '<div class="opacity-70">لا توجد أصناف</div>';
+          host.querySelectorAll("[data-edit]").forEach(function (btn) {
+            btn.addEventListener("click", function () { editingId = btn.getAttribute("data-edit"); renderList(); });
+          });
+          host.querySelectorAll("[data-cancel]").forEach(function (btn) {
+            btn.addEventListener("click", function () { editingId = null; renderList(); });
+          });
+          host.querySelectorAll("[data-save]").forEach(function (btn) {
+            btn.addEventListener("click", async function () {
+              var id = btn.getAttribute("data-save");
+              var box = btn.closest("div").parentElement;
+              var name = box.querySelector('[data-ef="name"]').value.trim();
+              var purchase = Number(box.querySelector('[data-ef="purchase"]').value || 0);
+              var sale = Number(box.querySelector('[data-ef="sale"]').value || 0);
+              var notes = box.querySelector('[data-ef="notes"]').value.trim();
+              try {
+                await apiPatchJson("/api/trade/items/" + encodeURIComponent(id), { name: name, default_purchase_price: purchase, default_sale_price: sale, notes: notes });
+                showToast("تم تعديل الصنف ✔️", "#10b981");
+                editingId = null;
                 await load();
-              }catch(e){ showToast(e.message || "فشل تحديث حالة الصنف","#ef4444"); }
+              } catch (e) { showToast(e.message || "فشل التعديل", "#ef4444"); }
             });
           });
-          document.querySelectorAll("[data-edit]").forEach((btn)=>{
-            btn.addEventListener("click", async ()=>{
-              const id = btn.getAttribute("data-edit");
-              const row = rows.find((x)=>x.id===id);
-              if(!row) return;
-              const name = prompt("اسم الصنف", row.name || "");
-              if(name==null) return;
-              const price = prompt("سعر البيع", String(row.default_sale_price || 0));
-              if(price==null) return;
-              const barcode = prompt("الباركود", row.barcode || "");
-              if(barcode==null) return;
-              try{
-                await apiPatchJson(`/api/trade/items/${encodeURIComponent(id)}`, { name, default_sale_price: Number(price || 0), barcode });
-                showToast("تم تعديل الصنف ✔️","#10b981");
+          host.querySelectorAll("[data-del]").forEach(function (btn) {
+            btn.addEventListener("click", async function () {
+              if (!confirm("هل تريد حذف هذا الصنف؟")) return;
+              try {
+                await apiDelete("/api/trade/items/" + encodeURIComponent(btn.getAttribute("data-del")));
+                showToast("تم حذف الصنف ✔️", "#10b981");
                 await load();
-              }catch(e){ showToast(e.message || "فشل التعديل","#ef4444"); }
+              } catch (e) { showToast(e.message || "لا يمكن حذف الصنف لوجود حركات عليه", "#ef4444"); }
             });
           });
         }
-        document.getElementById("addBtn").addEventListener("click",async()=>{
-          try{
-            await apiPostJson("/api/trade/items",{code:document.getElementById("code").value||"",barcode:document.getElementById("barcode").value||"",name:document.getElementById("name").value||"",brand:document.getElementById("brand").value||"",size:document.getElementById("size").value||"",unit:document.getElementById("unit").value||"قطعة",is_taxable:document.getElementById("isTaxable").value==="1",tax_rate:Number(document.getElementById("taxRate").value||0),is_active:document.getElementById("isActive").value==="1",category:document.getElementById("category").value||"rim"});
-            showToast("تمت الإضافة ✔️","#10b981"); await load();
-          }catch(e){showToast(e.message||"فشل الإضافة","#ef4444");}
+
+        async function load() {
+          var q = document.getElementById("searchQ").value || "";
+          var d = await apiGet("/api/trade/items?q=" + encodeURIComponent(q));
+          rows = d.items || [];
+          renderList();
+        }
+
+        document.getElementById("addBtn").addEventListener("click", async function () {
+          var name = document.getElementById("name").value.trim();
+          if (!name) { showToast("اكتب اسم الصنف أولاً", "#ef4444"); return; }
+          var code = "ITM-" + Date.now().toString(36).toUpperCase();
+          try {
+            await apiPostJson("/api/trade/items", {
+              code: code,
+              name: name,
+              default_purchase_price: Number(document.getElementById("purchasePrice").value || 0),
+              default_sale_price: Number(document.getElementById("salePrice").value || 0),
+              notes: document.getElementById("notes").value || "",
+              unit: "قطعة",
+              category: "rim",
+              is_taxable: true,
+              tax_rate: 0,
+              is_active: true,
+            });
+            showToast("تمت إضافة الصنف ✔️", "#10b981");
+            document.getElementById("name").value = "";
+            document.getElementById("purchasePrice").value = "";
+            document.getElementById("salePrice").value = "";
+            document.getElementById("notes").value = "";
+            await load();
+          } catch (e) { showToast(e.message || "فشلت الإضافة", "#ef4444"); }
         });
-        document.getElementById("applyFiltersBtn").addEventListener("click", load);
+
         document.getElementById("searchQ").addEventListener("input", load);
-        await Promise.all([loadUnits(), load()]);
+
+        document.getElementById("importBtn").addEventListener("click", function () {
+          document.getElementById("importFile").click();
+        });
+        document.getElementById("importFile").addEventListener("change", async function () {
+          var f = this.files && this.files[0];
+          if (!f) return;
+          try {
+            var fd = new FormData();
+            fd.append("file", f);
+            var res = await apiPostForm("/api/trade/items/import", fd);
+            showToast("تم الاستيراد: " + res.created + " جديد، " + res.updated + " محدَّث" + (res.errors && res.errors.length ? ("، " + res.errors.length + " خطأ") : ""), "#10b981");
+            await load();
+          } catch (e) { showToast(e.message || "فشل الاستيراد", "#ef4444"); }
+          this.value = "";
+        });
+
+        await load();
       })();
     </script>
   </body>

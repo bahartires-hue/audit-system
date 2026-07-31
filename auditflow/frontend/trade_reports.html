@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>التقارير | المالية</title><link rel="stylesheet" href="/static/tailwind.css?v=9" /><link rel="stylesheet" href="/static/dark.css?v=9" />
+  <style>
+    .fin-nav { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 14px; border-radius:14px; background:linear-gradient(90deg, rgba(180,140,60,0.14), rgba(180,140,60,0.03)); border:1px solid rgba(180,140,60,0.35); margin-bottom:14px; }
+    .fin-nav a { padding:7px 14px; border-radius:999px; font-weight:800; font-size:0.85rem; border:1px solid rgba(180,140,60,0.35); color:#8a6a1f; }
+    html.dark .fin-nav a { color:#e8cd85; }
+    .fin-nav a.active { background:linear-gradient(270deg, #8a6a1f 0%, #c9a24d 45%, #b8863a 100%); color:#1a1406 !important; border:none; }
+    .fin-nav .fin-label { font-weight:800; color:#8a6a1f; }
+    html.dark .fin-nav .fin-label { color:#e8cd85; }
+    .rep-tab { padding:8px 16px; border-radius:10px; font-weight:800; font-size:0.85rem; border:1px solid #e5e7eb; }
+    .rep-tab.active { background:#1f2937; color:#fff; }
+    html.dark .rep-tab.active { background:#c9a24d; color:#1a1406; }
+  </style>
+  </head>
+  <body class="bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
+    <div class="max-w-7xl mx-auto p-4 space-y-4">
+      <div class="fin-nav">
+        <span class="fin-label">💰 المالية</span>
+        <a href="/trade/items">📦 الأصناف</a>
+        <a href="/trade/purchases">📥 المشتريات</a>
+        <a href="/inventory-management">🧾 نقطة البيع</a>
+        <a href="/trade/reports" class="active">📊 التقارير</a>
+      </div>
+
+      <div class="rounded-xl border p-4 bg-white dark:bg-slate-950">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h1 class="text-xl font-extrabold">📊 التقارير</h1>
+          <a href="/api/trade/reports/export-all" class="rounded-xl border font-extrabold px-4 py-2">⬇️ تصدير جميع التقارير Excel</a>
+        </div>
+        <div class="flex flex-wrap gap-2 mb-4" id="tabBar">
+          <button class="rep-tab active" data-tab="stock">المخزون الحالي</button>
+          <button class="rep-tab" data-tab="sales">المبيعات</button>
+          <button class="rep-tab" data-tab="purchases">المشتريات</button>
+          <button class="rep-tab" data-tab="profit">الأرباح</button>
+          <button class="rep-tab" data-tab="movement">حركة صنف</button>
+          <button class="rep-tab" data-tab="top">الأكثر مبيعاً</button>
+          <button class="rep-tab" data-tab="worst">الأقل مبيعاً</button>
+          <button class="rep-tab" data-tab="low">الأصناف المنخفضة</button>
+        </div>
+        <div id="tabContent"></div>
+      </div>
+    </div>
+    <script src="/static/app.js?v=18"></script>
+    <script>
+      (async function () {
+        await initAuthUI();
+        function esc(s){return String(s==null?"":s).replace(/[&<>"']/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]; });}
+        function money(v){return (Math.round((Number(v)||0)*100)/100).toFixed(2);}
+        function table(headers, rows) {
+          if (!rows.length) return '<div class="opacity-70 py-4 text-center">لا توجد بيانات</div>';
+          return '<div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-100 dark:bg-slate-800"><tr>' +
+            headers.map(function(h){return '<th class="px-2 py-2">'+h+'</th>';}).join("") +
+            '</tr></thead><tbody>' + rows.map(function(r){return '<tr class="border-t">'+r.map(function(c){return '<td class="px-2 py-2">'+c+'</td>';}).join("")+'</tr>';}).join("") +
+            '</tbody></table></div>';
+        }
+
+        var itemsCache = [];
+        async function ensureItemsCache() {
+          if (itemsCache.length) return itemsCache;
+          var d = await apiGet("/api/trade/items?q=");
+          itemsCache = d.items || [];
+          return itemsCache;
+        }
+
+        async function renderStock() {
+          var d = await apiGet("/api/trade/inventory");
+          var rows = (d.items||[]).map(function(x){return [esc(x.code), esc(x.name), esc(x.quantity), money(x.cost_price), money(x.sale_price), money(x.stock_value)];});
+          document.getElementById("tabContent").innerHTML =
+            '<div class="mb-2"><a href="/api/trade/reports/export-all" class="text-sm underline">تصدير Excel</a></div>' +
+            table(["الكود","اسم الصنف","الكمية","تكلفة الوحدة","سعر البيع","قيمة المخزون"], rows);
+        }
+
+        async function renderSales() {
+          var d = await apiGet("/api/trade/sales?limit=200");
+          var rows = (d.items||[]).map(function(x){return [esc(x.invoice_no), esc(x.customer_name), esc(x.sale_date), esc(x.payment_type), money(x.total_amount)];});
+          document.getElementById("tabContent").innerHTML =
+            '<div class="mb-2"><a href="/api/trade/sales/export" class="text-sm underline">تصدير Excel</a></div>' +
+            table(["رقم الفاتورة","العميل","التاريخ","طريقة الدفع","الإجمالي"], rows);
+        }
+
+        async function renderPurchases() {
+          var d = await apiGet("/api/trade/purchases?limit=200");
+          var rows = (d.items||[]).map(function(x){return [esc(x.invoice_no), esc(x.supplier_name), esc(x.purchase_date), money(x.total_amount)];});
+          document.getElementById("tabContent").innerHTML =
+            '<div class="mb-2"><a href="/api/trade/purchases/export" class="text-sm underline">تصدير Excel</a></div>' +
+            table(["رقم الفاتورة","المورد","التاريخ","الإجمالي"], rows);
+        }
+
+        async function renderProfit() {
+          var d = await apiGet("/api/trade/reports/profit");
+          var t = d.totals || {};
+          var rows = (d.items||[]).map(function(x){return [esc(x.date), esc(x.invoice_no), esc(x.item), esc(x.qty), money(x.net_sales), money(x.cost_total), money(x.profit)];});
+          document.getElementById("tabContent").innerHTML =
+            '<div class="rounded-xl border p-3 mb-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">' +
+            '<div>صافي المبيعات<div class="font-extrabold text-lg">'+money(t.net_sales)+'</div></div>' +
+            '<div>التكلفة<div class="font-extrabold text-lg">'+money(t.cost_total)+'</div></div>' +
+            '<div>الربح<div class="font-extrabold text-lg text-emerald-600">'+money(t.profit)+'</div></div>' +
+            '<div>هامش الربح<div class="font-extrabold text-lg">'+esc(t.profit_margin_pct)+'%</div></div>' +
+            '</div>' + table(["التاريخ","رقم الفاتورة","الصنف","الكمية","صافي المبيعات","التكلفة","الربح"], rows);
+        }
+
+        async function renderMovement() {
+          var items = await ensureItemsCache();
+          var host = document.getElementById("tabContent");
+          host.innerHTML = '<div class="flex gap-2 mb-3"><select id="moveItemSelect" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950 flex-1">' +
+            items.map(function(x){return '<option value="'+esc(x.id)+'">'+esc(x.code)+' - '+esc(x.name)+'</option>';}).join("") +
+            '</select><a id="moveExportLink" class="rounded-xl border font-extrabold px-4 py-2">⬇️ تصدير</a></div><div id="moveTableHost"></div>';
+          async function loadMove() {
+            var id = document.getElementById("moveItemSelect").value;
+            document.getElementById("moveExportLink").href = "/api/trade/reports/item-movement/export?item_id=" + encodeURIComponent(id);
+            var d = await apiGet("/api/trade/reports/item-movement?item_id=" + encodeURIComponent(id));
+            var rows = (d.items||[]).map(function(x){return [esc(x.date), esc(x.movement_type), esc(x.qty_in), esc(x.qty_out), money(x.unit_cost), esc(x.balance_after)];});
+            document.getElementById("moveTableHost").innerHTML = table(["التاريخ","نوع الحركة","وارد","صادر","تكلفة الوحدة","الرصيد"], rows);
+          }
+          document.getElementById("moveItemSelect").addEventListener("change", loadMove);
+          if (items.length) await loadMove();
+        }
+
+        async function renderTop(worst) {
+          var d = await apiGet("/api/trade/reports/top-items?limit=20");
+          var list = worst ? d.worst_selling : d.best_selling;
+          var rows = (list||[]).map(function(x){return [esc(x.item), esc(x.qty), money(x.sales), money(x.profit)];});
+          document.getElementById("tabContent").innerHTML =
+            '<div class="mb-2"><a href="/api/trade/reports/export-all" class="text-sm underline">تصدير Excel</a></div>' +
+            table(["الصنف","الكمية المباعة","المبيعات","الربح"], rows);
+        }
+
+        async function renderLow() {
+          var d = await apiGet("/api/trade/reports/stock-status");
+          var rows = (d.low_stock||[]).map(function(x){return [esc(x.code), esc(x.name), esc(x.quantity), esc(x.min_qty)];});
+          document.getElementById("tabContent").innerHTML =
+            '<div class="mb-2"><a href="/api/trade/reports/export-all" class="text-sm underline">تصدير Excel</a></div>' +
+            table(["الكود","اسم الصنف","الكمية الحالية","الحد الأدنى"], rows);
+        }
+
+        var renderers = {
+          stock: renderStock, sales: renderSales, purchases: renderPurchases, profit: renderProfit,
+          movement: renderMovement, top: function(){return renderTop(false);}, worst: function(){return renderTop(true);}, low: renderLow,
+        };
+
+        document.querySelectorAll(".rep-tab").forEach(function (btn) {
+          btn.addEventListener("click", async function () {
+            document.querySelectorAll(".rep-tab").forEach(function(b){b.classList.remove("active");});
+            btn.classList.add("active");
+            document.getElementById("tabContent").innerHTML = '<div class="opacity-70 py-4 text-center">جارِ التحميل...</div>';
+            try { await renderers[btn.getAttribute("data-tab")](); }
+            catch (e) { document.getElementById("tabContent").innerHTML = '<div class="text-red-600 py-4 text-center">'+(e.message||"تعذر تحميل التقرير")+'</div>'; }
+          });
+        });
+
+        await renderStock();
+      })();
+    </script>
+  </body>
+</html>
