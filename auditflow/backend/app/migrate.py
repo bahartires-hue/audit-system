@@ -56,6 +56,9 @@ def _migrate_postgresql() -> None:
         "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS archived INTEGER DEFAULT 0",
         "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS report_type VARCHAR DEFAULT 'branches'",
         # employees (HR v2)
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS position VARCHAR",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS department VARCHAR",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS branch_name VARCHAR",
         "ALTER TABLE employees ADD COLUMN IF NOT EXISTS employee_number VARCHAR",
         "ALTER TABLE employees ADD COLUMN IF NOT EXISTS nationality VARCHAR",
         "ALTER TABLE employees ADD COLUMN IF NOT EXISTS national_id VARCHAR",
@@ -77,6 +80,8 @@ def _migrate_postgresql() -> None:
     with engine.begin() as conn:
         for sql in stmts:
             conn.execute(text(sql))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_employees_department ON employees (department)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_employees_branch_name ON employees (branch_name)"))
         conn.execute(
             text(
                 "UPDATE analysis_reports SET archived = 0 WHERE archived IS NULL"
