@@ -535,6 +535,54 @@ class CompanyProfile(Base):
     updated_at = Column(DateTime, default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow, nullable=False)
 
 
+class Employee(Base):
+    __tablename__ = "employees"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False, index=True)
+    position = Column(String, nullable=True)
+    is_active = Column(Integer, nullable=False, default=1, index=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class Payroll(Base):
+    __tablename__ = "payrolls"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    employee_id = Column(String, ForeignKey("employees.id"), nullable=False, index=True)
+    month = Column(Integer, nullable=False, index=True)
+    year = Column(Integer, nullable=False, index=True)
+    base_salary = Column(Float, nullable=False, default=0.0)
+    total_allowances = Column(Float, nullable=False, default=0.0)
+    total_deductions = Column(Float, nullable=False, default=0.0)
+    net_salary = Column(Float, nullable=False, default=0.0)
+    status = Column(String, nullable=False, default="unpaid", index=True)  # unpaid | paid
+    paid_at = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class PayrollAllowance(Base):
+    __tablename__ = "payroll_allowances"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    payroll_id = Column(String, ForeignKey("payrolls.id"), nullable=False, index=True)
+    label = Column(String, nullable=False)
+    amount = Column(Float, nullable=False, default=0.0)
+
+
+class PayrollDeduction(Base):
+    __tablename__ = "payroll_deductions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    payroll_id = Column(String, ForeignKey("payrolls.id"), nullable=False, index=True)
+    label = Column(String, nullable=False)
+    amount = Column(Float, nullable=False, default=0.0)
+
+
 def init_db() -> None:
     from .db import engine
     from .migrate import run_migrations
