@@ -251,6 +251,56 @@ def ui_hr_alerts(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "hr_alerts.html", "op-hr")
 
 
+@app.get("/hr/employees", response_class=HTMLResponse)
+def ui_hr_employees(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "hr_employees.html", "op-hr")
+
+
+@app.get("/hr/contracts", response_class=HTMLResponse)
+def ui_hr_contracts(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "hr_contracts.html", "op-hr")
+
+
+@app.get("/hr/advances", response_class=HTMLResponse)
+def ui_hr_advances(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "hr_advances.html", "op-hr")
+
+
+@app.get("/hr/deductions", response_class=HTMLResponse)
+def ui_hr_deductions(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "hr_deductions.html", "op-hr")
+
+
+@app.get("/hr/allowances", response_class=HTMLResponse)
+def ui_hr_allowances(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "hr_allowances.html", "op-hr")
+
+
+@app.get("/hr/commissions", response_class=HTMLResponse)
+def ui_hr_commissions(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "hr_commissions.html", "op-hr")
+
+
+@app.get("/hr/leaves", response_class=HTMLResponse)
+def ui_hr_leaves(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "hr_leaves.html", "op-hr")
+
+
+@app.get("/hr/attendance", response_class=HTMLResponse)
+def ui_hr_attendance(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "hr_attendance.html", "op-hr")
+
+
+@app.get("/hr/reports", response_class=HTMLResponse)
+def ui_hr_reports(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "hr_reports.html", "op-hr")
+
+
+@app.get("/hr/settings", response_class=HTMLResponse)
+def ui_hr_settings(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "hr_settings.html", "op-hr")
+
+
 @app.get("/finance", response_class=HTMLResponse)
 def ui_finance(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "finance.html", "op-finance")

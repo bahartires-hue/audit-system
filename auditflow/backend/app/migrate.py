@@ -55,6 +55,24 @@ def _migrate_postgresql() -> None:
         "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS notes TEXT",
         "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS archived INTEGER DEFAULT 0",
         "ALTER TABLE analysis_reports ADD COLUMN IF NOT EXISTS report_type VARCHAR DEFAULT 'branches'",
+        # employees (HR v2)
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS employee_number VARCHAR",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS nationality VARCHAR",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS national_id VARCHAR",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS residency_expiry TIMESTAMP",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS passport_number VARCHAR",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS passport_expiry TIMESTAMP",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS basic_salary DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS commission_percentage DOUBLE PRECISION",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS hire_date TIMESTAMP",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS birth_date TIMESTAMP",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS phone VARCHAR",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS email VARCHAR",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'active'",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS photo_url VARCHAR",
+        # payrolls (HR v2)
+        "ALTER TABLE payrolls ADD COLUMN IF NOT EXISTS gross_before_tax DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE payrolls ADD COLUMN IF NOT EXISTS tax_amount DOUBLE PRECISION DEFAULT 0",
     ]
     with engine.begin() as conn:
         for sql in stmts:
@@ -87,6 +105,10 @@ def _migrate_postgresql() -> None:
         conn.execute(
             text("UPDATE users SET role_name = 'user' WHERE role_name IS NULL OR role_name = ''")
         )
+
+
+        conn.execute(text("UPDATE employees SET status = 'active' WHERE status IS NULL OR status = ''"))
+        conn.execute(text("UPDATE employees SET basic_salary = 0 WHERE basic_salary IS NULL"))
 
 
 def run_migrations() -> None:

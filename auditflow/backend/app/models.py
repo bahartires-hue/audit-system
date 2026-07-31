@@ -540,10 +540,24 @@ class Employee(Base):
 
     id = Column(String, primary_key=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    employee_number = Column(String, nullable=True, index=True)
     name = Column(String, nullable=False, index=True)
+    nationality = Column(String, nullable=True)
+    national_id = Column(String, nullable=True)
+    residency_expiry = Column(DateTime, nullable=True, index=True)
+    passport_number = Column(String, nullable=True)
+    passport_expiry = Column(DateTime, nullable=True, index=True)
     position = Column(String, nullable=True)
     department = Column(String, nullable=True, index=True)
     branch_name = Column(String, nullable=True, index=True)
+    basic_salary = Column(Float, nullable=False, default=0.0)
+    commission_percentage = Column(Float, nullable=True)
+    hire_date = Column(DateTime, nullable=True)
+    birth_date = Column(DateTime, nullable=True)
+    phone = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="active", index=True)  # active|on_leave|suspended|resigned|terminated
+    photo_url = Column(String, nullable=True)
     is_active = Column(Integer, nullable=False, default=1, index=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
@@ -589,8 +603,10 @@ class Payroll(Base):
     base_salary = Column(Float, nullable=False, default=0.0)
     total_allowances = Column(Float, nullable=False, default=0.0)
     total_deductions = Column(Float, nullable=False, default=0.0)
+    gross_before_tax = Column(Float, nullable=False, default=0.0)
+    tax_amount = Column(Float, nullable=False, default=0.0)
     net_salary = Column(Float, nullable=False, default=0.0)
-    status = Column(String, nullable=False, default="unpaid", index=True)  # unpaid | paid
+    status = Column(String, nullable=False, default="unpaid", index=True)  # unpaid | paid | cancelled
     paid_at = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
@@ -612,6 +628,151 @@ class PayrollDeduction(Base):
     payroll_id = Column(String, ForeignKey("payrolls.id"), nullable=False, index=True)
     label = Column(String, nullable=False)
     amount = Column(Float, nullable=False, default=0.0)
+
+
+
+class EmployeeContract(Base):
+    __tablename__ = "employee_contracts"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    employee_id = Column(String, ForeignKey("employees.id"), nullable=False, index=True)
+    contract_type = Column(String, nullable=True)
+    start_date = Column(DateTime, nullable=True, index=True)
+    end_date = Column(DateTime, nullable=True, index=True)
+    salary = Column(Float, nullable=False, default=0.0)
+    housing_allowance = Column(Float, nullable=False, default=0.0)
+    transport_allowance = Column(Float, nullable=False, default=0.0)
+    other_allowances = Column(Float, nullable=False, default=0.0)
+    probation_days = Column(Integer, nullable=False, default=0)
+    annual_leave_days = Column(Integer, nullable=False, default=21)
+    file_url = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="active", index=True)  # active|ended
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow, nullable=False)
+
+
+class Advance(Base):
+    __tablename__ = "hr_advances"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    employee_id = Column(String, ForeignKey("employees.id"), nullable=False, index=True)
+    date = Column(DateTime, nullable=True, index=True)
+    amount = Column(Float, nullable=False, default=0.0)
+    reason = Column(String, nullable=True)
+    installments_count = Column(Integer, nullable=False, default=1)
+    installment_amount = Column(Float, nullable=False, default=0.0)
+    remaining_amount = Column(Float, nullable=False, default=0.0)
+    status = Column(String, nullable=False, default="active", index=True)  # active|completed|cancelled
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class DeductionRecord(Base):
+    __tablename__ = "hr_deductions"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    employee_id = Column(String, ForeignKey("employees.id"), nullable=False, index=True)
+    deduction_type = Column(String, nullable=True)
+    amount = Column(Float, nullable=False, default=0.0)
+    reason = Column(String, nullable=True)
+    date = Column(DateTime, nullable=True, index=True)
+    applied = Column(Integer, nullable=False, default=0, index=True)
+    payroll_id = Column(String, ForeignKey("payrolls.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class AllowanceRecord(Base):
+    __tablename__ = "hr_allowances"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    employee_id = Column(String, ForeignKey("employees.id"), nullable=False, index=True)
+    allowance_type = Column(String, nullable=True)
+    amount = Column(Float, nullable=False, default=0.0)
+    recurring = Column(Integer, nullable=False, default=0, index=True)
+    date = Column(DateTime, nullable=True, index=True)
+    applied = Column(Integer, nullable=False, default=0, index=True)
+    payroll_id = Column(String, ForeignKey("payrolls.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class CommissionRecord(Base):
+    __tablename__ = "hr_commissions"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    employee_id = Column(String, ForeignKey("employees.id"), nullable=False, index=True)
+    sales_amount = Column(Float, nullable=False, default=0.0)
+    percentage = Column(Float, nullable=False, default=0.0)
+    commission_value = Column(Float, nullable=False, default=0.0)
+    date = Column(DateTime, nullable=True, index=True)
+    applied = Column(Integer, nullable=False, default=0, index=True)
+    payroll_id = Column(String, ForeignKey("payrolls.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class LeaveRequest(Base):
+    __tablename__ = "hr_leaves"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    employee_id = Column(String, ForeignKey("employees.id"), nullable=False, index=True)
+    leave_type = Column(String, nullable=True)
+    start_date = Column(DateTime, nullable=True, index=True)
+    end_date = Column(DateTime, nullable=True, index=True)
+    days_count = Column(Integer, nullable=False, default=0)
+    paid = Column(Integer, nullable=False, default=1)
+    status = Column(String, nullable=False, default="pending", index=True)  # pending|accepted|rejected
+    applied = Column(Integer, nullable=False, default=0, index=True)
+    payroll_id = Column(String, ForeignKey("payrolls.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class Attendance(Base):
+    __tablename__ = "hr_attendance"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    employee_id = Column(String, ForeignKey("employees.id"), nullable=False, index=True)
+    date = Column(DateTime, nullable=False, index=True)
+    check_in = Column(String, nullable=True)
+    check_out = Column(String, nullable=True)
+    late_minutes = Column(Integer, nullable=False, default=0)
+    overtime_minutes = Column(Integer, nullable=False, default=0)
+    is_absent = Column(Integer, nullable=False, default=0, index=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class EndOfService(Base):
+    __tablename__ = "hr_end_of_service"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    employee_id = Column(String, ForeignKey("employees.id"), nullable=False, index=True)
+    end_date = Column(DateTime, nullable=True)
+    reason = Column(String, nullable=True)  # resigned|terminated|contract_end|retirement
+    remaining_salaries = Column(Float, nullable=False, default=0.0)
+    remaining_advances = Column(Float, nullable=False, default=0.0)
+    deductions_total = Column(Float, nullable=False, default=0.0)
+    leave_balance_days = Column(Float, nullable=False, default=0.0)
+    leave_balance_value = Column(Float, nullable=False, default=0.0)
+    gratuity_amount = Column(Float, nullable=False, default=0.0)
+    total_dues = Column(Float, nullable=False, default=0.0)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class HRConfigItem(Base):
+    __tablename__ = "hr_config_items"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    category = Column(String, nullable=False, index=True)  # department|position|leave_type|allowance_type|deduction_type|branch
+    name = Column(String, nullable=False)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
 
 
 def init_db() -> None:
