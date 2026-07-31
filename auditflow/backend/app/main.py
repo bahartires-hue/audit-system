@@ -236,6 +236,21 @@ def ui_hr(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "hr.html", "op-hr")
 
 
+@app.get("/hr/payroll", response_class=HTMLResponse)
+def ui_hr_payroll(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "hr_payroll.html", "op-hr")
+
+
+@app.get("/hr/employee", response_class=HTMLResponse)
+def ui_hr_employee(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "hr_employee.html", "op-hr")
+
+
+@app.get("/hr/alerts", response_class=HTMLResponse)
+def ui_hr_alerts(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "hr_alerts.html", "op-hr")
+
+
 @app.get("/finance", response_class=HTMLResponse)
 def ui_finance(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "finance.html", "op-finance")

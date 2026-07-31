@@ -542,9 +542,40 @@ class Employee(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String, nullable=False, index=True)
     position = Column(String, nullable=True)
+    department = Column(String, nullable=True, index=True)
+    branch_name = Column(String, nullable=True, index=True)
     is_active = Column(Integer, nullable=False, default=1, index=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class EmployeeDocument(Base):
+    __tablename__ = "employee_documents"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    employee_id = Column(String, ForeignKey("employees.id"), nullable=False, index=True)
+    doc_type = Column(String, nullable=False, index=True)
+    doc_number = Column(String, nullable=True)
+    issue_date = Column(DateTime, nullable=True)
+    expiry_date = Column(DateTime, nullable=True, index=True)
+    issuing_authority = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+    file_url = Column(String, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow, nullable=False)
+
+
+class EmployeeDocumentRenewal(Base):
+    __tablename__ = "employee_document_renewals"
+
+    id = Column(String, primary_key=True)
+    document_id = Column(String, ForeignKey("employee_documents.id"), nullable=False, index=True)
+    old_issue_date = Column(DateTime, nullable=True)
+    old_expiry_date = Column(DateTime, nullable=True)
+    renewed_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+    renewed_by_name = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
 
 
 class Payroll(Base):
