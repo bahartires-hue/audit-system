@@ -33,14 +33,15 @@
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
-            <thead class="bg-slate-100 dark:bg-slate-800"><tr><th class="px-2 py-2">الصنف</th><th class="px-2 py-2">الكمية</th><th class="px-2 py-2">سعر الشراء</th><th class="px-2 py-2">الإجمالي</th><th class="px-2 py-2"></th></tr></thead>
+            <thead class="bg-slate-100 dark:bg-slate-800"><tr><th class="px-2 py-2">الصنف</th><th class="px-2 py-2">الكمية</th><th class="px-2 py-2">سعر الشراء (قبل الضريبة)</th><th class="px-2 py-2">الضريبة</th><th class="px-2 py-2">الإجمالي شامل الضريبة</th><th class="px-2 py-2"></th></tr></thead>
             <tbody id="cartBody"></tbody>
           </table>
           <div id="cartEmpty" class="opacity-70 text-center py-4">لم تتم إضافة أصناف بعد للفاتورة.</div>
         </div>
-        <div class="flex justify-between items-center mt-3 rounded-xl border px-4 py-3 bg-slate-50 dark:bg-slate-900">
-          <div class="font-extrabold">إجمالي فاتورة الشراء</div>
-          <div id="pGrandTotal" class="font-extrabold text-2xl">0.00</div>
+        <div class="mt-3 rounded-xl border px-4 py-3 bg-slate-50 dark:bg-slate-900 space-y-1">
+          <div class="flex justify-between items-center text-sm"><div class="opacity-80">الإجمالي قبل الضريبة</div><div id="pSubTotal" class="font-bold">0.00</div></div>
+          <div class="flex justify-between items-center text-sm"><div class="opacity-80">ضريبة القيمة المضافة</div><div id="pTaxTotal" class="font-bold">0.00</div></div>
+          <div class="flex justify-between items-center pt-1 border-t"><div class="font-extrabold">الإجمالي النهائي</div><div id="pGrandTotal" class="font-extrabold text-2xl">0.00</div></div>
         </div>
         <button id="saveBtn" class="mt-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-5 py-3 w-full md:w-auto">💾 حفظ عملية الشراء</button>
       </div>
@@ -98,10 +99,24 @@
           } catch (e) { renderResults([]); }
         }
 
+        function normRate(rate, taxable) {
+          if (!taxable) return 0;
+          var r = Number(rate) || 0;
+          if (r > 1) r = r / 100;
+          return r;
+        }
+        function computeLine(row) {
+          var qty = Number(row.qty) || 0;
+          var unitCost = Number(row.unit_cost) || 0;
+          var net = qty * unitCost;
+          var rate = normRate(row.tax_rate, row.is_taxable);
+          var tax = round2(net * rate);
+          return { net: round2(net), tax: tax, total: round2(net + tax) };
+        }
         function addToCart(item) {
           var existing = cart.find(function (r) { return r.item_id === item.id; });
           if (existing) { existing.qty = round2(Number(existing.qty)+1); }
-          else { cart.push({ item_id: item.id, name: item.name, code: item.code, qty: 1, unit_cost: Number(item.last_cost)||0 }); }
+          else { cart.push({ item_id: item.id, name: item.name, code: item.code, qty: 1, unit_cost: Number(item.last_cost)||0, is_taxable: !!item.is_taxable, tax_rate: Number(item.tax_rate)||0 }); }
           renderCart();
         }
 
@@ -112,10 +127,12 @@
           empty.style.display = "none";
           var st = "width:90px;padding:4px 6px;border-radius:6px;border:1px solid #ccc;text-align:center;";
           body.innerHTML = cart.map(function (row, i) {
+            var line = computeLine(row);
             return '<tr data-row="'+i+'"><td class="px-2 py-2"><div class="font-bold">'+esc(row.name)+'</div><div class="text-xs opacity-70">'+esc(row.code)+'</div></td>'+
-              '<td class="px-2 py-2"><input type="number" step="0.01" min="0.01" value="'+esc(row.qty)+'" data-f="qty" style="'+st+'" class="bg-white dark:bg-slate-950" /></td>'+
-              '<td class="px-2 py-2"><input type="number" step="0.01" min="0" value="'+esc(row.unit_cost)+'" data-f="unit_cost" style="'+st+'" class="bg-white dark:bg-slate-950" /></td>'+
-              '<td class="px-2 py-2 font-bold" data-total="'+i+'">'+money(row.qty*row.unit_cost)+'</td>'+
+              '<td class="px-2 py-2"><input type="number" step="any" value="'+esc(row.qty)+'" data-f="qty" style="'+st+'" class="bg-white dark:bg-slate-950" /></td>'+
+              '<td class="px-2 py-2"><input type="number" step="any" value="'+esc(row.unit_cost)+'" data-f="unit_cost" style="'+st+'" class="bg-white dark:bg-slate-950" /></td>'+
+              '<td class="px-2 py-2" data-tax="'+i+'">'+money(line.tax)+'</td>'+
+              '<td class="px-2 py-2 font-bold" data-total="'+i+'">'+money(line.total)+'</td>'+
               '<td class="px-2 py-2"><button data-del="'+i+'" class="rounded-lg border px-2 py-1 text-red-600">✕</button></td></tr>';
           }).join("");
           body.querySelectorAll("input[data-f]").forEach(function (inp) {
@@ -123,8 +140,11 @@
               var tr = inp.closest("tr");
               var idx = Number(tr.getAttribute("data-row"));
               cart[idx][inp.getAttribute("data-f")] = Number(inp.value)||0;
+              var line = computeLine(cart[idx]);
+              var taxCell = tr.querySelector('[data-tax="'+idx+'"]');
+              if (taxCell) taxCell.textContent = money(line.tax);
               var totalCell = tr.querySelector('[data-total="'+idx+'"]');
-              if (totalCell) totalCell.textContent = money(cart[idx].qty*cart[idx].unit_cost);
+              if (totalCell) totalCell.textContent = money(line.total);
               renderTotals();
             });
           });
@@ -135,8 +155,11 @@
         }
 
         function renderTotals() {
-          var total = cart.reduce(function (s,r) { return s + Number(r.qty)*Number(r.unit_cost); }, 0);
-          document.getElementById("pGrandTotal").textContent = money(total);
+          var sub = 0, tax = 0;
+          cart.forEach(function (r) { var line = computeLine(r); sub += line.net; tax += line.tax; });
+          document.getElementById("pSubTotal").textContent = money(sub);
+          document.getElementById("pTaxTotal").textContent = money(tax);
+          document.getElementById("pGrandTotal").textContent = money(sub + tax);
         }
 
         function resetForm() {
@@ -166,12 +189,13 @@
         document.getElementById("saveBtn").addEventListener("click", async function () {
           if (!cart.length) { showToast("أضف صنفًا واحدًا على الأقل", "#ef4444"); return; }
           try {
+            var taxSum = cart.reduce(function (s, r) { return s + computeLine(r).tax; }, 0);
             var payload = {
               invoice_no: document.getElementById("pInvoiceNo").value || genInvoiceNo(),
               supplier_name: "مورد عام",
               purchase_date: document.getElementById("pDate").value || new Date().toISOString().slice(0,10),
               payment_type: "cash",
-              tax_amount: 0,
+              tax_amount: round2(taxSum),
               discount: 0,
               paid_amount: 0,
               notes: document.getElementById("pNotes").value || "",
