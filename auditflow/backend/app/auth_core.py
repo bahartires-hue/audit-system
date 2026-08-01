@@ -153,11 +153,12 @@ def user_can_access_page_key(user: Optional[User], page_key: Optional[str]) -> b
     return page_key in allowed
 
 
-def log_event(db: Session, action: str, user_id: Optional[str] = None, meta: Optional[Dict[str, Any]] = None) -> None:
+def log_event(db: Session, action: str, user_id: Optional[str] = None, meta: Optional[Dict[str, Any]] = None, employee_id: Optional[str] = None) -> None:
     db.add(
         AuditLog(
             id=uuid.uuid4().hex,
             user_id=user_id,
+            employee_id=employee_id,
             action=action,
             meta_json=meta or {},
         )

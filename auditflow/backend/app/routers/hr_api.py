@@ -33,6 +33,10 @@ from ..models import (
     PayrollDeduction,
     AppSetting,
     CompanyProfile,
+    WithdrawalRecord,
+    TravelRecord,
+    CustodyRecord,
+    AuditLog,
 )
 from ..pdf_utils import generate_pdf_report
 
@@ -237,6 +241,12 @@ class EmployeeCreate(BaseModel):
     email: str = ""
     status: str = "active"
     notes: str = ""
+    gender: str = ""
+    address: str = ""
+    manager_id: str = ""
+    bank_name: str = ""
+    iban: str = ""
+    bank_salary: Optional[float] = None
 
 
 class EmployeeUpdate(BaseModel):
@@ -258,11 +268,30 @@ class EmployeeUpdate(BaseModel):
     status: Optional[str] = None
     is_active: Optional[bool] = None
     notes: Optional[str] = None
+    gender: Optional[str] = None
+    address: Optional[str] = None
+    manager_id: Optional[str] = None
+    bank_name: Optional[str] = None
+    iban: Optional[str] = None
+    bank_salary: Optional[float] = None
 
 
-def _employee_out(e: Employee) -> dict:
+def _years_of_service(hire_date) -> Optional[float]:
+    if not hire_date:
+        return None
+    days = (dt.datetime.utcnow() - hire_date).days
+    if days < 0:
+        return None
+    return round(days / 365.25, 1)
+
+
+def _employee_out(e: Employee, db=None) -> dict:
     residency_days = _days_left(e.residency_expiry)
     passport_days = _days_left(e.passport_expiry)
+    manager_name = ""
+    if db is not None and e.manager_id:
+        mgr = db.query(Employee).filter(Employee.id == e.manager_id).first()
+        manager_name = mgr.name if mgr else ""
     return {
         "id": e.id,
         "employee_number": e.employee_number or "",
@@ -288,6 +317,14 @@ def _employee_out(e: Employee) -> dict:
         "photo_url": e.photo_url or "",
         "is_active": bool(int(e.is_active or 0)),
         "notes": e.notes or "",
+        "gender": e.gender or "",
+        "address": e.address or "",
+        "manager_id": e.manager_id or "",
+        "manager_name": manager_name,
+        "bank_name": e.bank_name or "",
+        "iban": e.iban or "",
+        "bank_salary": e.bank_salary,
+        "years_of_service": _years_of_service(e.hire_date),
     }
 
 
@@ -350,11 +387,17 @@ def create_employee(request: Request, body: EmployeeCreate = Body(...)):
             status=body.status or "active",
             is_active=1 if (body.status or "active") == "active" else 0,
             notes=(body.notes or "").strip() or None,
+            gender=(body.gender or "").strip() or None,
+            address=(body.address or "").strip() or None,
+            manager_id=(body.manager_id or "").strip() or None,
+            bank_name=(body.bank_name or "").strip() or None,
+            iban=(body.iban or "").strip() or None,
+            bank_salary=body.bank_salary,
         )
         db.add(rec)
         db.commit()
-        log_event(db, "hr.employee.create", user.id, {"employee_id": rec.id})
-        return _employee_out(rec)
+        log_event(db, "hr.employee.create", user.id, {"employee_id": rec.id}, employee_id=rec.id)
+        return _employee_out(rec, db)
     finally:
         db.close()
 
@@ -593,7 +636,169 @@ def get_employee(employee_id: str, request: Request):
         rec = db.query(Employee).filter(Employee.user_id == user.id, Employee.id == employee_id).first()
         if not rec:
             raise HTTPException(404, "الموظف غير موجود")
-        return _employee_out(rec)
+        return _employee_out(rec, db)
+    finally:
+        db.close()
+
+
+TIMELINE_ICONS = {
+    "hr.employee.create": "👤", "hr.employee.update": "✏️", "hr.employee.salary_change": "💵",
+    "hr.contract.create": "📄", "hr.advance.create": "💰", "hr.withdrawal.create": "🧾",
+    "hr.deduction.create": "➖", "hr.allowance.create": "➕", "hr.commission.create": "📈",
+    "hr.leave.create": "🏖️", "hr.leave.decision": "✅", "hr.payroll.create": "🧮",
+    "hr.payroll.pay": "💳", "hr.payroll.delete": "🗑️", "hr.end_of_service.create": "🏁",
+    "hr.document.create": "📎", "hr.document.file_upload": "📎", "hr.document.delete": "🗑️",
+    "hr.document.renew": "🔄", "hr.travel.create": "✈️", "hr.travel.return": "🛬",
+    "hr.custody.create": "📦", "hr.custody.return": "📦",
+}
+
+
+def _timeline_label(action: str, meta: dict) -> str:
+    if action == "hr.employee.create":
+        return "تم تعيين الموظف"
+    if action == "hr.employee.update":
+        return "تم تحديث بيانات الموظف"
+    if action == "hr.employee.salary_change":
+        return f"تم تعديل الراتب من {meta.get('old_salary')} إلى {meta.get('new_salary')}"
+    if action == "hr.contract.create":
+        return "تم إضافة عقد جديد"
+    if action == "hr.advance.create":
+        return "تم تسجيل سلفة"
+    if action == "hr.withdrawal.create":
+        return "تم تسجيل سحبية"
+    if action == "hr.deduction.create":
+        return "تم تسجيل استقطاع"
+    if action == "hr.allowance.create":
+        return "تم تسجيل بدل"
+    if action == "hr.commission.create":
+        return "تم تسجيل عمولة"
+    if action == "hr.leave.create":
+        return "تم تقديم طلب إجازة"
+    if action == "hr.leave.decision":
+        return "تم اعتماد الإجازة" if meta.get("decision") == "accepted" else "تم رفض طلب الإجازة"
+    if action == "hr.payroll.create":
+        return "تم إنشاء مسير راتب"
+    if action == "hr.payroll.pay":
+        return "تم صرف الراتب"
+    if action == "hr.payroll.delete":
+        return "تم حذف مسير راتب"
+    if action == "hr.end_of_service.create":
+        return "تم إنهاء خدمة الموظف"
+    if action == "hr.document.create":
+        return f"تم رفع وثيقة ({meta.get('doc_type', '')})"
+    if action == "hr.document.file_upload":
+        return "تم رفع ملف للوثيقة"
+    if action == "hr.document.delete":
+        return "تم حذف وثيقة"
+    if action == "hr.document.renew":
+        return f"تم تجديد وثيقة ({meta.get('doc_type', '')})"
+    if action == "hr.travel.create":
+        return "تم تسجيل سفر"
+    if action == "hr.travel.return":
+        return "تم تسجيل العودة من السفر"
+    if action == "hr.custody.create":
+        return f"تم تسليم عهدة: {meta.get('item_name', '')}"
+    if action == "hr.custody.return":
+        cond = meta.get("condition")
+        return {"returned": "تم إرجاع العهدة", "lost": "تم تسجيل العهدة كمفقودة", "damaged": "تم تسجيل العهدة كتالفة"}.get(cond, "تم إرجاع العهدة")
+    return action
+
+
+@router.get("/employees/{employee_id}/timeline")
+def employee_timeline(employee_id: str, request: Request, limit: int = Query(200, ge=1, le=1000)):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        employee = db.query(Employee).filter(Employee.user_id == user.id, Employee.id == employee_id).first()
+        if not employee:
+            raise HTTPException(404, "الموظف غير موجود")
+        rows = db.query(AuditLog).filter(
+            AuditLog.employee_id == employee_id, AuditLog.user_id == user.id,
+        ).order_by(AuditLog.created_at.desc()).limit(limit).all()
+        items = []
+        for r in rows:
+            meta = r.meta_json or {}
+            items.append({
+                "id": r.id, "action": r.action, "icon": TIMELINE_ICONS.get(r.action, "•"),
+                "label": _timeline_label(r.action, meta), "meta": meta,
+                "created_at": _fmt_dt(r.created_at),
+            })
+        return {"items": items}
+    finally:
+        db.close()
+
+
+@router.get("/employees/{employee_id}/profile-summary")
+def employee_profile_summary(employee_id: str, request: Request):
+    """بطاقة المعلومات السريعة + البطاقات الإحصائية أعلى ملف الموظف — كل الأرقام محسوبة لحظياً من القاعدة (لا تخزين مستقل)."""
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        e = db.query(Employee).filter(Employee.user_id == user.id, Employee.id == employee_id).first()
+        if not e:
+            raise HTTPException(404, "الموظف غير موجود")
+
+        contract = db.query(EmployeeContract).filter(
+            EmployeeContract.employee_id == employee_id, EmployeeContract.status == "active",
+        ).order_by(EmployeeContract.created_at.desc()).first()
+
+        last_attendance = db.query(Attendance).filter(Attendance.employee_id == employee_id).order_by(Attendance.date.desc()).first()
+        last_leave = db.query(LeaveRequest).filter(LeaveRequest.employee_id == employee_id).order_by(LeaveRequest.created_at.desc()).first()
+        last_advance = db.query(Advance).filter(Advance.employee_id == employee_id).order_by(Advance.created_at.desc()).first()
+        last_payroll = db.query(Payroll).filter(Payroll.employee_id == employee_id).order_by(Payroll.year.desc(), Payroll.month.desc()).first()
+
+        quick_info = _employee_out(e, db)
+        quick_info.update({
+            "contract_status": "ساري" if contract else "لا يوجد",
+            "contract_type": contract.contract_type if contract else None,
+            "contract_end_date": _fmt_date(contract.end_date) if contract else None,
+            "residency_status": "منتهية" if (e.residency_expiry and (_days_left(e.residency_expiry) or 0) < 0) else ("سارية" if e.residency_expiry else "غير مسجّلة"),
+            "passport_status": "منتهٍ" if (e.passport_expiry and (_days_left(e.passport_expiry) or 0) < 0) else ("ساري" if e.passport_expiry else "غير مسجّل"),
+            "last_attendance_date": _fmt_date(last_attendance.date) if last_attendance else None,
+            "last_leave": {"type": last_leave.leave_type, "start_date": _fmt_date(last_leave.start_date), "status": last_leave.status} if last_leave else None,
+            "last_advance": {"amount": round(float(last_advance.amount or 0), 2), "date": _fmt_date(last_advance.date), "status": last_advance.status} if last_advance else None,
+            "last_net_salary": round(float(last_payroll.net_salary or 0), 2) if last_payroll else None,
+            "last_salary_period": f"{MONTHS_AR[last_payroll.month-1]} {last_payroll.year}" if last_payroll else None,
+        })
+
+        active_advances = db.query(Advance).filter(Advance.employee_id == employee_id, Advance.status == "active").all()
+        all_advances = db.query(Advance).filter(Advance.employee_id == employee_id).all()
+        pending_withdrawals = db.query(WithdrawalRecord).filter(WithdrawalRecord.employee_id == employee_id, WithdrawalRecord.status == "pending").all()
+        pending_deductions = db.query(DeductionRecord).filter(DeductionRecord.employee_id == employee_id, DeductionRecord.applied == 0).all()
+        pending_allowances = db.query(AllowanceRecord).filter(AllowanceRecord.employee_id == employee_id, AllowanceRecord.applied == 0).all()
+        pending_commissions = db.query(CommissionRecord).filter(CommissionRecord.employee_id == employee_id, CommissionRecord.applied == 0).all()
+        all_leaves = db.query(LeaveRequest).filter(LeaveRequest.employee_id == employee_id, LeaveRequest.status == "accepted").all()
+        this_year = dt.datetime.utcnow().year
+        leave_days_this_year = sum(l.days_count for l in all_leaves if l.start_date and l.start_date.year == this_year)
+        annual_leave_days = contract.annual_leave_days if contract else 21
+        absent_count = db.query(Attendance).filter(Attendance.employee_id == employee_id, Attendance.is_absent == 1).count()
+        late_count = db.query(Attendance).filter(Attendance.employee_id == employee_id, Attendance.late_minutes > 0).count()
+        all_payrolls = db.query(Payroll).filter(Payroll.employee_id == employee_id).all()
+        total_salaries_paid = round(sum(float(p.net_salary or 0) for p in all_payrolls if p.status == "paid"), 2)
+        gratuity_estimate = _compute_gratuity(e.basic_salary or 0.0, e.hire_date, dt.datetime.utcnow()) if e.hire_date else 0.0
+        active_custody_count = db.query(CustodyRecord).filter(CustodyRecord.employee_id == employee_id, CustodyRecord.status == "assigned").count()
+        travel_count = db.query(TravelRecord).filter(TravelRecord.employee_id == employee_id).count()
+
+        stats = {
+            "advances_total": round(sum(float(a.amount or 0) for a in all_advances), 2),
+            "advances_count": len(all_advances),
+            "advances_remaining": round(sum(float(a.remaining_amount or 0) for a in active_advances), 2),
+            "withdrawals_pending_total": round(sum(float(w.amount or 0) for w in pending_withdrawals), 2),
+            "withdrawals_pending_count": len(pending_withdrawals),
+            "deductions_pending_total": round(sum(float(d.amount or 0) for d in pending_deductions), 2),
+            "allowances_pending_total": round(sum(float(a.amount or 0) for a in pending_allowances), 2),
+            "commissions_pending_total": round(sum(float(c.commission_value or 0) for c in pending_commissions), 2),
+            "leave_days_used_this_year": leave_days_this_year,
+            "leave_balance_days": max(annual_leave_days - leave_days_this_year, 0),
+            "absent_days_count": absent_count,
+            "late_count": late_count,
+            "total_salaries_paid": total_salaries_paid,
+            "eos_gratuity_estimate": round(gratuity_estimate, 2),
+            "active_custody_count": active_custody_count,
+            "travel_count": travel_count,
+        }
+
+        return {"quick_info": quick_info, "stats": stats}
     finally:
         db.close()
 
@@ -611,12 +816,18 @@ def update_employee(employee_id: str, request: Request, body: EmployeeUpdate = B
         # ملاحظة معمارية: "passport_number" و"residency_expiry" و"passport_expiry" أُزيلت
         # عمدًا من التحديث المباشر — تبويب الوثائق هو المصدر الوحيد لها الآن (Single Source
         # of Truth)، وتتم مزامنتها تلقائيًا عبر _sync_identity_docs_from_documents.
-        simple_fields = ["name", "nationality", "national_id", "position", "department", "branch_name", "phone", "email", "notes"]
+        simple_fields = ["name", "nationality", "national_id", "position", "department", "branch_name", "phone", "email", "notes", "gender", "address", "manager_id", "bank_name", "iban"]
         for f in simple_fields:
             if f in data and data[f] is not None:
                 setattr(rec, f, (data[f] or "").strip() or None)
+        salary_changed = False
+        old_salary = rec.basic_salary
         if "basic_salary" in data and data["basic_salary"] is not None:
+            if round(float(data["basic_salary"]), 2) != round(float(old_salary or 0.0), 2):
+                salary_changed = True
             rec.basic_salary = data["basic_salary"]
+        if "bank_salary" in data:
+            rec.bank_salary = data["bank_salary"]
         if "commission_percentage" in data:
             rec.commission_percentage = data["commission_percentage"]
         if "hire_date" in data:
@@ -629,8 +840,11 @@ def update_employee(employee_id: str, request: Request, body: EmployeeUpdate = B
         if "is_active" in data and data["is_active"] is not None:
             rec.is_active = 1 if data["is_active"] else 0
         db.commit()
-        log_event(db, "hr.employee.update", user.id, {"employee_id": rec.id})
-        return _employee_out(rec)
+        if salary_changed:
+            log_event(db, "hr.employee.salary_change", user.id, {"employee_id": rec.id, "old_salary": round(float(old_salary or 0.0), 2), "new_salary": round(float(rec.basic_salary or 0.0), 2)}, employee_id=rec.id)
+        else:
+            log_event(db, "hr.employee.update", user.id, {"employee_id": rec.id}, employee_id=rec.id)
+        return _employee_out(rec, db)
     finally:
         db.close()
 
@@ -801,7 +1015,7 @@ async def create_contract(
             employee.basic_salary = rec.salary
 
         db.commit()
-        log_event(db, "hr.contract.create", user.id, {"contract_id": rec.id, "employee_id": employee_id})
+        log_event(db, "hr.contract.create", user.id, {"contract_id": rec.id, "employee_id": employee_id}, employee_id=employee_id)
         return _contract_out(rec)
     finally:
         db.close()
@@ -885,7 +1099,7 @@ def create_advance(request: Request, body: AdvanceCreate = Body(...)):
         )
         db.add(rec)
         db.commit()
-        log_event(db, "hr.advance.create", user.id, {"advance_id": rec.id})
+        log_event(db, "hr.advance.create", user.id, {"advance_id": rec.id}, employee_id=body.employee_id)
         return _advance_out(rec, employee.name)
     finally:
         db.close()
@@ -921,6 +1135,101 @@ def cancel_advance(advance_id: str, request: Request):
         rec.status = "cancelled"
         db.commit()
         return _advance_out(rec)
+    finally:
+        db.close()
+
+
+# ============================================================
+# السحبيات (سحبية: مبلغ يُخصم دفعة واحدة من راتب الشهر القادم — بعكس السلفة التي تُقسّط)
+# ============================================================
+
+class WithdrawalCreate(BaseModel):
+    employee_id: str
+    date: str = ""
+    amount: float = Field(gt=0)
+    reason: str = ""
+
+
+def _withdrawal_out(w: WithdrawalRecord, employee_name: str = "") -> dict:
+    return {
+        "id": w.id, "employee_id": w.employee_id, "employee_name": employee_name,
+        "date": _fmt_date(w.date), "amount": round(float(w.amount or 0.0), 2),
+        "reason": w.reason or "", "status": w.status,
+        "status_label": {"pending": "معلّقة", "settled": "مُسوّاة", "cancelled": "ملغاة"}.get(w.status, w.status),
+        "applied": bool(w.applied), "payroll_id": w.payroll_id,
+    }
+
+
+@router.get("/withdrawals")
+def list_withdrawals(request: Request, employee_id: str = Query(""), status: str = Query("")):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        q = db.query(WithdrawalRecord, Employee).join(Employee, Employee.id == WithdrawalRecord.employee_id).filter(WithdrawalRecord.user_id == user.id)
+        if employee_id:
+            q = q.filter(WithdrawalRecord.employee_id == employee_id)
+        if status:
+            q = q.filter(WithdrawalRecord.status == status)
+        rows = q.order_by(WithdrawalRecord.created_at.desc()).all()
+        return {"items": [_withdrawal_out(w, e.name) for w, e in rows]}
+    finally:
+        db.close()
+
+
+@router.post("/withdrawals")
+def create_withdrawal(request: Request, body: WithdrawalCreate = Body(...)):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        employee = db.query(Employee).filter(Employee.user_id == user.id, Employee.id == body.employee_id).first()
+        if not employee:
+            raise HTTPException(404, "الموظف غير موجود")
+        rec = WithdrawalRecord(
+            id=uuid.uuid4().hex, user_id=user.id, employee_id=body.employee_id,
+            date=_parse_simple_date(body.date, "التاريخ") or dt.datetime.utcnow(),
+            amount=body.amount, reason=(body.reason or "").strip() or None, status="pending",
+        )
+        db.add(rec)
+        db.commit()
+        log_event(db, "hr.withdrawal.create", user.id, {"withdrawal_id": rec.id}, employee_id=body.employee_id)
+        return _withdrawal_out(rec, employee.name)
+    finally:
+        db.close()
+
+
+@router.delete("/withdrawals/{withdrawal_id}")
+def delete_withdrawal(withdrawal_id: str, request: Request):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        rec = db.query(WithdrawalRecord).filter(WithdrawalRecord.user_id == user.id, WithdrawalRecord.id == withdrawal_id).first()
+        if not rec:
+            raise HTTPException(404, "السحبية غير موجودة")
+        if rec.applied:
+            raise HTTPException(400, "لا يمكن حذف سحبية طُبّقت على راتب بالفعل — يمكن حذفها فقط قبل صرف الراتب المرتبط")
+        db.delete(rec)
+        db.commit()
+        return {"deleted": True}
+    finally:
+        db.close()
+
+
+@router.post("/withdrawals/{withdrawal_id}/cancel")
+def cancel_withdrawal(withdrawal_id: str, request: Request):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        rec = db.query(WithdrawalRecord).filter(WithdrawalRecord.user_id == user.id, WithdrawalRecord.id == withdrawal_id).first()
+        if not rec:
+            raise HTTPException(404, "السحبية غير موجودة")
+        if rec.applied:
+            raise HTTPException(400, "لا يمكن إلغاء سحبية طُبّقت على راتب بالفعل")
+        rec.status = "cancelled"
+        db.commit()
+        return _withdrawal_out(rec)
     finally:
         db.close()
 
@@ -981,7 +1290,7 @@ def create_deduction(request: Request, body: DeductionCreate = Body(...)):
         )
         db.add(rec)
         db.commit()
-        log_event(db, "hr.deduction.create", user.id, {"deduction_id": rec.id})
+        log_event(db, "hr.deduction.create", user.id, {"deduction_id": rec.id}, employee_id=body.employee_id)
         return _deduction_out(rec, employee.name)
     finally:
         db.close()
@@ -1057,7 +1366,7 @@ def create_allowance(request: Request, body: AllowanceCreate = Body(...)):
         )
         db.add(rec)
         db.commit()
-        log_event(db, "hr.allowance.create", user.id, {"allowance_id": rec.id})
+        log_event(db, "hr.allowance.create", user.id, {"allowance_id": rec.id}, employee_id=body.employee_id)
         return _allowance_out(rec, employee.name)
     finally:
         db.close()
@@ -1131,7 +1440,7 @@ def create_commission(request: Request, body: CommissionCreate = Body(...)):
         )
         db.add(rec)
         db.commit()
-        log_event(db, "hr.commission.create", user.id, {"commission_id": rec.id})
+        log_event(db, "hr.commission.create", user.id, {"commission_id": rec.id}, employee_id=body.employee_id)
         return _commission_out(rec, employee.name)
     finally:
         db.close()
@@ -1213,7 +1522,7 @@ def create_leave(request: Request, body: LeaveCreate = Body(...)):
         )
         db.add(rec)
         db.commit()
-        log_event(db, "hr.leave.create", user.id, {"leave_id": rec.id})
+        log_event(db, "hr.leave.create", user.id, {"leave_id": rec.id}, employee_id=body.employee_id)
         return _leave_out(rec, employee.name)
     finally:
         db.close()
@@ -1232,6 +1541,7 @@ def decide_leave(leave_id: str, request: Request, decision: str = Body(..., embe
             raise HTTPException(400, "قرار غير صالح")
         rec.status = decision
         db.commit()
+        log_event(db, "hr.leave.decision", user.id, {"leave_id": rec.id, "decision": decision}, employee_id=rec.employee_id)
         return _leave_out(rec)
     finally:
         db.close()
@@ -1484,7 +1794,14 @@ def create_payroll(request: Request, body: PayrollCreate = Body(...)):
                 ded_lines.append((f"خصم إجازة غير مدفوعة ({lv.days_count} يوم)", round(daily_rate * lv.days_count, 2)))
                 consumed_leave_ids.append(lv.id)
 
-        # 7) بنود يدوية إضافية من المستخدم
+        # 7) السحبيات المعلّقة — تُخصم بالكامل من راتب الشهر القادم
+        withdrawals = db.query(WithdrawalRecord).filter(
+            WithdrawalRecord.user_id == user.id, WithdrawalRecord.employee_id == body.employee_id, WithdrawalRecord.status == "pending",
+        ).all()
+        for w in withdrawals:
+            ded_lines.append((f"سحبية بتاريخ {_fmt_date(w.date)}", w.amount))
+
+        # 8) بنود يدوية إضافية من المستخدم
         for item in body.extra_allowances:
             allow_lines.append((item.label, item.amount))
         for item in body.extra_deductions:
@@ -1538,9 +1855,13 @@ def create_payroll(request: Request, body: PayrollCreate = Body(...)):
             if lv:
                 lv.applied = 1
                 lv.payroll_id = payroll.id
+        for w in withdrawals:
+            w.status = "settled"
+            w.applied = 1
+            w.payroll_id = payroll.id
 
         db.commit()
-        log_event(db, "hr.payroll.create", user.id, {"payroll_id": payroll.id})
+        log_event(db, "hr.payroll.create", user.id, {"payroll_id": payroll.id}, employee_id=body.employee_id)
         return _payroll_out(db, payroll, employee.name)
     finally:
         db.close()
@@ -1562,7 +1883,7 @@ def pay_payroll(payroll_id: str, request: Request):
         p.status = "paid"
         p.paid_at = dt.datetime.utcnow()
         db.commit()
-        log_event(db, "hr.payroll.pay", user.id, {"payroll_id": p.id})
+        log_event(db, "hr.payroll.pay", user.id, {"payroll_id": p.id}, employee_id=p.employee_id)
         e = db.query(Employee).filter(Employee.id == p.employee_id).first()
         return _payroll_out(db, p, e.name if e else "")
     finally:
@@ -1582,6 +1903,10 @@ def _rollback_payroll_links(db, payroll_id: str):
     for lv in db.query(LeaveRequest).filter(LeaveRequest.payroll_id == payroll_id).all():
         lv.applied = 0
         lv.payroll_id = None
+    for w in db.query(WithdrawalRecord).filter(WithdrawalRecord.payroll_id == payroll_id).all():
+        w.applied = 0
+        w.payroll_id = None
+        w.status = "pending"
     for line in db.query(PayrollDeduction).filter(PayrollDeduction.payroll_id == payroll_id).all():
         if line.label.startswith("قسط سلفة"):
             adv = db.query(Advance).filter(
@@ -1604,12 +1929,13 @@ def delete_payroll(payroll_id: str, request: Request):
             raise HTTPException(404, "الراتب غير موجود")
         if p.status == "paid":
             raise HTTPException(400, "لا يمكن حذف راتب تم صرفه بالفعل — يمكن إلغاؤه فقط إن لم يُصرف")
+        emp_id_for_log = p.employee_id
         _rollback_payroll_links(db, payroll_id)
         db.query(PayrollAllowance).filter(PayrollAllowance.payroll_id == payroll_id).delete()
         db.query(PayrollDeduction).filter(PayrollDeduction.payroll_id == payroll_id).delete()
         db.delete(p)
         db.commit()
-        log_event(db, "hr.payroll.delete", user.id, {"payroll_id": payroll_id})
+        log_event(db, "hr.payroll.delete", user.id, {"payroll_id": payroll_id}, employee_id=emp_id_for_log)
         return {"deleted": True}
     finally:
         db.close()
@@ -1657,10 +1983,41 @@ def hr_dashboard_summary(request: Request):
         ).count()
         active_emps = db.query(Employee).filter(Employee.user_id == user.id, Employee.is_active == 1).all()
         residency_expired_count = sum(1 for e in active_emps if (_days_left(e.residency_expiry) or 999) < 0)
+        passport_expired_count = sum(1 for e in active_emps if (_days_left(e.passport_expiry) or 999) < 0)
+        active_contracts = db.query(EmployeeContract).filter(EmployeeContract.user_id == user.id, EmployeeContract.status == "active").all()
         contracts_expiring_count = sum(
-            1 for c in db.query(EmployeeContract).filter(EmployeeContract.user_id == user.id, EmployeeContract.status == "active").all()
-            if (_days_left(c.end_date) is not None and _days_left(c.end_date) <= 30)
+            1 for c in active_contracts if (_days_left(c.end_date) is not None and 0 <= _days_left(c.end_date) <= 30)
         )
+        contracts_expired_count = sum(1 for c in active_contracts if (_days_left(c.end_date) or 999) < 0)
+        today_start = dt.datetime(now.year, now.month, now.day)
+        today_end = today_start + dt.timedelta(days=1)
+        travel_active_count = db.query(TravelRecord).filter(
+            TravelRecord.user_id == user.id, TravelRecord.status != "cancelled",
+            TravelRecord.actual_return_date.is_(None),
+            TravelRecord.departure_date <= now,
+        ).count()
+        leaves_today_count = db.query(LeaveRequest).filter(
+            LeaveRequest.user_id == user.id, LeaveRequest.status == "accepted",
+            LeaveRequest.start_date <= today_end, LeaveRequest.end_date >= today_start,
+        ).count()
+        advances_total = round(sum(
+            float(a.remaining_amount or 0.0) for a in db.query(Advance).filter(Advance.user_id == user.id, Advance.status == "active").all()
+        ), 2)
+        withdrawals_total = round(sum(
+            float(w.amount or 0.0) for w in db.query(WithdrawalRecord).filter(WithdrawalRecord.user_id == user.id, WithdrawalRecord.status == "pending").all()
+        ), 2)
+        allowances_total = round(sum(
+            float(a.amount or 0.0) for a in db.query(AllowanceRecord).filter(AllowanceRecord.user_id == user.id, AllowanceRecord.applied == 0).all()
+        ), 2)
+        deductions_total = round(sum(
+            float(d.amount or 0.0) for d in db.query(DeductionRecord).filter(DeductionRecord.user_id == user.id, DeductionRecord.applied == 0).all()
+        ), 2)
+        commissions_total = round(sum(
+            float(c.commission_value or 0.0) for c in db.query(CommissionRecord).filter(CommissionRecord.user_id == user.id, CommissionRecord.applied == 0).all()
+        ), 2)
+        eos_total = round(sum(
+            float(r.total_dues or 0.0) for r in db.query(EndOfService).filter(EndOfService.user_id == user.id).all()
+        ), 2)
         return {
             "employees_count": employees_count,
             "total_this_month": total,
@@ -1671,7 +2028,17 @@ def hr_dashboard_summary(request: Request):
             "not_paid_yet": not_paid_yet,
             "absent_today": absent_today,
             "residency_expired_count": residency_expired_count,
+            "passport_expired_count": passport_expired_count,
             "contracts_expiring_count": contracts_expiring_count,
+            "contracts_expired_count": contracts_expired_count,
+            "travel_active_count": travel_active_count,
+            "leaves_today_count": leaves_today_count,
+            "advances_total": advances_total,
+            "withdrawals_total": withdrawals_total,
+            "allowances_total": allowances_total,
+            "deductions_total": deductions_total,
+            "commissions_total": commissions_total,
+            "eos_total": eos_total,
         }
     finally:
         db.close()
@@ -1815,7 +2182,7 @@ def create_end_of_service(employee_id: str, request: Request, body: EndOfService
         employee.status = "terminated"
         employee.is_active = 0
         db.commit()
-        log_event(db, "hr.end_of_service.create", user.id, {"employee_id": employee_id})
+        log_event(db, "hr.end_of_service.create", user.id, {"employee_id": employee_id}, employee_id=employee_id)
         return _eos_out(rec, employee.name)
     finally:
         db.close()
@@ -1991,7 +2358,7 @@ async def create_employee_document(
         db.add(rec)
         db.commit()
         _sync_identity_docs_from_documents(db, employee_id)
-        log_event(db, "hr.document.create", user.id, {"document_id": rec.id, "employee_id": employee_id, "doc_type": rec.doc_type})
+        log_event(db, "hr.document.create", user.id, {"document_id": rec.id, "employee_id": employee_id, "doc_type": rec.doc_type}, employee_id=employee_id)
         return _doc_out(rec)
     finally:
         db.close()
@@ -2056,7 +2423,7 @@ async def upload_document_file(document_id: str, request: Request, file: UploadF
             f.write(content)
         rec.file_url = f"/uploads/hr_documents/{saved_name}"
         db.commit()
-        log_event(db, "hr.document.file_upload", user.id, {"document_id": rec.id})
+        log_event(db, "hr.document.file_upload", user.id, {"document_id": rec.id}, employee_id=rec.employee_id)
         return _doc_out(rec)
     finally:
         db.close()
@@ -2076,7 +2443,7 @@ def delete_document(document_id: str, request: Request):
         db.delete(rec)
         db.commit()
         _sync_identity_docs_from_documents(db, emp_id_for_sync)
-        log_event(db, "hr.document.delete", user.id, {"document_id": document_id})
+        log_event(db, "hr.document.delete", user.id, {"document_id": document_id}, employee_id=emp_id_for_sync)
         return {"deleted": True}
     finally:
         db.close()
@@ -2115,7 +2482,7 @@ def renew_document(document_id: str, request: Request, body: DocumentRenew = Bod
         rec.expiry_date = new_expiry
         db.commit()
         _sync_identity_docs_from_documents(db, rec.employee_id)
-        log_event(db, "hr.document.renew", user.id, {"document_id": rec.id})
+        log_event(db, "hr.document.renew", user.id, {"document_id": rec.id, "doc_type": rec.doc_type}, employee_id=rec.employee_id)
         return _doc_out(rec)
     finally:
         db.close()
@@ -2198,6 +2565,257 @@ def documents_alerts(
     finally:
         db.close()
 
+
+
+# ============================================================
+# السفر
+# ============================================================
+
+TRAVEL_TYPE_LABELS = {"domestic": "داخل المملكة", "international": "خارج المملكة"}
+TRAVEL_STATUS_LABELS = {"scheduled": "مجدول", "ongoing": "قيد السفر", "completed": "مكتمل", "cancelled": "ملغى"}
+
+
+class TravelCreate(BaseModel):
+    employee_id: str
+    travel_type: str = "domestic"
+    destination: str = ""
+    departure_date: str
+    return_date: str = ""
+    purpose: str = ""
+    notes: str = ""
+
+
+def _travel_status(t: TravelRecord) -> str:
+    if t.status == "cancelled":
+        return "cancelled"
+    if t.actual_return_date:
+        return "completed"
+    today = dt.datetime.utcnow()
+    if t.departure_date and today < t.departure_date:
+        return "scheduled"
+    if t.return_date and today > t.return_date:
+        return "completed"
+    return "ongoing"
+
+
+def _travel_out(t: TravelRecord, employee_name: str = "") -> dict:
+    status = _travel_status(t)
+    return {
+        "id": t.id, "employee_id": t.employee_id, "employee_name": employee_name,
+        "travel_type": t.travel_type, "travel_type_label": TRAVEL_TYPE_LABELS.get(t.travel_type, t.travel_type),
+        "destination": t.destination or "", "departure_date": _fmt_date(t.departure_date),
+        "return_date": _fmt_date(t.return_date), "actual_return_date": _fmt_date(t.actual_return_date),
+        "purpose": t.purpose or "", "notes": t.notes or "",
+        "status": status, "status_label": TRAVEL_STATUS_LABELS.get(status, status),
+    }
+
+
+@router.get("/travel")
+def list_travel(request: Request, employee_id: str = Query(""), status: str = Query("")):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        q = db.query(TravelRecord, Employee).join(Employee, Employee.id == TravelRecord.employee_id).filter(TravelRecord.user_id == user.id)
+        if employee_id:
+            q = q.filter(TravelRecord.employee_id == employee_id)
+        rows = q.order_by(TravelRecord.departure_date.desc()).all()
+        items = [_travel_out(t, e.name) for t, e in rows]
+        if status:
+            items = [i for i in items if i["status"] == status]
+        return {"items": items}
+    finally:
+        db.close()
+
+
+@router.post("/travel")
+def create_travel(request: Request, body: TravelCreate = Body(...)):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        employee = db.query(Employee).filter(Employee.user_id == user.id, Employee.id == body.employee_id).first()
+        if not employee:
+            raise HTTPException(404, "الموظف غير موجود")
+        if body.travel_type not in ("domestic", "international"):
+            raise HTTPException(400, "نوع السفر غير صالح")
+        departure = _parse_simple_date(body.departure_date, "تاريخ السفر")
+        ret = _parse_simple_date(body.return_date, "تاريخ العودة") if body.return_date else None
+        if not departure:
+            raise HTTPException(400, "تاريخ السفر مطلوب")
+        if ret and ret < departure:
+            raise HTTPException(400, "تاريخ العودة لا يمكن أن يسبق تاريخ السفر")
+        rec = TravelRecord(
+            id=uuid.uuid4().hex, user_id=user.id, employee_id=body.employee_id,
+            travel_type=body.travel_type, destination=(body.destination or "").strip() or None,
+            departure_date=departure, return_date=ret,
+            purpose=(body.purpose or "").strip() or None, notes=(body.notes or "").strip() or None,
+            status="scheduled",
+        )
+        db.add(rec)
+        db.commit()
+        log_event(db, "hr.travel.create", user.id, {"travel_id": rec.id}, employee_id=body.employee_id)
+        return _travel_out(rec, employee.name)
+    finally:
+        db.close()
+
+
+@router.post("/travel/{travel_id}/return")
+def mark_travel_returned(travel_id: str, request: Request):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        rec = db.query(TravelRecord).filter(TravelRecord.user_id == user.id, TravelRecord.id == travel_id).first()
+        if not rec:
+            raise HTTPException(404, "سجل السفر غير موجود")
+        if rec.status == "cancelled":
+            raise HTTPException(400, "لا يمكن تسجيل عودة لرحلة ملغاة")
+        rec.actual_return_date = dt.datetime.utcnow()
+        rec.status = "completed"
+        db.commit()
+        log_event(db, "hr.travel.return", user.id, {"travel_id": rec.id}, employee_id=rec.employee_id)
+        return _travel_out(rec)
+    finally:
+        db.close()
+
+
+@router.post("/travel/{travel_id}/cancel")
+def cancel_travel(travel_id: str, request: Request):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        rec = db.query(TravelRecord).filter(TravelRecord.user_id == user.id, TravelRecord.id == travel_id).first()
+        if not rec:
+            raise HTTPException(404, "سجل السفر غير موجود")
+        rec.status = "cancelled"
+        db.commit()
+        return _travel_out(rec)
+    finally:
+        db.close()
+
+
+@router.delete("/travel/{travel_id}")
+def delete_travel(travel_id: str, request: Request):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        rec = db.query(TravelRecord).filter(TravelRecord.user_id == user.id, TravelRecord.id == travel_id).first()
+        if not rec:
+            raise HTTPException(404, "سجل السفر غير موجود")
+        db.delete(rec)
+        db.commit()
+        return {"deleted": True}
+    finally:
+        db.close()
+
+
+# ============================================================
+# العهد (عهد الشركة لدى الموظف)
+# ============================================================
+
+CUSTODY_STATUS_LABELS = {"assigned": "بعهدة الموظف", "returned": "تم الإرجاع", "lost": "مفقودة", "damaged": "تالفة"}
+
+
+class CustodyCreate(BaseModel):
+    employee_id: str
+    item_name: str = Field(min_length=1)
+    item_type: str = ""
+    serial_number: str = ""
+    value: Optional[float] = None
+    assigned_date: str = ""
+    expected_return_date: str = ""
+    notes: str = ""
+
+
+def _custody_out(c: CustodyRecord, employee_name: str = "") -> dict:
+    return {
+        "id": c.id, "employee_id": c.employee_id, "employee_name": employee_name,
+        "item_name": c.item_name, "item_type": c.item_type or "", "serial_number": c.serial_number or "",
+        "value": round(float(c.value), 2) if c.value is not None else None,
+        "assigned_date": _fmt_date(c.assigned_date), "expected_return_date": _fmt_date(c.expected_return_date),
+        "actual_return_date": _fmt_date(c.actual_return_date),
+        "status": c.status, "status_label": CUSTODY_STATUS_LABELS.get(c.status, c.status),
+        "notes": c.notes or "",
+    }
+
+
+@router.get("/custody")
+def list_custody(request: Request, employee_id: str = Query(""), status: str = Query("")):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        q = db.query(CustodyRecord, Employee).join(Employee, Employee.id == CustodyRecord.employee_id).filter(CustodyRecord.user_id == user.id)
+        if employee_id:
+            q = q.filter(CustodyRecord.employee_id == employee_id)
+        if status:
+            q = q.filter(CustodyRecord.status == status)
+        rows = q.order_by(CustodyRecord.created_at.desc()).all()
+        return {"items": [_custody_out(c, e.name) for c, e in rows]}
+    finally:
+        db.close()
+
+
+@router.post("/custody")
+def create_custody(request: Request, body: CustodyCreate = Body(...)):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        employee = db.query(Employee).filter(Employee.user_id == user.id, Employee.id == body.employee_id).first()
+        if not employee:
+            raise HTTPException(404, "الموظف غير موجود")
+        rec = CustodyRecord(
+            id=uuid.uuid4().hex, user_id=user.id, employee_id=body.employee_id,
+            item_name=body.item_name.strip(), item_type=(body.item_type or "").strip() or None,
+            serial_number=(body.serial_number or "").strip() or None, value=body.value,
+            assigned_date=_parse_simple_date(body.assigned_date, "تاريخ التسليم") or dt.datetime.utcnow(),
+            expected_return_date=_parse_simple_date(body.expected_return_date, "تاريخ الإرجاع المتوقع"),
+            notes=(body.notes or "").strip() or None, status="assigned",
+        )
+        db.add(rec)
+        db.commit()
+        log_event(db, "hr.custody.create", user.id, {"custody_id": rec.id, "item_name": rec.item_name}, employee_id=body.employee_id)
+        return _custody_out(rec, employee.name)
+    finally:
+        db.close()
+
+
+@router.post("/custody/{custody_id}/return")
+def return_custody(custody_id: str, request: Request, condition: str = Body("returned", embed=True)):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        rec = db.query(CustodyRecord).filter(CustodyRecord.user_id == user.id, CustodyRecord.id == custody_id).first()
+        if not rec:
+            raise HTTPException(404, "سجل العهدة غير موجود")
+        if condition not in ("returned", "lost", "damaged"):
+            raise HTTPException(400, "حالة غير صالحة")
+        rec.status = condition
+        rec.actual_return_date = dt.datetime.utcnow()
+        db.commit()
+        log_event(db, "hr.custody.return", user.id, {"custody_id": rec.id, "condition": condition}, employee_id=rec.employee_id)
+        return _custody_out(rec)
+    finally:
+        db.close()
+
+
+@router.delete("/custody/{custody_id}")
+def delete_custody(custody_id: str, request: Request):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        rec = db.query(CustodyRecord).filter(CustodyRecord.user_id == user.id, CustodyRecord.id == custody_id).first()
+        if not rec:
+            raise HTTPException(404, "سجل العهدة غير موجود")
+        db.delete(rec)
+        db.commit()
+        return {"deleted": True}
+    finally:
+        db.close()
 
 
 # ============================================================
@@ -2643,6 +3261,41 @@ def alerts_feed(request: Request):
             for e in employees:
                 if e.id not in paid_ids:
                     items.append({"type": "salary_unpaid", "severity": "medium", "employee_id": e.id, "employee_name": e.name, "message": f"{e.name} لم يستلم راتب هذا الشهر بعد"})
+
+        # الموظفون الموجودون في سفر حالياً
+        emp_by_id = {e.id: e for e in employees}
+        travels = db.query(TravelRecord).filter(TravelRecord.user_id == user.id, TravelRecord.status != "cancelled", TravelRecord.actual_return_date.is_(None)).all()
+        now_dt = dt.datetime.utcnow()
+        for t in travels:
+            e = emp_by_id.get(t.employee_id)
+            if not e or not t.departure_date or t.departure_date > now_dt:
+                continue
+            items.append({"type": "travel", "severity": "notice", "employee_id": t.employee_id, "employee_name": e.name, "message": f"✈️ {e.name} في سفر حالياً" + (f" (متوقع العودة {_fmt_date(t.return_date)})" if t.return_date else "")})
+
+        # سلف قائمة (نشطة) لم تُسدَّد بعد بالكامل
+        active_advances = db.query(Advance).filter(Advance.user_id == user.id, Advance.status == "active").all()
+        for a in active_advances:
+            e = emp_by_id.get(a.employee_id)
+            if not e:
+                continue
+            items.append({"type": "advance_active", "severity": "notice", "employee_id": a.employee_id, "employee_name": e.name, "message": f"💰 {e.name} لديه سلفة قائمة (المتبقي {round(float(a.remaining_amount or 0), 2)})"})
+
+        # سحبيات معلّقة لم تُسوَّ بعد
+        pending_withdrawals = db.query(WithdrawalRecord).filter(WithdrawalRecord.user_id == user.id, WithdrawalRecord.status == "pending").all()
+        for w in pending_withdrawals:
+            e = emp_by_id.get(w.employee_id)
+            if not e:
+                continue
+            items.append({"type": "withdrawal_pending", "severity": "notice", "employee_id": w.employee_id, "employee_name": e.name, "message": f"🧾 سحبية معلّقة لـ{e.name} بقيمة {round(float(w.amount or 0), 2)}"})
+
+        # الغياب اليوم
+        today_start = dt.datetime(today.year, today.month, today.day)
+        absentees = db.query(Attendance).filter(Attendance.user_id == user.id, Attendance.is_absent == 1, Attendance.date >= today_start).all()
+        for a in absentees:
+            e = emp_by_id.get(a.employee_id)
+            if not e:
+                continue
+            items.append({"type": "absent_today", "severity": "medium", "employee_id": a.employee_id, "employee_name": e.name, "message": f"🚫 {e.name} غائب اليوم"})
 
         order = {"critical": 0, "high": 1, "medium": 2, "notice": 3}
         items.sort(key=lambda x: order.get(x["severity"], 9))

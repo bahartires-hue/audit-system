@@ -76,6 +76,15 @@ def _migrate_postgresql() -> None:
         # payrolls (HR v2)
         "ALTER TABLE payrolls ADD COLUMN IF NOT EXISTS gross_before_tax DOUBLE PRECISION DEFAULT 0",
         "ALTER TABLE payrolls ADD COLUMN IF NOT EXISTS tax_amount DOUBLE PRECISION DEFAULT 0",
+        # employees (Employee 360 profile — manager/bank/personal)
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS gender VARCHAR",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS address TEXT",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS manager_id VARCHAR",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS bank_name VARCHAR",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS iban VARCHAR",
+        "ALTER TABLE employees ADD COLUMN IF NOT EXISTS bank_salary DOUBLE PRECISION",
+        # audit_logs (Employee timeline)
+        "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS employee_id VARCHAR",
     ]
     with engine.begin() as conn:
         for sql in stmts:
@@ -114,6 +123,8 @@ def _migrate_postgresql() -> None:
 
         conn.execute(text("UPDATE employees SET status = 'active' WHERE status IS NULL OR status = ''"))
         conn.execute(text("UPDATE employees SET basic_salary = 0 WHERE basic_salary IS NULL"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_employee_id ON audit_logs (employee_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_employees_manager_id ON employees (manager_id)"))
 
 
 def run_migrations() -> None:

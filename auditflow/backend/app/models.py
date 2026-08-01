@@ -68,6 +68,7 @@ class AuditLog(Base):
 
     id = Column(String, primary_key=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
+    employee_id = Column(String, ForeignKey("employees.id"), nullable=True, index=True)
     action = Column(String, nullable=False)
     meta_json = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
@@ -560,6 +561,12 @@ class Employee(Base):
     photo_url = Column(String, nullable=True)
     is_active = Column(Integer, nullable=False, default=1, index=True)
     notes = Column(Text, nullable=True)
+    gender = Column(String, nullable=True)  # male|female
+    address = Column(Text, nullable=True)
+    manager_id = Column(String, ForeignKey("employees.id"), nullable=True, index=True)
+    bank_name = Column(String, nullable=True)
+    iban = Column(String, nullable=True)
+    bank_salary = Column(Float, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
 
@@ -761,6 +768,56 @@ class EndOfService(Base):
     leave_balance_value = Column(Float, nullable=False, default=0.0)
     gratuity_amount = Column(Float, nullable=False, default=0.0)
     total_dues = Column(Float, nullable=False, default=0.0)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class WithdrawalRecord(Base):
+    __tablename__ = "hr_withdrawals"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    employee_id = Column(String, ForeignKey("employees.id"), nullable=False, index=True)
+    date = Column(DateTime, nullable=True, index=True)
+    amount = Column(Float, nullable=False, default=0.0)
+    reason = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="pending", index=True)  # pending|settled|cancelled
+    applied = Column(Integer, nullable=False, default=0, index=True)
+    payroll_id = Column(String, ForeignKey("payrolls.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class TravelRecord(Base):
+    __tablename__ = "hr_travel"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    employee_id = Column(String, ForeignKey("employees.id"), nullable=False, index=True)
+    travel_type = Column(String, nullable=False, default="domestic")  # domestic|international
+    destination = Column(String, nullable=True)
+    departure_date = Column(DateTime, nullable=True, index=True)
+    return_date = Column(DateTime, nullable=True, index=True)  # planned return
+    actual_return_date = Column(DateTime, nullable=True)
+    purpose = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="scheduled", index=True)  # scheduled|ongoing|completed|cancelled
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class CustodyRecord(Base):
+    __tablename__ = "hr_custody"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    employee_id = Column(String, ForeignKey("employees.id"), nullable=False, index=True)
+    item_name = Column(String, nullable=False)
+    item_type = Column(String, nullable=True)
+    serial_number = Column(String, nullable=True)
+    value = Column(Float, nullable=True)
+    assigned_date = Column(DateTime, nullable=True, index=True)
+    expected_return_date = Column(DateTime, nullable=True)
+    actual_return_date = Column(DateTime, nullable=True)
+    status = Column(String, nullable=False, default="assigned", index=True)  # assigned|returned|lost|damaged
+    notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
 
