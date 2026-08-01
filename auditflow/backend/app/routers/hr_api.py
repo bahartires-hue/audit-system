@@ -403,13 +403,19 @@ def create_employee(request: Request, body: EmployeeCreate = Body(...)):
 
 
 EMPLOYEE_IMPORT_HEADERS = [
-    "الرقم الوظيفي", "اسم الموظف", "الجنسية", "رقم الهوية/الإقامة",
+    "الاسم", "الرقم الوظيفي", "الفرع", "القسم", "الوظيفة", "الجنسية", "الجنس",
+    "تاريخ الميلاد", "الجوال", "البريد الإلكتروني", "العنوان", "رقم الهوية",
     "تاريخ انتهاء الهوية/الإقامة", "رقم الجواز", "تاريخ انتهاء الجواز",
-    "الجوال", "البريد الإلكتروني", "الوظيفة", "القسم", "الفرع",
-    "الراتب الأساسي", "نسبة العمولة", "تاريخ التعيين", "الحالة", "ملاحظات",
+    "رقم رخصة العمل", "تاريخ انتهاء رخصة العمل", "رقم التأمين الطبي",
+    "تاريخ انتهاء التأمين الطبي", "تاريخ التعيين", "نوع العقد", "بداية العقد",
+    "نهاية العقد", "الراتب الأساسي", "بدل السكن", "بدل النقل", "البدلات الأخرى",
+    "نسبة العمولة", "الراتب البنكي", "اسم البنك", "رقم الآيبان", "المدير المباشر",
+    "الحالة الوظيفية", "ملاحظات",
 ]
 
 _STATUS_LABEL_TO_VALUE = {v: k for k, v in STATUS_LABELS.items()}
+GENDER_LABELS = {"male": "ذكر", "female": "أنثى"}
+_GENDER_LABEL_TO_VALUE = {v: k for k, v in GENDER_LABELS.items()}
 
 
 def _cell_str(v) -> str:
@@ -445,15 +451,74 @@ def _parse_import_status(v):
     raise ValueError(f"قيمة الحالة غير معروفة: {s}")
 
 
+def _parse_import_gender(v):
+    s = _cell_str(v)
+    if not s:
+        return None
+    if s in GENDER_LABELS:
+        return s
+    if s in _GENDER_LABEL_TO_VALUE:
+        return _GENDER_LABEL_TO_VALUE[s]
+    raise ValueError(f"قيمة الجنس غير معروفة (استخدم ذكر/أنثى): {s}")
+
+
+def _upsert_generic_document(db, user_id: str, employee_id: str, doc_type_label: str, doc_number: str, expiry_date):
+    """للوثائق التي لا يوجد لها عمود مخصص على الموظف (رخصة عمل / تأمين طبي) —
+    نفس مبدأ عدم تكرار البيانات: تُكتب فقط في جدول الوثائق (مصدر واحد للحقيقة)،
+    وتظهر تلقائيًا في تبويب الوثائق وتنبيهات الانتهاء دون أي إدخال إضافي."""
+    if not expiry_date and not (doc_number or "").strip():
+        return
+    existing = (
+        db.query(EmployeeDocument)
+        .filter(EmployeeDocument.employee_id == employee_id, EmployeeDocument.doc_type == doc_type_label)
+        .order_by(EmployeeDocument.created_at.desc())
+        .first()
+    )
+    if existing:
+        if expiry_date:
+            existing.expiry_date = expiry_date
+        if (doc_number or "").strip():
+            existing.doc_number = doc_number.strip()
+    else:
+        db.add(EmployeeDocument(
+            id=uuid.uuid4().hex, user_id=user_id, employee_id=employee_id,
+            doc_type=doc_type_label, doc_number=(doc_number or "").strip() or None,
+            expiry_date=expiry_date,
+        ))
+
+
+def _latest_document_by_type(db, employee_id: str, doc_type_label: str):
+    return (
+        db.query(EmployeeDocument)
+        .filter(EmployeeDocument.employee_id == employee_id, EmployeeDocument.doc_type == doc_type_label)
+        .order_by(EmployeeDocument.created_at.desc())
+        .first()
+    )
+
+
+def _latest_contract_for_export(db, employee_id: str):
+    return (
+        db.query(EmployeeContract)
+        .filter(EmployeeContract.employee_id == employee_id)
+        .order_by(EmployeeContract.created_at.desc())
+        .first()
+    )
+
+
 @router.get("/employees/import-template")
 def download_employees_import_template(request: Request):
     db = SessionLocal()
     try:
         require_user(db, request)
         example = [
-            "EMP-0001", "محمد أحمد", "سعودي", "1012345678", "2027-01-01",
-            "A1234567", "2029-05-01", "0501234567", "employee@example.com",
-            "محاسب", "المالية", "الفرع الرئيسي", 6000, 2.5, "2024-01-01", "نشط", "",
+            "محمد أحمد", "EMP-0001", "الفرع الرئيسي", "المالية", "محاسب", "سعودي", "ذكر",
+            "1990-05-10", "0501234567", "employee@example.com", "الرياض - حي النخيل", "1012345678",
+            "2027-01-01", "A1234567", "2029-05-01",
+            "RP-778899", "2027-03-01", "MI-556677",
+            "2027-02-01", "2024-01-01", "دائم", "2024-01-01",
+            "", 6000, 500, 300, 0,
+            2.5, 6800, "بنك الراجحي", "SA0000000000000000000000", "",
+            "نشط", "",
         ]
         return _xlsx_response(EMPLOYEE_IMPORT_HEADERS, [example], "قالب_استيراد_الموظفين.xlsx")
     finally:
@@ -475,24 +540,48 @@ def export_employees(request: Request, q: str = Query(""), department: str = Que
             rows = [r for r in rows if (r.branch_name or "") == branch_name]
         if status:
             rows = [r for r in rows if (r.status or "active") == status]
+        name_by_id = {
+            e_id: e_name for e_id, e_name in
+            db.query(Employee.id, Employee.name).filter(Employee.user_id == user.id).all()
+        }
         out_rows = []
         for e in rows:
+            contract = _latest_contract_for_export(db, e.id)
+            work_permit = _latest_document_by_type(db, e.id, "رخصة عمل")
+            medical_ins = _latest_document_by_type(db, e.id, "تأمين طبي")
             out_rows.append([
-                e.employee_number or "",
                 e.name or "",
+                e.employee_number or "",
+                e.branch_name or "",
+                e.department or "",
+                e.position or "",
                 e.nationality or "",
+                GENDER_LABELS.get(e.gender or "", e.gender or ""),
+                _fmt_date(e.birth_date),
+                e.phone or "",
+                e.email or "",
+                e.address or "",
                 e.national_id or "",
                 _fmt_date(e.residency_expiry),
                 e.passport_number or "",
                 _fmt_date(e.passport_expiry),
-                e.phone or "",
-                e.email or "",
-                e.position or "",
-                e.department or "",
-                e.branch_name or "",
-                round(float(e.basic_salary or 0.0), 2),
-                e.commission_percentage,
+                work_permit.doc_number if work_permit else "",
+                _fmt_date(work_permit.expiry_date) if work_permit else "",
+                medical_ins.doc_number if medical_ins else "",
+                _fmt_date(medical_ins.expiry_date) if medical_ins else "",
                 _fmt_date(e.hire_date),
+                contract.contract_type if contract else "",
+                _fmt_date(contract.start_date) if contract else "",
+                _fmt_date(contract.end_date) if contract else "",
+                round(float(e.basic_salary or 0.0), 2),
+                round(float(contract.housing_allowance), 2) if contract else 0,
+                round(float(contract.transport_allowance), 2) if contract else 0,
+                round(float(contract.other_allowances), 2) if contract else 0,
+                e.commission_percentage,
+                round(float(e.bank_salary), 2) if e.bank_salary is not None else "",
+                e.bank_name or "",
+                e.iban or "",
+                name_by_id.get(e.manager_id, "") if e.manager_id else "",
                 STATUS_LABELS.get(e.status or "active", e.status or ""),
                 e.notes or "",
             ])
@@ -524,40 +613,73 @@ async def import_employees(request: Request, file: UploadFile = File(...)):
         added = 0
         updated = 0
         errors = []
+        warnings = []
+        pending_manager_links = []  # (target_employee_id, manager_cell_value, row_num)
         row_num = 1
         for raw_row in ws.iter_rows(min_row=2, values_only=True):
             row_num += 1
             if raw_row is None or all(c is None or (isinstance(c, str) and not c.strip()) for c in raw_row):
                 continue
-            cells = list(raw_row) + [None] * max(0, 17 - len(raw_row))
+            cells = list(raw_row) + [None] * max(0, 34 - len(raw_row))
             try:
-                employee_number = _cell_str(cells[0])
-                name = _cell_str(cells[1])
+                name = _cell_str(cells[0])
                 if not name:
                     raise ValueError("اسم الموظف مطلوب")
-                nationality = _cell_str(cells[2])
-                national_id = _cell_str(cells[3])
-                residency_expiry = _parse_import_date(cells[4], "تاريخ انتهاء الهوية/الإقامة")
-                passport_number = _cell_str(cells[5])
-                passport_expiry = _parse_import_date(cells[6], "تاريخ انتهاء الجواز")
-                phone = _cell_str(cells[7])
-                email = _cell_str(cells[8])
-                position = _cell_str(cells[9])
-                department = _cell_str(cells[10])
-                branch_name = _cell_str(cells[11])
-                salary_raw = cells[12]
+                employee_number = _cell_str(cells[1])
+                branch_name = _cell_str(cells[2])
+                department = _cell_str(cells[3])
+                position = _cell_str(cells[4])
+                nationality = _cell_str(cells[5])
+                gender = _parse_import_gender(cells[6])
+                birth_date = _parse_import_date(cells[7], "تاريخ الميلاد")
+                phone = _cell_str(cells[8])
+                email = _cell_str(cells[9])
+                address = _cell_str(cells[10])
+                national_id = _cell_str(cells[11])
+                residency_expiry = _parse_import_date(cells[12], "تاريخ انتهاء الهوية/الإقامة")
+                passport_number = _cell_str(cells[13])
+                passport_expiry = _parse_import_date(cells[14], "تاريخ انتهاء الجواز")
+                work_permit_number = _cell_str(cells[15])
+                work_permit_expiry = _parse_import_date(cells[16], "تاريخ انتهاء رخصة العمل")
+                medical_ins_number = _cell_str(cells[17])
+                medical_ins_expiry = _parse_import_date(cells[18], "تاريخ انتهاء التأمين الطبي")
+                hire_date = _parse_import_date(cells[19], "تاريخ التعيين")
+                contract_type = _cell_str(cells[20])
+                contract_start = _parse_import_date(cells[21], "بداية العقد")
+                contract_end = _parse_import_date(cells[22], "نهاية العقد")
+                salary_raw = cells[23]
                 try:
                     basic_salary = float(salary_raw) if salary_raw not in (None, "") else 0.0
                 except (TypeError, ValueError):
                     raise ValueError(f"الراتب الأساسي غير رقمي: {salary_raw}")
-                comm_raw = cells[13]
+
+                def _num(idx, label):
+                    raw = cells[idx]
+                    if raw in (None, ""):
+                        return 0.0
+                    try:
+                        return float(raw)
+                    except (TypeError, ValueError):
+                        raise ValueError(f"{label} غير رقمي: {raw}")
+
+                housing_allowance = _num(24, "بدل السكن")
+                transport_allowance = _num(25, "بدل النقل")
+                other_allowances = _num(26, "البدلات الأخرى")
+                comm_raw = cells[27]
                 try:
                     commission_percentage = float(comm_raw) if comm_raw not in (None, "") else None
                 except (TypeError, ValueError):
                     raise ValueError(f"نسبة العمولة غير رقمية: {comm_raw}")
-                hire_date = _parse_import_date(cells[14], "تاريخ التعيين")
-                status = _parse_import_status(cells[15])
-                notes = _cell_str(cells[16])
+                bank_salary_raw = cells[28]
+                try:
+                    bank_salary = float(bank_salary_raw) if bank_salary_raw not in (None, "") else None
+                except (TypeError, ValueError):
+                    raise ValueError(f"الراتب البنكي غير رقمي: {bank_salary_raw}")
+                bank_name = _cell_str(cells[29])
+                iban = _cell_str(cells[30])
+                manager_cell = _cell_str(cells[31])
+                status = _parse_import_status(cells[32])
+                notes = _cell_str(cells[33])
             except ValueError as ve:
                 errors.append({"row": row_num, "reason": str(ve)})
                 continue
@@ -582,8 +704,15 @@ async def import_employees(request: Request, file: UploadFile = File(...)):
                     existing.basic_salary = basic_salary
                     existing.commission_percentage = commission_percentage
                     existing.hire_date = hire_date
+                    existing.birth_date = birth_date or existing.birth_date
                     existing.phone = phone or None
                     existing.email = email or None
+                    existing.address = address or existing.address
+                    existing.gender = gender or existing.gender
+                    existing.bank_name = bank_name or existing.bank_name
+                    existing.iban = iban or existing.iban
+                    if bank_salary is not None:
+                        existing.bank_salary = bank_salary
                     existing.status = status
                     existing.is_active = 1 if status == "active" else 0
                     existing.notes = notes or None
@@ -602,8 +731,14 @@ async def import_employees(request: Request, file: UploadFile = File(...)):
                         basic_salary=basic_salary,
                         commission_percentage=commission_percentage,
                         hire_date=hire_date,
+                        birth_date=birth_date,
                         phone=phone or None,
                         email=email or None,
+                        address=address or None,
+                        gender=gender,
+                        bank_name=bank_name or None,
+                        iban=iban or None,
+                        bank_salary=bank_salary,
                         status=status,
                         is_active=1 if status == "active" else 0,
                         notes=notes or None,
@@ -611,21 +746,66 @@ async def import_employees(request: Request, file: UploadFile = File(...)):
                     db.add(rec)
                     added += 1
                 db.commit()
+
                 if residency_expiry:
                     _upsert_identity_document(db, user.id, target_employee_id, "إقامة", "", residency_expiry)
                 if passport_expiry or passport_number:
                     _upsert_identity_document(db, user.id, target_employee_id, "جواز", passport_number, passport_expiry)
+                if work_permit_expiry or work_permit_number:
+                    _upsert_generic_document(db, user.id, target_employee_id, "رخصة عمل", work_permit_number, work_permit_expiry)
+                if medical_ins_expiry or medical_ins_number:
+                    _upsert_generic_document(db, user.id, target_employee_id, "تأمين طبي", medical_ins_number, medical_ins_expiry)
                 db.commit()
                 _sync_identity_docs_from_documents(db, target_employee_id)
+
+                # عقد العمل: يُنشأ تلقائيًا من الاستيراد فقط إذا لا يوجد عقد ساري بالفعل لهذا
+                # الموظف (لتفادي تكرار العقود عند إعادة استيراد نفس الملف)؛ وإلا فالتعديل على
+                # عقد قائم يتم من داخل ملف الموظف نفسه وليس عبر إعادة الاستيراد.
+                if contract_type or contract_start or contract_end:
+                    has_active_contract = db.query(EmployeeContract).filter(
+                        EmployeeContract.employee_id == target_employee_id,
+                        EmployeeContract.status == "active",
+                    ).first()
+                    if not has_active_contract:
+                        db.add(EmployeeContract(
+                            id=uuid.uuid4().hex, user_id=user.id, employee_id=target_employee_id,
+                            contract_type=contract_type or None,
+                            start_date=contract_start, end_date=contract_end,
+                            salary=basic_salary,
+                            housing_allowance=housing_allowance,
+                            transport_allowance=transport_allowance,
+                            other_allowances=other_allowances,
+                            status="active",
+                        ))
+                        db.commit()
+
+                if manager_cell:
+                    pending_manager_links.append((target_employee_id, manager_cell, row_num))
             except Exception as ex:
                 db.rollback()
                 errors.append({"row": row_num, "reason": f"تعذر الحفظ: {ex}"})
 
-        log_event(db, "hr.employee.import", user.id, {"added": added, "updated": updated, "errors": len(errors)})
-        return {"added": added, "updated": updated, "errors": errors, "total_rows": row_num - 1}
+        # ربط المدير المباشر: يتم بعد معالجة كل الصفوف حتى لو ظهر المدير في صف لاحق بنفس الملف
+        for target_employee_id, manager_cell, row_num in pending_manager_links:
+            manager_rec = db.query(Employee).filter(
+                Employee.user_id == user.id, Employee.employee_number == manager_cell, Employee.id != target_employee_id,
+            ).first()
+            if not manager_rec:
+                manager_rec = db.query(Employee).filter(
+                    Employee.user_id == user.id, Employee.name == manager_cell, Employee.id != target_employee_id,
+                ).first()
+            if manager_rec:
+                emp_rec = db.query(Employee).filter(Employee.id == target_employee_id).first()
+                if emp_rec:
+                    emp_rec.manager_id = manager_rec.id
+                    db.commit()
+            else:
+                warnings.append({"row": row_num, "reason": f"تعذر إيجاد المدير المباشر المطابق: {manager_cell}"})
+
+        log_event(db, "hr.employee.import", user.id, {"added": added, "updated": updated, "errors": len(errors), "warnings": len(warnings)})
+        return {"added": added, "updated": updated, "errors": errors, "warnings": warnings, "total_rows": row_num - 1}
     finally:
         db.close()
-
 
 
 @router.get("/employees/{employee_id}")

@@ -766,17 +766,24 @@
           var errBox = document.getElementById("importReportErrors");
           var added = report.added || 0, updated = report.updated || 0;
           var errors = report.errors || [];
+          var warnings = report.warnings || [];
           summary.innerHTML =
             "<span style='color:#22c55e'>تمت إضافة: " + added + "</span>" +
             "<span style='color:#0ea5e9'>تم تحديث: " + updated + "</span>" +
-            "<span style='color:#dc2626'>أخطاء: " + errors.length + "</span>";
-          if (!errors.length) {
-            errBox.innerHTML = "<div style='color:var(--text-muted)'>لا توجد أخطاء</div>";
-          } else {
-            errBox.innerHTML = errors.map(function (er) {
-              return "<div style='padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.08)'>صف " + er.row + ": " + er.reason + "</div>";
-            }).join("");
+            "<span style='color:#dc2626'>أخطاء: " + errors.length + "</span>" +
+            (warnings.length ? "<span style='color:#d97706'>تنبيهات: " + warnings.length + "</span>" : "");
+          var parts = [];
+          if (errors.length) {
+            parts.push(errors.map(function (er) {
+              return "<div style='padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.08);color:#dc2626'>صف " + er.row + ": " + er.reason + "</div>";
+            }).join(""));
           }
+          if (warnings.length) {
+            parts.push(warnings.map(function (w) {
+              return "<div style='padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.08);color:#d97706'>صف " + w.row + ": " + w.reason + "</div>";
+            }).join(""));
+          }
+          errBox.innerHTML = parts.length ? parts.join("") : "<div style='color:var(--text-muted)'>لا توجد أخطاء أو تنبيهات</div>";
           document.getElementById("importReportModal").style.display = "flex";
         }
         document.getElementById("importReportClose").addEventListener("click", function () { document.getElementById("importReportModal").style.display = "none"; });
