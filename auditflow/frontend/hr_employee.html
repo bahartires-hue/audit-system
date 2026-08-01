@@ -837,7 +837,7 @@
           try {
             var res = await apiGet("/api/hr/advances?employee_id=" + encodeURIComponent(_empId));
             var items = res.items || [];
-            var table = document.getElementById("advTable");
+            var table = document.getElementById("advancesTable");
             table.innerHTML = "<thead><tr><th>التاريخ</th><th>المبلغ</th><th>السبب</th><th>الأقساط</th><th>المتبقي</th><th>الحالة</th></tr></thead><tbody></tbody>";
             var body = table.querySelector("tbody");
             items.forEach(function (x) {
@@ -845,7 +845,7 @@
               tr.innerHTML = x.date + "</td><td>" + x.amount.toLocaleString() + "</td><td>" + (x.reason||"—") + "</td><td>" + x.installments_count + "</td><td>" + x.remaining_amount.toLocaleString() + "</td><td>" + ({active:"نشطة",completed:"مكتملة",cancelled:"ملغاة"}[x.status]||x.status);
               body.appendChild(tr);
             });
-            document.getElementById("advEmpty").style.display = items.length ? "none" : "block";
+            document.getElementById("advancesEmpty").style.display = items.length ? "none" : "block";
           } catch (e) { showToast(e.message || "تعذر التحميل", "#dc2626"); }
         }
         document.getElementById("advAddBtn").addEventListener("click", async function () {
@@ -861,7 +861,7 @@
           try {
             var res = await apiGet("/api/hr/deductions?employee_id=" + encodeURIComponent(_empId));
             var items = res.items || [];
-            var table = document.getElementById("dedTable");
+            var table = document.getElementById("deductionsTable");
             table.innerHTML = "<thead><tr><th>النوع</th><th>القيمة</th><th>السبب</th><th>التاريخ</th><th>الحالة</th></tr></thead><tbody></tbody>";
             var body = table.querySelector("tbody");
             items.forEach(function (x) {
@@ -869,7 +869,7 @@
               tr.innerHTML = (x.deduction_type||"—") + "</td><td>" + x.amount.toLocaleString() + "</td><td>" + (x.reason||"—") + "</td><td>" + x.date + "</td><td>" + (x.applied?"مطبّق":"بالانتظار");
               body.appendChild(tr);
             });
-            document.getElementById("dedEmpty").style.display = items.length ? "none" : "block";
+            document.getElementById("deductionsEmpty").style.display = items.length ? "none" : "block";
           } catch (e) { showToast(e.message || "تعذر التحميل", "#dc2626"); }
         }
         document.getElementById("dedAddBtn").addEventListener("click", async function () {
@@ -885,7 +885,7 @@
           try {
             var res = await apiGet("/api/hr/allowances?employee_id=" + encodeURIComponent(_empId));
             var items = res.items || [];
-            var table = document.getElementById("allowTable");
+            var table = document.getElementById("allowancesTable");
             table.innerHTML = "<thead><tr><th>النوع</th><th>القيمة</th><th>متكرر</th><th>التاريخ</th><th>الحالة</th></tr></thead><tbody></tbody>";
             var body = table.querySelector("tbody");
             items.forEach(function (x) {
@@ -893,7 +893,7 @@
               tr.innerHTML = (x.allowance_type||"—") + "</td><td>" + x.amount.toLocaleString() + "</td><td>" + (x.recurring?"نعم":"لا") + "</td><td>" + x.date + "</td><td>" + (x.recurring?"نشط دائم":(x.applied?"مطبّق":"بالانتظار"));
               body.appendChild(tr);
             });
-            document.getElementById("allowEmpty").style.display = items.length ? "none" : "block";
+            document.getElementById("allowancesEmpty").style.display = items.length ? "none" : "block";
           } catch (e) { showToast(e.message || "تعذر التحميل", "#dc2626"); }
         }
         document.getElementById("allowAddBtn").addEventListener("click", async function () {
@@ -909,7 +909,7 @@
           try {
             var res = await apiGet("/api/hr/commissions?employee_id=" + encodeURIComponent(_empId));
             var items = res.items || [];
-            var table = document.getElementById("commTable");
+            var table = document.getElementById("commissionsTable");
             table.innerHTML = "<thead><tr><th>المبيعات</th><th>النسبة %</th><th>قيمة العمولة</th><th>التاريخ</th><th>الحالة</th></tr></thead><tbody></tbody>";
             var body = table.querySelector("tbody");
             items.forEach(function (x) {
@@ -917,7 +917,7 @@
               tr.innerHTML = x.sales_amount.toLocaleString() + "</td><td>" + x.percentage + "</td><td style='font-weight:800;'>" + x.commission_value.toLocaleString() + "</td><td>" + x.date + "</td><td>" + (x.applied?"مطبّقة":"بالانتظار");
               body.appendChild(tr);
             });
-            document.getElementById("commEmpty").style.display = items.length ? "none" : "block";
+            document.getElementById("commissionsEmpty").style.display = items.length ? "none" : "block";
           } catch (e) { showToast(e.message || "تعذر التحميل", "#dc2626"); }
         }
         document.getElementById("commAddBtn").addEventListener("click", async function () {
