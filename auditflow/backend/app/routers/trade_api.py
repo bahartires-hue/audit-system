@@ -2077,6 +2077,117 @@ def _find_header_index(header: list[str], *names: str) -> int:
     return -1
 
 
+class StocktakeApplyLine(BaseModel):
+    item_id: str
+    counted_qty: float = Field(ge=0)
+
+
+class StocktakeApply(BaseModel):
+    reason: str = ""
+    lines: list[StocktakeApplyLine]
+
+
+@router.get("/stocktake/template")
+def stocktake_template(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = db.query(Item).filter(Item.user_id == user.id, Item.is_active == 1).order_by(Item.code.asc()).all()
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "الجرد"
+        ws.append(["الكود", "اسم الصنف (للعرض فقط)", "الكمية بالنظام (للعرض فقط)", "الكمية الفعلية (عدّها هنا)"])
+        for r in rows:
+            ws.append([r.code, r.name, round(float(r.quantity or 0.0), 4), ""])
+        return _xlsx_response(wb, "stocktake_template.xlsx")
+    finally:
+        db.close()
+
+
+@router.post("/stocktake/preview")
+async def stocktake_preview(request: Request, file: UploadFile = File(...)):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        content = await file.read()
+        wb = load_workbook(io.BytesIO(content), data_only=True)
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            raise HTTPException(400, "الملف فارغ")
+        header = [str(c or "").strip() for c in rows[0]]
+        idx_code = _find_header_index(header, "الكود", "code")
+        idx_counted = _find_header_index(header, "الكمية الفعلية (عدّها هنا)", "الكمية الفعلية", "counted_qty")
+        if idx_code == -1 or idx_counted == -1:
+            raise HTTPException(400, "لم يتم العثور على أعمدة الكود/الكمية الفعلية في الملف")
+        items_by_code = {x.code: x for x in db.query(Item).filter(Item.user_id == user.id).all()}
+        out = []
+        errors = []
+        for rn, row in enumerate(rows[1:], start=2):
+            code = str(row[idx_code] or "").strip() if idx_code < len(row) and row[idx_code] is not None else ""
+            if not code:
+                continue
+            if idx_counted >= len(row) or row[idx_counted] is None or str(row[idx_counted]).strip() == "":
+                continue
+            item = items_by_code.get(code)
+            if not item:
+                errors.append(f"صف {rn}: الكود {code} غير موجود")
+                continue
+            try:
+                counted = round(abs(float(row[idx_counted])), 4)
+            except (TypeError, ValueError):
+                errors.append(f"صف {rn}: قيمة كمية غير صالحة")
+                continue
+            system_qty = round(float(item.quantity or 0.0), 4)
+            out.append({
+                "item_id": item.id,
+                "code": item.code,
+                "name": item.name,
+                "system_qty": system_qty,
+                "counted_qty": counted,
+                "difference": round(counted - system_qty, 4),
+            })
+        return {"rows": out, "errors": errors}
+    finally:
+        db.close()
+
+
+@router.post("/stocktake/apply")
+def stocktake_apply(request: Request, body: StocktakeApply = Body(...)):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        if not body.lines:
+            raise HTTPException(400, "لا توجد بنود لتطبيقها")
+        now = dt.datetime.utcnow()
+        reason = (body.reason or "").strip() or "جرد مخزون"
+        applied = 0
+        skipped = 0
+        results = []
+        for ln in body.lines:
+            item = db.query(Item).filter(Item.user_id == user.id, Item.id == ln.item_id).first()
+            if not item:
+                skipped += 1
+                continue
+            before = round(float(item.quantity or 0.0), 4)
+            after = round(abs(float(ln.counted_qty or 0.0)), 4)
+            diff = round(after - before, 4)
+            if abs(diff) < 0.0001:
+                skipped += 1
+                continue
+            item.quantity = after
+            db.add(StockAdjustment(id=uuid.uuid4().hex, user_id=user.id, item_id=item.id, branch_id=item.branch_id, adjust_date=now, qty_before=before, qty_after=after, difference=diff, reason=reason))
+            db.add(StockMovement(id=uuid.uuid4().hex, user_id=user.id, item_id=item.id, movement_type="adjust", qty_in=diff if diff > 0 else 0.0, qty_out=abs(diff) if diff < 0 else 0.0, unit_cost=round(float(item.last_cost or 0.0), 4), reference_type="stocktake", reference_id=item.id, movement_date=now, notes=reason))
+            applied += 1
+            results.append({"item_id": item.id, "code": item.code, "qty_before": before, "qty_after": after, "difference": diff})
+        db.commit()
+        log_event(db, "trade.stocktake.apply", user.id, {"applied": applied, "skipped": skipped})
+        return {"applied": applied, "skipped": skipped, "results": results}
+    finally:
+        db.close()
+
+
 @router.get("/items/export")
 def export_items(request: Request, template: str = Query("full")):
     db = SessionLocal()

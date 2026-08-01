@@ -391,6 +391,11 @@ def ui_trade_reports(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "trade_reports.html", "op-inventory")
 
 
+@app.get("/trade/stocktake", response_class=HTMLResponse)
+def ui_trade_stocktake(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "trade_stocktake.html", "op-inventory")
+
+
 @app.get("/trade/master-data", response_class=HTMLResponse)
 def ui_trade_master_data():
     return RedirectResponse(url="/inventory-management", status_code=302)

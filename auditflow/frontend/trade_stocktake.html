@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>الجرد | المالية</title><link rel="stylesheet" href="/static/tailwind.css?v=9" /><link rel="stylesheet" href="/static/dark.css?v=9" />
+  <style>
+    .fin-nav { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 14px; border-radius:14px; background:linear-gradient(90deg, rgba(180,140,60,0.14), rgba(180,140,60,0.03)); border:1px solid rgba(180,140,60,0.35); margin-bottom:14px; }
+    .fin-nav a { padding:7px 14px; border-radius:999px; font-weight:800; font-size:0.85rem; border:1px solid rgba(180,140,60,0.35); color:#8a6a1f; }
+    html.dark .fin-nav a { color:#e8cd85; }
+    .fin-nav a.active { background:linear-gradient(270deg, #8a6a1f 0%, #c9a24d 45%, #b8863a 100%); color:#1a1406 !important; border:none; }
+    .fin-nav .fin-label { font-weight:800; color:#8a6a1f; }
+    html.dark .fin-nav .fin-label { color:#e8cd85; }
+    .toast-host { position:fixed; top:16px; left:50%; transform:translateX(-50%); z-index:9999; box-shadow:0 8px 24px rgba(0,0,0,.25); }
+    table.st-tbl { width:100%; border-collapse:collapse; font-size:0.85rem; }
+    table.st-tbl th { text-align:right; padding:8px 6px; font-weight:800; border-bottom:2px solid rgba(148,163,184,.35); white-space:nowrap; }
+    table.st-tbl td { padding:6px; border-bottom:1px solid rgba(148,163,184,.18); white-space:nowrap; }
+    .diff-pos { color:#059669; font-weight:800; }
+    html.dark .diff-pos { color:#34d399; }
+    .diff-neg { color:#dc2626; font-weight:800; }
+    html.dark .diff-neg { color:#f87171; }
+    .diff-zero { opacity:.6; }
+  </style>
+  </head>
+  <body class="bg-slate-100 dark:bg-[#050508] text-slate-900 dark:text-slate-100 min-h-screen">
+    <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
+    <div class="max-w-7xl mx-auto p-4 space-y-4">
+      <div class="fin-nav">
+        <span class="fin-label">💰 المالية</span>
+        <a href="/trade/items">📦 الأصناف</a>
+        <a href="/trade/purchases">📥 المشتريات</a>
+        <a href="/inventory-management">🧾 نقطة البيع</a>
+        <a href="/trade/stocktake" class="active">📋 الجرد</a>
+        <a href="/trade/reports">📊 التقارير</a>
+      </div>
+
+      <div class="rounded-xl border p-4 bg-white dark:bg-slate-950">
+        <h1 class="text-xl font-extrabold mb-3">📋 جرد المخزون</h1>
+        <div class="flex flex-wrap gap-2 mb-3 text-sm">
+          <a href="/api/trade/stocktake/template" class="rounded-xl border font-extrabold px-4 py-2">⬇️ تحميل قالب الجرد (كل الأصناف)</a>
+          <button id="importBtn" class="rounded-xl border font-extrabold px-4 py-2">⬆️ استيراد نتيجة الجرد من Excel</button>
+          <button id="loadAllBtn" class="rounded-xl border font-extrabold px-4 py-2">📝 عدّ يدوي (تحميل كل الأصناف)</button>
+          <input type="file" id="importFile" accept=".xlsx,.xls" style="display:none" />
+        </div>
+        <div class="flex gap-2 mb-3">
+          <input id="reasonInput" class="rounded-xl border px-3 py-2 bg-white dark:bg-slate-950 flex-1" placeholder="سبب الجرد (اختياري) — مثال: جرد نهاية الشهر" />
+        </div>
+        <div id="summaryBar" class="hidden mb-3 rounded-xl border px-4 py-3 bg-amber-50 dark:bg-amber-950/30 text-sm font-bold"></div>
+        <div class="overflow-x-auto">
+        <table class="st-tbl">
+          <thead>
+            <tr>
+              <th>الكود</th>
+              <th>اسم الصنف</th>
+              <th>الكمية بالنظام</th>
+              <th>الكمية الفعلية</th>
+              <th>الفرق</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"><tr><td colspan="5" class="text-center opacity-60 py-6">حمّل قالب الجرد ثم استورده، أو استخدم العدّ اليدوي</td></tr></tbody>
+        </table>
+        </div>
+        <div class="mt-3">
+          <button id="applyBtn" class="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-5 py-3 hidden">✅ تطبيق الجرد وتسوية المخزون</button>
+        </div>
+      </div>
+    </div>
+    <script src="/static/app.js?v=19"></script>
+    <script>
+
+      (async function () {
+        await initAuthUI();
+        var rows = [];
+
+        function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]; }); }
+        function qtyFmt(v) { var n = Number(v) || 0; return (Math.round(n * 10000) / 10000).toString(); }
+
+        function diffClass(d) {
+          if (d > 0.0001) return "diff-pos";
+          if (d < -0.0001) return "diff-neg";
+          return "diff-zero";
+        }
+
+        function renderTable() {
+          var tbody = document.getElementById("tbody");
+          if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center opacity-60 py-6">حمّل قالب الجرد ثم استورده، أو استخدم العدّ اليدوي</td></tr>';
+            document.getElementById("applyBtn").classList.add("hidden");
+            document.getElementById("summaryBar").classList.add("hidden");
+            return;
+          }
+          tbody.innerHTML = rows.map(function (r, i) {
+            var diff = Math.round((Number(r.counted_qty) - Number(r.system_qty)) * 10000) / 10000;
+            return "<tr>" +
+              "<td class=\"font-mono\">" + esc(r.code) + "</td>" +
+              "<td class=\"font-bold\">" + esc(r.name) + "</td>" +
+              "<td>" + qtyFmt(r.system_qty) + "</td>" +
+              "<td><input type=\"number\" step=\"any\" data-row=\"" + i + "\" value=\"" + esc(r.counted_qty) + "\" style=\"width:100px;padding:4px 6px;border-radius:6px;border:1px solid #ccc;text-align:center;\" class=\"bg-white dark:bg-slate-950\" /></td>" +
+              "<td class=\"" + diffClass(diff) + "\" data-diffcell=\"" + i + "\">" + (diff > 0 ? "+" : "") + diff + "</td>" +
+              "</tr>";
+          }).join("");
+          tbody.querySelectorAll("input[data-row]").forEach(function (inp) {
+            inp.addEventListener("input", function () {
+              var idx = Number(inp.getAttribute("data-row"));
+              rows[idx].counted_qty = Number(inp.value) || 0;
+              var diff = Math.round((Number(rows[idx].counted_qty) - Number(rows[idx].system_qty)) * 10000) / 10000;
+              var cell = tbody.querySelector('[data-diffcell="' + idx + '"]');
+              if (cell) { cell.textContent = (diff > 0 ? "+" : "") + diff; cell.className = diffClass(diff); }
+              updateSummary();
+            });
+          });
+          document.getElementById("applyBtn").classList.remove("hidden");
+          updateSummary();
+        }
+
+        function updateSummary() {
+          var changed = rows.filter(function (r) { return Math.abs(Number(r.counted_qty) - Number(r.system_qty)) > 0.0001; });
+          var bar = document.getElementById("summaryBar");
+          bar.classList.remove("hidden");
+          bar.textContent = "إجمالي الأصناف: " + rows.length + " — أصناف بها فروقات: " + changed.length;
+        }
+
+        document.getElementById("loadAllBtn").addEventListener("click", async function () {
+          try {
+            var d = await apiGet("/api/trade/items?q=");
+            rows = (d.items || []).filter(function (x) { return x.is_active; }).map(function (x) {
+              return { item_id: x.id, code: x.code, name: x.name, system_qty: x.quantity, counted_qty: x.quantity };
+            });
+            renderTable();
+            showToast("تم تحميل " + rows.length + " صنف — عدّل الكمية الفعلية لكل صنف", "#10b981");
+          } catch (e) { showToast(e.message || "تعذر تحميل الأصناف", "#ef4444"); }
+        });
+
+        document.getElementById("importBtn").addEventListener("click", function () {
+          document.getElementById("importFile").click();
+        });
+        document.getElementById("importFile").addEventListener("change", async function () {
+          var f = this.files && this.files[0];
+          if (!f) return;
+          try {
+            var fd = new FormData();
+            fd.append("file", f);
+            var res = await apiPostForm("/api/trade/stocktake/preview", fd);
+            rows = res.rows || [];
+            renderTable();
+            var msg = "تم تحميل " + rows.length + " صنف للمراجعة";
+            if (res.errors && res.errors.length) msg += "، " + res.errors.length + " خطأ (تم تجاهلها)";
+            showToast(msg, "#10b981");
+          } catch (e) { showToast(e.message || "فشل استيراد ملف الجرد", "#ef4444"); }
+          this.value = "";
+        });
+
+        document.getElementById("applyBtn").addEventListener("click", async function () {
+          var changed = rows.filter(function (r) { return Math.abs(Number(r.counted_qty) - Number(r.system_qty)) > 0.0001; });
+          if (!changed.length) { showToast("لا توجد فروقات لتطبيقها", "#f59e0b"); return; }
+          if (!confirm("سيتم تسوية مخزون " + changed.length + " صنف بناءً على الجرد. متابعة؟")) return;
+          try {
+            var payload = {
+              reason: document.getElementById("reasonInput").value || "جرد مخزون",
+              lines: changed.map(function (r) { return { item_id: r.item_id, counted_qty: Number(r.counted_qty) }; }),
+            };
+            var res = await apiPostJson("/api/trade/stocktake/apply", payload);
+            showToast("تم تطبيق الجرد: " + res.applied + " صنف تم تسويته", "#10b981");
+            rows = [];
+            renderTable();
+            document.getElementById("importFile").value = "";
+          } catch (e) { showToast(e.message || "فشل تطبيق الجرد", "#ef4444"); }
+        });
+      })();
+    </script>
+  </body>
+</html>
