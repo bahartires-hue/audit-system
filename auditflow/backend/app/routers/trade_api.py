@@ -1836,6 +1836,107 @@ def item_movement_report(
         db.close()
 
 
+@router.get("/reports/tax-return/export")
+def tax_return_export(request: Request, date_from: str = Query(""), date_to: str = Query("")):
+    data = tax_return_report(request, date_from=date_from, date_to=date_to)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "الإقرار الضريبي"
+    ws.append(["إقرار ضريبة القيمة المضافة"])
+    ws.append(["الفترة من", data["period"]["date_from"], "إلى", data["period"]["date_to"]])
+    ws.append([])
+    ws.append(["ضريبة المخرجات (المبيعات)"])
+    ov = data["output_vat"]
+    ws.append(["صافي المبيعات قبل الضريبة", ov["net_sales_before_tax"]])
+    ws.append(["صافي ضريبة المبيعات", ov["net_sales_tax"]])
+    ws.append([])
+    ws.append(["ضريبة المدخلات (المشتريات)"])
+    iv = data["input_vat"]
+    ws.append(["صافي المشتريات قبل الضريبة", iv["net_purchases_before_tax"]])
+    ws.append(["صافي ضريبة المشتريات", iv["net_purchases_tax"]])
+    ws.append([])
+    nv = data["net_vat"]
+    ws.append(["صافي الضريبة المستحقة" if nv["status"] == "payable" else "رصيد ضريبي دائن", nv["payable_amount"] if nv["status"] == "payable" else nv["credit_amount"]])
+    return _xlsx_response(wb, "tax_return.xlsx")
+
+
+@router.get("/reports/stock-ledger")
+def stock_ledger_report(
+    request: Request,
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    item_id: str = Query(""),
+    movement_type: str = Query(""),
+    limit: int = Query(300, ge=1, le=2000),
+):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        df = _parse_date(date_from, "date_from") if (date_from or "").strip() else None
+        dt_to = _parse_date(date_to, "date_to") if (date_to or "").strip() else None
+        q = db.query(StockMovement, Item).join(Item, Item.id == StockMovement.item_id).filter(StockMovement.user_id == user.id, Item.user_id == user.id)
+        if df:
+            q = q.filter(StockMovement.movement_date >= df)
+        if dt_to:
+            q = q.filter(StockMovement.movement_date <= dt_to)
+        if (item_id or "").strip():
+            q = q.filter(StockMovement.item_id == item_id.strip())
+        mt = (movement_type or "").strip().lower()
+        if mt:
+            q = q.filter(StockMovement.movement_type == mt)
+        rows = q.order_by(StockMovement.movement_date.desc(), StockMovement.created_at.desc()).limit(limit).all()
+        type_labels = {"purchase": "شراء", "sale": "بيع", "sale_return": "مرتجع بيع", "purchase_return": "مرتجع شراء", "adjust": "تسوية/جرد", "transfer": "تحويل"}
+        out = [
+            {
+                "date": mv.movement_date.strftime("%Y-%m-%d") if mv.movement_date else "",
+                "movement_type": mv.movement_type,
+                "movement_type_label": type_labels.get(mv.movement_type, mv.movement_type),
+                "item_code": item.code,
+                "item_name": item.name,
+                "qty_in": round(float(mv.qty_in or 0.0), 4),
+                "qty_out": round(float(mv.qty_out or 0.0), 4),
+                "unit_cost": round(float(mv.unit_cost or 0.0), 2),
+                "reference_type": mv.reference_type or "",
+                "notes": mv.notes or "",
+            }
+            for mv, item in rows
+        ]
+        return {"items": out}
+    finally:
+        db.close()
+
+
+@router.get("/reports/stock-ledger/export")
+def stock_ledger_export(request: Request, date_from: str = Query(""), date_to: str = Query("")):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        df = _parse_date(date_from, "date_from") if (date_from or "").strip() else None
+        dt_to = _parse_date(date_to, "date_to") if (date_to or "").strip() else None
+        q = db.query(StockMovement, Item).join(Item, Item.id == StockMovement.item_id).filter(StockMovement.user_id == user.id, Item.user_id == user.id)
+        if df:
+            q = q.filter(StockMovement.movement_date >= df)
+        if dt_to:
+            q = q.filter(StockMovement.movement_date <= dt_to)
+        rows = q.order_by(StockMovement.movement_date.desc(), StockMovement.created_at.desc()).limit(5000).all()
+        type_labels = {"purchase": "شراء", "sale": "بيع", "sale_return": "مرتجع بيع", "purchase_return": "مرتجع شراء", "adjust": "تسوية/جرد", "transfer": "تحويل"}
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "سجل حركة المخزون"
+        ws.append(["التاريخ", "نوع الحركة", "كود الصنف", "اسم الصنف", "وارد", "صادر", "تكلفة الوحدة", "ملاحظات"])
+        for mv, item in rows:
+            ws.append([
+                mv.movement_date.strftime("%Y-%m-%d") if mv.movement_date else "",
+                type_labels.get(mv.movement_type, mv.movement_type),
+                item.code, item.name,
+                round(float(mv.qty_in or 0.0), 4), round(float(mv.qty_out or 0.0), 4),
+                round(float(mv.unit_cost or 0.0), 2), mv.notes or "",
+            ])
+        return _xlsx_response(wb, "stock_ledger.xlsx")
+    finally:
+        db.close()
+
+
 @router.get("/reports/tax-return")
 def tax_return_report(request: Request, date_from: str = Query(""), date_to: str = Query("")):
     db = SessionLocal()

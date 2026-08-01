@@ -38,6 +38,8 @@
           <button class="rep-tab" data-tab="top">الأكثر مبيعاً</button>
           <button class="rep-tab" data-tab="worst">الأقل مبيعاً</button>
           <button class="rep-tab" data-tab="low">الأصناف المنخفضة</button>
+          <button class="rep-tab" data-tab="ledger">سجل حركة المخزون</button>
+          <button class="rep-tab" data-tab="tax">الإقرار الضريبي</button>
         </div>
         <div id="tabContent"></div>
       </div>
@@ -135,9 +137,37 @@
             table(["الكود","اسم الصنف","الكمية الحالية","الحد الأدنى"], rows);
         }
 
+        async function renderLedger() {
+          var host = document.getElementById("tabContent");
+          host.innerHTML = '<div class="mb-2"><a href="/api/trade/reports/stock-ledger/export" class="text-sm underline">تصدير Excel</a></div><div id="ledgerHost">جارِ التحميل...</div>';
+          var d = await apiGet("/api/trade/reports/stock-ledger?limit=300");
+          var rows = (d.items||[]).map(function(x){return [esc(x.date), esc(x.movement_type_label), esc(x.item_code), esc(x.item_name), esc(x.qty_in), esc(x.qty_out), money(x.unit_cost)];});
+          document.getElementById("ledgerHost").innerHTML = table(["التاريخ","نوع الحركة","الكود","اسم الصنف","وارد","صادر","تكلفة الوحدة"], rows);
+        }
+
+        async function renderTax() {
+          var d = await apiGet("/api/trade/reports/tax-return");
+          var ov = d.output_vat, iv = d.input_vat, nv = d.net_vat;
+          document.getElementById("tabContent").innerHTML =
+            '<div class="mb-2"><a href="/api/trade/reports/tax-return/export" class="text-sm underline">تصدير Excel</a></div>' +
+            '<div class="grid grid-cols-1 md:grid-cols-2 gap-3">' +
+            '<div class="rounded-xl border p-3"><div class="font-extrabold mb-2">ضريبة المخرجات (المبيعات)</div>' +
+            '<div class="flex justify-between text-sm py-1"><span>صافي المبيعات قبل الضريبة</span><span class="font-bold">'+money(ov.net_sales_before_tax)+'</span></div>' +
+            '<div class="flex justify-between text-sm py-1"><span>صافي ضريبة المبيعات</span><span class="font-bold">'+money(ov.net_sales_tax)+'</span></div></div>' +
+            '<div class="rounded-xl border p-3"><div class="font-extrabold mb-2">ضريبة المدخلات (المشتريات)</div>' +
+            '<div class="flex justify-between text-sm py-1"><span>صافي المشتريات قبل الضريبة</span><span class="font-bold">'+money(iv.net_purchases_before_tax)+'</span></div>' +
+            '<div class="flex justify-between text-sm py-1"><span>صافي ضريبة المشتريات</span><span class="font-bold">'+money(iv.net_purchases_tax)+'</span></div></div>' +
+            '</div>' +
+            '<div class="rounded-xl border p-4 mt-3 text-center" style="background:rgba(16,185,129,.08);">' +
+            '<div class="font-extrabold text-lg">' + (nv.status === "payable" ? "صافي الضريبة المستحقة على المنشأة" : "رصيد ضريبي دائن (لصالح المنشأة)") + '</div>' +
+            '<div class="font-extrabold text-3xl mt-1">' + money(nv.status === "payable" ? nv.payable_amount : nv.credit_amount) + ' ر.س</div>' +
+            '</div>';
+        }
+
         var renderers = {
           stock: renderStock, sales: renderSales, purchases: renderPurchases, profit: renderProfit,
           movement: renderMovement, top: function(){return renderTop(false);}, worst: function(){return renderTop(true);}, low: renderLow,
+          ledger: renderLedger, tax: renderTax,
         };
 
         document.querySelectorAll(".rep-tab").forEach(function (btn) {
