@@ -587,8 +587,8 @@
           </div>
 
           <div class="op-tab-panel" id="tab-contract" style="display:none;">
-            <div style="display:flex;justify-content:flex-end;margin-bottom:0.75rem;">
-              <a href="/hr/contracts" class="op-btn-chip op-btn-chip--gold" style="padding:6px 14px;font-size:0.8rem;">إدارة العقود →</a>
+            <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:end;margin-bottom:0.9rem;" id="contractAddRow">
+<div class="op-tool-field" style="margin-bottom:0;"><label>نوع العقد</label><input type="text" id="ctrType" placeholder="دوام كامل / جزئي / مؤقت" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>بداية العقد</label><input type="date" id="ctrStart" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>نهاية العقد</label><input type="date" id="ctrEnd" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>الراتب</label><input type="number" id="ctrSalary" step="0.01" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>بدل السكن</label><input type="number" id="ctrHousing" step="0.01" value="0" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>بدل النقل</label><input type="number" id="ctrTransport" step="0.01" value="0" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>بدلات أخرى</label><input type="number" id="ctrOther" step="0.01" value="0" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>فترة التجربة (أيام)</label><input type="number" id="ctrProbation" value="90" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>أيام الإجازة السنوية</label><input type="number" id="ctrAnnualLeave" value="21" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>ملف العقد (اختياري)</label><input type="file" id="ctrFile" accept=".pdf,.jpg,.jpeg,.png" /></div><button type="button" class="op-btn-chip op-btn-chip--gold" id="ctrAddBtn" style="height:38px;">حفظ عقد جديد</button>
             </div>
             <div id="contractCard"></div>
           </div>
@@ -1197,6 +1197,34 @@
               "</table></div>";
           } catch (e) { showToast(e.message || "تعذر تحميل العقد", "#dc2626"); }
         }
+
+        document.getElementById("ctrAddBtn").addEventListener("click", async function () {
+          var __saveBtn = this;
+          await guardedSave(__saveBtn, async function () {
+          try {
+            var fd = new FormData();
+            fd.append("contract_type", document.getElementById("ctrType").value);
+            fd.append("start_date", document.getElementById("ctrStart").value);
+            fd.append("end_date", document.getElementById("ctrEnd").value);
+            fd.append("salary", document.getElementById("ctrSalary").value || "0");
+            fd.append("housing_allowance", document.getElementById("ctrHousing").value || "0");
+            fd.append("transport_allowance", document.getElementById("ctrTransport").value || "0");
+            fd.append("other_allowances", document.getElementById("ctrOther").value || "0");
+            fd.append("probation_days", document.getElementById("ctrProbation").value || "0");
+            fd.append("annual_leave_days", document.getElementById("ctrAnnualLeave").value || "21");
+            var f = document.getElementById("ctrFile").files[0];
+            if (f) fd.append("file", f);
+            await apiPostForm("/api/hr/employees/" + _empId + "/contracts", fd);
+            showToast("تم حفظ العقد ✔️ (أي عقد سابق ساري يُنهى تلقائيًا)", "#22c55e");
+            if (window.__markSaved) window.__markSaved();
+            document.getElementById("ctrType").value = ""; document.getElementById("ctrStart").value = ""; document.getElementById("ctrEnd").value = "";
+            document.getElementById("ctrSalary").value = ""; document.getElementById("ctrHousing").value = "0"; document.getElementById("ctrTransport").value = "0";
+            document.getElementById("ctrOther").value = "0"; document.getElementById("ctrProbation").value = "90"; document.getElementById("ctrAnnualLeave").value = "21";
+            document.getElementById("ctrFile").value = "";
+            await loadContractTab();
+          } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
+          }, "جارٍ الحفظ ...");
+        });
 
         var SEV_META = {
           critical: {color:"#dc2626", bg:"rgba(220,38,38,0.12)", icon:"🔴"}, high: {color:"#f97316", bg:"rgba(249,115,22,0.12)", icon:"🟠"},

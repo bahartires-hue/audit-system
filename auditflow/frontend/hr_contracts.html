@@ -434,7 +434,6 @@
 
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.9rem;flex-wrap:wrap;gap:8px;">
           <select id="flEmployee" style="padding:8px 12px;border-radius:10px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);min-width:220px;"><option value="">كل الموظفين</option></select>
-          <button type="button" class="op-btn-chip op-btn-chip--gold" id="addBtn">➕ عقد جديد</button>
         </div>
         <div class="op-shell-card" style="padding:0;overflow:auto;">
           <table class="op-admin-table" style="width:100%;">
@@ -442,26 +441,6 @@
             <tbody id="listBody"></tbody>
           </table>
           <div id="listEmpty" style="display:none;padding:2rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد عقود مسجّلة</div>
-        </div>
-        <div class="op-tool-modal-overlay" id="addModal" style="display:none;">
-          <div class="op-tool-modal">
-            <div class="op-tool-modal-head"><div><h3>عقد جديد</h3></div><button type="button" id="modalClose">✕</button></div>
-            <div class="op-tool-field"><label>الموظف</label><select id="fEmployee"></select></div>
-            <div class="op-tool-field"><label>نوع العقد</label><input type="text" id="fType" placeholder="دوام كامل / جزئي / مؤقت" /></div>
-            <div class="op-tool-field"><label>بداية العقد</label><input type="date" id="fStart" /></div>
-            <div class="op-tool-field"><label>نهاية العقد</label><input type="date" id="fEnd" /></div>
-            <div class="op-tool-field"><label>الراتب</label><input type="number" id="fSalary" step="0.01" /></div>
-            <div class="op-tool-field"><label>بدل السكن</label><input type="number" id="fHousing" step="0.01" value="0" /></div>
-            <div class="op-tool-field"><label>بدل النقل</label><input type="number" id="fTransport" step="0.01" value="0" /></div>
-            <div class="op-tool-field"><label>بدلات أخرى</label><input type="number" id="fOther" step="0.01" value="0" /></div>
-            <div class="op-tool-field"><label>فترة التجربة (أيام)</label><input type="number" id="fProbation" value="90" /></div>
-            <div class="op-tool-field"><label>أيام الإجازة السنوية</label><input type="number" id="fAnnualLeave" value="21" /></div>
-            <div class="op-tool-field"><label>ملف العقد PDF (اختياري)</label><input type="file" id="fFile" accept=".pdf,.jpg,.jpeg,.png" /></div>
-            <div class="op-tool-modal-actions">
-              <button type="button" class="op-tool-btn-secondary" id="modalCancel">إلغاء</button>
-              <button type="button" class="op-btn-chip op-btn-chip--gold" id="modalSave">حفظ</button>
-            </div>
-          </div>
         </div>
       </main>
     </div>
@@ -516,8 +495,7 @@
             var res = await apiGet("/api/hr/employees");
             _employeesCache = res.items || [];
             var flSel = document.getElementById("flEmployee");
-            var fSel = document.getElementById("fEmployee");
-            _employeesCache.forEach(function (e) { flSel.appendChild(new Option(e.name, e.id)); fSel.appendChild(new Option(e.name, e.id)); });
+            _employeesCache.forEach(function (e) { flSel.appendChild(new Option(e.name, e.id)); });
           } catch (e) {}
         }
 
@@ -526,7 +504,7 @@
           var endTxt = c.end_date ? (c.end_days_left != null && c.end_days_left < 0 ? c.end_date + " (منتهي)" : c.end_date) : "—";
           var fileCell = c.file_url ? ('<a href="' + c.file_url + '" target="_blank" style="color:var(--gold-soft);">📎 عرض/تحميل</a>') : "—";
           tr.innerHTML =
-            "<td style='font-weight:800;'>" + c.employee_name + "</td>" +
+            "<td style='font-weight:800;'><a href='/hr/employees/" + c.employee_id + "?tab=contract' style='color:inherit;text-decoration:underline;'>" + c.employee_name + "</a></td>" +
             "<td>" + (c.contract_type || "—") + "</td>" + "<td>" + (c.start_date || "—") + "</td>" + "<td>" + endTxt + "</td>" +
             "<td>" + c.salary.toLocaleString() + "</td>" +
             "<td>" + (c.status === "active" ? "🟢 ساري" : "⚪ منتهي") + "</td>" +
@@ -577,47 +555,6 @@
         }
         document.getElementById("flEmployee").addEventListener("change", loadList);
 
-        document.getElementById("addBtn").addEventListener("click", function () {
-          document.getElementById("fEmployee").value = "";
-          document.getElementById("fType").value = "";
-          document.getElementById("fStart").value = ""; document.getElementById("fEnd").value = "";
-          document.getElementById("fSalary").value = ""; document.getElementById("fHousing").value = "0";
-          document.getElementById("fTransport").value = "0"; document.getElementById("fOther").value = "0";
-          document.getElementById("fProbation").value = "90"; document.getElementById("fAnnualLeave").value = "21";
-          document.getElementById("fFile").value = "";
-          document.getElementById("addModal").style.display = "flex";
-        });
-        document.getElementById("modalClose").addEventListener("click", function () { document.getElementById("addModal").style.display = "none"; });
-        document.getElementById("modalCancel").addEventListener("click", function () { document.getElementById("addModal").style.display = "none"; });
-        document.getElementById("addModal").addEventListener("click", function (ev) { if (ev.target === this) this.style.display = "none"; });
-
-        document.getElementById("modalSave").addEventListener("click", async function () {
-          var __saveBtn = this;
-          await guardedSave(__saveBtn, async function () {
-          var employee_id = document.getElementById("fEmployee").value;
-          if (!employee_id) { showToast("اختر الموظف", "#dc2626"); return; }
-          try {
-            var fd = new FormData();
-            fd.append("contract_type", document.getElementById("fType").value);
-            fd.append("start_date", document.getElementById("fStart").value);
-            fd.append("end_date", document.getElementById("fEnd").value);
-            fd.append("salary", document.getElementById("fSalary").value || "0");
-            fd.append("housing_allowance", document.getElementById("fHousing").value || "0");
-            fd.append("transport_allowance", document.getElementById("fTransport").value || "0");
-            fd.append("other_allowances", document.getElementById("fOther").value || "0");
-            fd.append("probation_days", document.getElementById("fProbation").value || "0");
-            fd.append("annual_leave_days", document.getElementById("fAnnualLeave").value || "21");
-            var f = document.getElementById("fFile").files[0];
-            if (f) fd.append("file", f);
-            await apiPostForm("/api/hr/employees/" + employee_id + "/contracts", fd);
-            showToast("تم حفظ العقد ✔️", "#22c55e");
-            if (window.__markSaved) window.__markSaved();
-            document.getElementById("addModal").style.display = "none";
-            await loadList();
-          } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
-        
-          }, "جارٍ الحفظ ...");
-        });
 
         async function deleteItem(id) {
           if (!confirm("حذف هذا العقد؟")) return;
@@ -627,7 +564,6 @@
 
         (async function () { await loadEmployeeOptions(); await loadList(); })();
     
-        initUnsavedGuard({ modals: ["addModal"] });
     </script>
 
   </body>
