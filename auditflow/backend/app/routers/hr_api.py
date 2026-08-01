@@ -335,9 +335,9 @@ def create_employee(request: Request, body: EmployeeCreate = Body(...)):
             name=body.name.strip(),
             nationality=(body.nationality or "").strip() or None,
             national_id=(body.national_id or "").strip() or None,
-            residency_expiry=_parse_simple_date(body.residency_expiry, "تاريخ انتهاء الإقامة"),
-            passport_number=(body.passport_number or "").strip() or None,
-            passport_expiry=_parse_simple_date(body.passport_expiry, "تاريخ انتهاء الجواز"),
+            # ملاحظة معمارية: الإقامة/الجواز لم تعد تُدخل هنا مباشرة — تبويب الوثائق
+            # في ملف الموظف هو المصدر الوحيد لها، وتتم مزامنتها تلقائيًا من هناك
+            # عبر _sync_identity_docs_from_documents (Single Source of Truth).
             position=(body.position or "").strip() or None,
             department=(body.department or "").strip() or None,
             branch_name=(body.branch_name or "").strip() or None,
@@ -526,13 +526,13 @@ async def import_employees(request: Request, file: UploadFile = File(...)):
                 existing = db.query(Employee).filter(Employee.user_id == user.id, Employee.employee_number == employee_number).first()
 
             try:
+                target_employee_id = existing.id if existing else uuid.uuid4().hex
                 if existing:
                     existing.name = name
                     existing.nationality = nationality or None
                     existing.national_id = national_id or existing.national_id
-                    existing.residency_expiry = residency_expiry
-                    existing.passport_number = passport_number or None
-                    existing.passport_expiry = passport_expiry
+                    # ملاحظة معمارية: لا نكتب على existing.residency_expiry/passport_* مباشرة —
+                    # نكتب وثيقة حقيقية في جدول الوثائق ثم نزامن (Single Source of Truth).
                     existing.position = position or None
                     existing.department = department or None
                     existing.branch_name = branch_name or None
@@ -547,15 +547,12 @@ async def import_employees(request: Request, file: UploadFile = File(...)):
                     updated += 1
                 else:
                     rec = Employee(
-                        id=uuid.uuid4().hex,
+                        id=target_employee_id,
                         user_id=user.id,
                         employee_number=employee_number or _next_employee_number(db, user.id),
                         name=name,
                         nationality=nationality or None,
                         national_id=national_id or None,
-                        residency_expiry=residency_expiry,
-                        passport_number=passport_number or None,
-                        passport_expiry=passport_expiry,
                         position=position or None,
                         department=department or None,
                         branch_name=branch_name or None,
@@ -571,6 +568,12 @@ async def import_employees(request: Request, file: UploadFile = File(...)):
                     db.add(rec)
                     added += 1
                 db.commit()
+                if residency_expiry:
+                    _upsert_identity_document(db, user.id, target_employee_id, "إقامة", "", residency_expiry)
+                if passport_expiry or passport_number:
+                    _upsert_identity_document(db, user.id, target_employee_id, "جواز", passport_number, passport_expiry)
+                db.commit()
+                _sync_identity_docs_from_documents(db, target_employee_id)
             except Exception as ex:
                 db.rollback()
                 errors.append({"row": row_num, "reason": f"تعذر الحفظ: {ex}"})
@@ -605,7 +608,10 @@ def update_employee(employee_id: str, request: Request, body: EmployeeUpdate = B
         if not rec:
             raise HTTPException(404, "الموظف غير موجود")
         data = body.dict(exclude_unset=True)
-        simple_fields = ["name", "nationality", "national_id", "passport_number", "position", "department", "branch_name", "phone", "email", "notes"]
+        # ملاحظة معمارية: "passport_number" و"residency_expiry" و"passport_expiry" أُزيلت
+        # عمدًا من التحديث المباشر — تبويب الوثائق هو المصدر الوحيد لها الآن (Single Source
+        # of Truth)، وتتم مزامنتها تلقائيًا عبر _sync_identity_docs_from_documents.
+        simple_fields = ["name", "nationality", "national_id", "position", "department", "branch_name", "phone", "email", "notes"]
         for f in simple_fields:
             if f in data and data[f] is not None:
                 setattr(rec, f, (data[f] or "").strip() or None)
@@ -613,10 +619,6 @@ def update_employee(employee_id: str, request: Request, body: EmployeeUpdate = B
             rec.basic_salary = data["basic_salary"]
         if "commission_percentage" in data:
             rec.commission_percentage = data["commission_percentage"]
-        if "residency_expiry" in data:
-            rec.residency_expiry = _parse_simple_date(data["residency_expiry"], "تاريخ انتهاء الإقامة")
-        if "passport_expiry" in data:
-            rec.passport_expiry = _parse_simple_date(data["passport_expiry"], "تاريخ انتهاء الجواز")
         if "hire_date" in data:
             rec.hire_date = _parse_simple_date(data["hire_date"], "تاريخ التعيين")
         if "birth_date" in data:
@@ -1831,6 +1833,58 @@ def _doc_status(expiry_date) -> dict:
     return {"status": "active", "status_label": "سارية", "severity": "none", "days_left": days_left}
 
 
+_RESIDENCY_DOC_MARKERS = ("إقامة",)
+_PASSPORT_DOC_MARKERS = ("جواز",)
+
+
+def _sync_identity_docs_from_documents(db, employee_id: str):
+    """الوثائق هي المصدر الوحيد للحقيقة لبيانات الإقامة/الجواز. هذه الدالة تُحدّث
+    أعمدة الموظف (المستخدمة في التنبيهات والتقارير السريعة) تلقائيًا من أحدث وثيقة
+    محفوظة من نوع (إقامة/جواز) — بحيث لا يحتاج المستخدم لإدخال نفس البيانات مرتين،
+    ولا يمكن أن تتعارض التنبيهات مع ما هو مسجّل فعليًا في تبويب الوثائق."""
+    employee = db.query(Employee).filter(Employee.id == employee_id).first()
+    if not employee:
+        return
+    docs = db.query(EmployeeDocument).filter(EmployeeDocument.employee_id == employee_id).all()
+
+    residency_docs = [d for d in docs if any(m in (d.doc_type or "") for m in _RESIDENCY_DOC_MARKERS)]
+    latest_residency = max(residency_docs, key=lambda d: (d.expiry_date or dt.datetime.min), default=None)
+    employee.residency_expiry = latest_residency.expiry_date if latest_residency else None
+
+    passport_docs = [d for d in docs if any(m in (d.doc_type or "") for m in _PASSPORT_DOC_MARKERS)]
+    latest_passport = max(passport_docs, key=lambda d: (d.expiry_date or dt.datetime.min), default=None)
+    employee.passport_expiry = latest_passport.expiry_date if latest_passport else None
+    employee.passport_number = latest_passport.doc_number if latest_passport else None
+
+    db.commit()
+
+
+def _upsert_identity_document(db, user_id: str, employee_id: str, doc_type_marker: str, doc_number: str, expiry_date):
+    """يُستخدم من مسارات الإدخال الجماعي (استيراد Excel) — بدل ما يكتب مباشرة على
+    عمود الموظف، ينشئ/يحدّث وثيقة حقيقية في جدول الوثائق (نفس مصدر تبويب الوثائق)،
+    ثم تتم المزامنة التلقائية لعمود الموظف من نفس الدالة أعلاه."""
+    if not expiry_date and not (doc_number or "").strip():
+        return
+    existing = (
+        db.query(EmployeeDocument)
+        .filter(EmployeeDocument.employee_id == employee_id, EmployeeDocument.doc_type.contains(doc_type_marker))
+        .order_by(EmployeeDocument.created_at.desc())
+        .first()
+    )
+    if existing:
+        if expiry_date:
+            existing.expiry_date = expiry_date
+        if (doc_number or "").strip():
+            existing.doc_number = doc_number.strip()
+    else:
+        default_type = "إقامة" if doc_type_marker == "إقامة" else "جواز سفر"
+        db.add(EmployeeDocument(
+            id=uuid.uuid4().hex, user_id=user_id, employee_id=employee_id,
+            doc_type=default_type, doc_number=(doc_number or "").strip() or None,
+            expiry_date=expiry_date,
+        ))
+
+
 def _doc_out(d: EmployeeDocument) -> dict:
     out = {
         "id": d.id,
@@ -1930,6 +1984,7 @@ async def create_employee_document(
         )
         db.add(rec)
         db.commit()
+        _sync_identity_docs_from_documents(db, employee_id)
         log_event(db, "hr.document.create", user.id, {"document_id": rec.id, "employee_id": employee_id, "doc_type": rec.doc_type})
         return _doc_out(rec)
     finally:
@@ -1967,6 +2022,7 @@ def update_document(document_id: str, request: Request, body: DocumentUpdate = B
         if body.notes is not None:
             rec.notes = body.notes.strip() or None
         db.commit()
+        _sync_identity_docs_from_documents(db, rec.employee_id)
         return _doc_out(rec)
     finally:
         db.close()
@@ -2009,9 +2065,11 @@ def delete_document(document_id: str, request: Request):
         rec = db.query(EmployeeDocument).filter(EmployeeDocument.user_id == user.id, EmployeeDocument.id == document_id).first()
         if not rec:
             raise HTTPException(404, "الوثيقة غير موجودة")
+        emp_id_for_sync = rec.employee_id
         db.query(EmployeeDocumentRenewal).filter(EmployeeDocumentRenewal.document_id == rec.id).delete()
         db.delete(rec)
         db.commit()
+        _sync_identity_docs_from_documents(db, emp_id_for_sync)
         log_event(db, "hr.document.delete", user.id, {"document_id": document_id})
         return {"deleted": True}
     finally:
@@ -2050,6 +2108,7 @@ def renew_document(document_id: str, request: Request, body: DocumentRenew = Bod
             rec.issue_date = new_issue
         rec.expiry_date = new_expiry
         db.commit()
+        _sync_identity_docs_from_documents(db, rec.employee_id)
         log_event(db, "hr.document.renew", user.id, {"document_id": rec.id})
         return _doc_out(rec)
     finally:

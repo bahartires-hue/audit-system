@@ -474,9 +474,9 @@
                 <div class="op-tool-field"><label>الاسم</label><input type="text" id="basicName" /></div>
                 <div class="op-tool-field"><label>الجنسية</label><input type="text" id="basicNationality" /></div>
                 <div class="op-tool-field"><label>رقم الهوية / الإقامة</label><input type="text" id="basicNationalId" /></div>
-                <div class="op-tool-field"><label>تاريخ انتهاء الإقامة</label><input type="date" id="basicResidencyExpiry" /></div>
-                <div class="op-tool-field"><label>رقم الجواز</label><input type="text" id="basicPassportNumber" /></div>
-                <div class="op-tool-field"><label>تاريخ انتهاء الجواز</label><input type="date" id="basicPassportExpiry" /></div>
+                <div class="op-tool-field"><label>تاريخ انتهاء الإقامة (من تبويب الوثائق)</label><input type="date" id="basicResidencyExpiry" disabled style="opacity:0.65;cursor:not-allowed;" /></div>
+                <div class="op-tool-field"><label>رقم الجواز (من تبويب الوثائق)</label><input type="text" id="basicPassportNumber" disabled style="opacity:0.65;cursor:not-allowed;" /></div>
+                <div class="op-tool-field"><label>تاريخ انتهاء الجواز (من تبويب الوثائق)</label><input type="date" id="basicPassportExpiry" disabled style="opacity:0.65;cursor:not-allowed;" /></div>
                 <div class="op-tool-field"><label>الوظيفة</label><input type="text" id="basicPosition" /></div>
                 <div class="op-tool-field"><label>القسم</label><input type="text" id="basicDepartment" /></div>
                 <div class="op-tool-field"><label>الفرع</label><input type="text" id="basicBranch" /></div>
@@ -495,6 +495,7 @@
                 </div>
               </div>
               <div class="op-tool-field"><label>ملاحظات</label><input type="text" id="basicNotes" /></div>
+              <div style="background:rgba(180,140,60,0.08);border:1px solid rgba(180,140,60,0.25);border-radius:10px;padding:8px 12px;font-size:0.78rem;color:var(--text-muted);margin-bottom:0.75rem;">ℹ️ الإقامة والجواز أعلاه للعرض فقط — أي تجديد أو تعديل يتم من <b>تبويب الوثائق</b> ويظهر هنا تلقائيًا.</div>
               <button type="button" class="op-btn-chip op-btn-chip--gold" id="basicSaveBtn">حفظ التعديلات</button>
             </div>
           </div>
@@ -781,9 +782,6 @@
               name: document.getElementById("basicName").value.trim(),
               nationality: document.getElementById("basicNationality").value,
               national_id: document.getElementById("basicNationalId").value,
-              residency_expiry: document.getElementById("basicResidencyExpiry").value,
-              passport_number: document.getElementById("basicPassportNumber").value,
-              passport_expiry: document.getElementById("basicPassportExpiry").value,
               position: document.getElementById("basicPosition").value,
               department: document.getElementById("basicDepartment").value,
               branch_name: document.getElementById("basicBranch").value,

@@ -471,9 +471,6 @@
               <div class="op-tool-field"><label>الاسم</label><input type="text" id="fName" /></div>
               <div class="op-tool-field"><label>الجنسية</label><input type="text" id="fNationality" /></div>
               <div class="op-tool-field"><label>رقم الهوية / الإقامة</label><input type="text" id="fNationalId" /></div>
-              <div class="op-tool-field"><label>تاريخ انتهاء الإقامة</label><input type="date" id="fResidencyExpiry" /></div>
-              <div class="op-tool-field"><label>رقم الجواز</label><input type="text" id="fPassportNumber" /></div>
-              <div class="op-tool-field"><label>تاريخ انتهاء الجواز</label><input type="date" id="fPassportExpiry" /></div>
               <div class="op-tool-field"><label>الوظيفة</label><input type="text" id="fPosition" /></div>
               <div class="op-tool-field"><label>القسم</label><input type="text" id="fDepartment" /></div>
               <div class="op-tool-field"><label>الفرع</label><input type="text" id="fBranch" /></div>
@@ -494,6 +491,7 @@
                 </select>
               </div>
             </div>
+            <div style="background:rgba(180,140,60,0.08);border:1px solid rgba(180,140,60,0.25);border-radius:10px;padding:8px 12px;font-size:0.78rem;color:var(--text-muted);margin-bottom:0.75rem;">ℹ️ تاريخ انتهاء الإقامة ورقم/تاريخ انتهاء الجواز تُدار الآن من تبويب "الوثائق" داخل ملف الموظف (بعد الحفظ) — لتفادي ازدواج الإدخال.</div>
             <div class="op-tool-field"><label>ملاحظات</label><input type="text" id="fNotes" /></div>
             <div class="op-tool-modal-actions">
               <button type="button" class="op-tool-btn-secondary" id="empModalCancel">إلغاء</button>
@@ -627,9 +625,6 @@
           document.getElementById("fName").value = e ? e.name : "";
           document.getElementById("fNationality").value = e ? e.nationality : "";
           document.getElementById("fNationalId").value = e ? e.national_id : "";
-          document.getElementById("fResidencyExpiry").value = e ? e.residency_expiry : "";
-          document.getElementById("fPassportNumber").value = e ? e.passport_number : "";
-          document.getElementById("fPassportExpiry").value = e ? e.passport_expiry : "";
           document.getElementById("fPosition").value = e ? e.position : "";
           document.getElementById("fDepartment").value = e ? e.department : "";
           document.getElementById("fBranch").value = e ? e.branch_name : "";
@@ -657,9 +652,6 @@
             name: name,
             nationality: document.getElementById("fNationality").value,
             national_id: document.getElementById("fNationalId").value,
-            residency_expiry: document.getElementById("fResidencyExpiry").value,
-            passport_number: document.getElementById("fPassportNumber").value,
-            passport_expiry: document.getElementById("fPassportExpiry").value,
             position: document.getElementById("fPosition").value,
             department: document.getElementById("fDepartment").value,
             branch_name: document.getElementById("fBranch").value,
