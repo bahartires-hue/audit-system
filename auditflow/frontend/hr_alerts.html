@@ -514,6 +514,8 @@
           notice: {color:"#22c55e", bg:"rgba(34,197,94,0.12)", icon:"🟢"}
         };
 
+        var ALERT_TYPE_TAB = { residency: "docs", passport: "docs", contract: "contract", probation: "contract", salary_unpaid: "payroll", birthday: "basic" };
+
         async function loadFeed() {
           try {
             var res = await apiGet("/api/hr/alerts/feed");
@@ -525,8 +527,9 @@
               var card = document.createElement("div");
               card.className = "op-shell-card";
               card.style.cssText = "padding:0.85rem 1.1rem;display:flex;align-items:center;gap:10px;background:" + m.bg + ";border-inline-start:4px solid " + m.color + ";";
+              var tab = ALERT_TYPE_TAB[it.type] || "basic";
               card.innerHTML = "<span style='font-size:1.1rem;'>" + m.icon + "</span><span style='font-weight:700;'>" + it.message + "</span>" +
-                "<a href='/hr/employee?id=" + encodeURIComponent(it.employee_id) + "' style='margin-inline-start:auto;color:var(--gold-soft);font-weight:800;font-size:0.8rem;text-decoration:none;'>عرض الملف →</a>";
+                "<a href='/hr/employee?id=" + encodeURIComponent(it.employee_id) + "&tab=" + tab + "' style='margin-inline-start:auto;color:var(--gold-soft);font-weight:800;font-size:0.8rem;text-decoration:none;'>عرض الملف →</a>";
               wrap.appendChild(card);
             });
             document.getElementById("feedEmpty").style.display = items.length ? "none" : "block";

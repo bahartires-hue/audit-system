@@ -570,6 +570,7 @@
           } catch (e) {}
         }
 
+        var ALERT_TYPE_TAB = { residency: "docs", passport: "docs", contract: "contract", probation: "contract", salary_unpaid: "payroll", birthday: "basic" };
         async function loadFeed() {
           try {
             var res = await apiGet("/api/hr/alerts/feed");
@@ -578,8 +579,10 @@
             wrap.innerHTML = "";
             items.forEach(function (it) {
               var m = SEV_META[it.severity] || SEV_META.notice;
-              var card = document.createElement("div");
-              card.style.cssText = "padding:0.6rem 0.75rem;border-radius:10px;display:flex;align-items:center;gap:8px;background:" + m.bg + ";border-inline-start:3px solid " + m.color + ";font-size:0.82rem;";
+              var tab = ALERT_TYPE_TAB[it.type] || "basic";
+              var card = document.createElement("a");
+              card.href = "/hr/employee?id=" + encodeURIComponent(it.employee_id) + "&tab=" + tab;
+              card.style.cssText = "padding:0.6rem 0.75rem;border-radius:10px;display:flex;align-items:center;gap:8px;background:" + m.bg + ";border-inline-start:3px solid " + m.color + ";font-size:0.82rem;text-decoration:none;color:inherit;cursor:pointer;";
               card.innerHTML = "<span>" + m.icon + "</span><span style='font-weight:700;'>" + it.message + "</span>";
               wrap.appendChild(card);
             });
