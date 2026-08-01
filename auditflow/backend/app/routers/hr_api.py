@@ -1717,11 +1717,14 @@ def _compute_gratuity(basic_salary: float, hire_date, end_date) -> float:
 
 
 @router.get("/end-of-service")
-def list_end_of_service(request: Request):
+def list_end_of_service(request: Request, employee_id: str = Query("")):
     db = SessionLocal()
     try:
         user = require_user(db, request)
-        rows = db.query(EndOfService, Employee).join(Employee, Employee.id == EndOfService.employee_id).filter(EndOfService.user_id == user.id).order_by(EndOfService.created_at.desc()).all()
+        q = db.query(EndOfService, Employee).join(Employee, Employee.id == EndOfService.employee_id).filter(EndOfService.user_id == user.id)
+        if employee_id:
+            q = q.filter(EndOfService.employee_id == employee_id)
+        rows = q.order_by(EndOfService.created_at.desc()).all()
         return {"items": [_eos_out(r, e.name) for r, e in rows]}
     finally:
         db.close()
@@ -1780,6 +1783,9 @@ def create_end_of_service(employee_id: str, request: Request, body: EndOfService
         employee = db.query(Employee).filter(Employee.user_id == user.id, Employee.id == employee_id).first()
         if not employee:
             raise HTTPException(404, "الموظف غير موجود")
+        existing_eos = db.query(EndOfService).filter(EndOfService.employee_id == employee_id).first()
+        if existing_eos:
+            raise HTTPException(400, "هذا الموظف لديه سجل نهاية خدمة مسبق بتاريخ " + _fmt_date(existing_eos.end_date) + " -- لا يمكن إنهاء الخدمة أكثر من مرة لنفس الموظف")
         end_dt = _parse_simple_date(body.end_date, "تاريخ نهاية الخدمة")
         unpaid_payrolls = db.query(Payroll).filter(Payroll.employee_id == employee_id, Payroll.status == "unpaid").all()
         remaining_salaries = round(sum(float(p.net_salary or 0) for p in unpaid_payrolls), 2)

@@ -739,6 +739,7 @@
           if (key === "docs") loadDocsTab();
           if (key === "contract") loadContractTab();
           if (key === "alerts") loadAlertsTab();
+          if (key === "eos") loadEosTab();
         }
         document.querySelectorAll(".op-tab-btn").forEach(function (b) {
           b.addEventListener("click", function () { switchTab(b.getAttribute("data-tab")); });
@@ -1247,6 +1248,33 @@
           } catch (e) {}
         }
 
+        async function loadEosTab() {
+          try {
+            var res = await apiGet("/api/hr/end-of-service?employee_id=" + encodeURIComponent(_empId));
+            var items = res.items || [];
+            var existingDiv = document.getElementById("eosExisting");
+            var formDiv = document.getElementById("eosForm");
+            if (items.length) {
+              var r = items[0];
+              existingDiv.innerHTML = "<div class='op-shell-card' style='padding:1.25rem;max-width:520px;'>" +
+                "<div style='font-weight:800;margin-bottom:0.75rem;'>🔚 تم إنهاء خدمة هذا الموظف بالفعل</div>" +
+                "<table class='op-admin-table' style='width:100%;'>" +
+                "<tr><td>تاريخ نهاية الخدمة</td><td>" + r.end_date + "</td></tr>" +
+                "<tr><td>السبب</td><td>" + r.reason_label + "</td></tr>" +
+                "<tr><td>مكافأة نهاية الخدمة</td><td>" + r.gratuity_amount.toLocaleString() + "</td></tr>" +
+                "<tr style='font-weight:800;'><td>إجمالي المستحقات</td><td>" + r.total_dues.toLocaleString() + "</td></tr>" +
+                "</table>" +
+                "<div style='margin-top:0.75rem;color:var(--text-muted);font-size:0.8rem;'>لا يمكن إنهاء خدمة نفس الموظف أكثر من مرة.</div>" +
+                "</div>";
+              existingDiv.style.display = "";
+              formDiv.style.display = "none";
+            } else {
+              existingDiv.style.display = "none";
+              formDiv.style.display = "";
+            }
+          } catch (e) { showToast(e.message || "تعذر تحميل بيانات نهاية الخدمة", "#dc2626"); }
+        }
+
         document.getElementById("eosPreviewBtn").addEventListener("click", async function () {
           var endDate = document.getElementById("eosEndDate").value;
           if (!endDate) { showToast("أدخل تاريخ نهاية الخدمة", "#dc2626"); return; }
@@ -1274,6 +1302,7 @@
             showToast("تم إنهاء الخدمة ✔️", "#22c55e");
             printSettlement(rec);
             await loadEmployeeHeader();
+            await loadEosTab();
           } catch (e) { showToast(e.message || "تعذر الإجراء", "#dc2626"); }
         });
 
