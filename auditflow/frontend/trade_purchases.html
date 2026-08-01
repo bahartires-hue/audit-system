@@ -115,14 +115,17 @@
             return '<tr data-row="'+i+'"><td class="px-2 py-2"><div class="font-bold">'+esc(row.name)+'</div><div class="text-xs opacity-70">'+esc(row.code)+'</div></td>'+
               '<td class="px-2 py-2"><input type="number" step="0.01" min="0.01" value="'+esc(row.qty)+'" data-f="qty" style="'+st+'" class="bg-white dark:bg-slate-950" /></td>'+
               '<td class="px-2 py-2"><input type="number" step="0.01" min="0" value="'+esc(row.unit_cost)+'" data-f="unit_cost" style="'+st+'" class="bg-white dark:bg-slate-950" /></td>'+
-              '<td class="px-2 py-2 font-bold">'+money(row.qty*row.unit_cost)+'</td>'+
+              '<td class="px-2 py-2 font-bold" data-total="'+i+'">'+money(row.qty*row.unit_cost)+'</td>'+
               '<td class="px-2 py-2"><button data-del="'+i+'" class="rounded-lg border px-2 py-1 text-red-600">✕</button></td></tr>';
           }).join("");
           body.querySelectorAll("input[data-f]").forEach(function (inp) {
             inp.addEventListener("input", function () {
-              var idx = Number(inp.closest("tr").getAttribute("data-row"));
+              var tr = inp.closest("tr");
+              var idx = Number(tr.getAttribute("data-row"));
               cart[idx][inp.getAttribute("data-f")] = Number(inp.value)||0;
-              renderCart();
+              var totalCell = tr.querySelector('[data-total="'+idx+'"]');
+              if (totalCell) totalCell.textContent = money(cart[idx].qty*cart[idx].unit_cost);
+              renderTotals();
             });
           });
           body.querySelectorAll("[data-del]").forEach(function (btn) {

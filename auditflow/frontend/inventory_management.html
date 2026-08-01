@@ -714,12 +714,12 @@
             var overBadge = over ? '<div style="color:#dc2626;font-size:0.68rem;font-weight:800;">الكمية أكبر من المتاح (' + esc(row.available) + ')</div>' : "";
             var inputStyle = "width:100%;min-width:60px;padding:5px 6px;border-radius:6px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);font-weight:700;text-align:center;font-size:0.8rem;";
             return '<tr data-row="' + i + '">' +
-              '<td style="padding:0.5rem;"><div style="font-weight:800;color:var(--text-heading);font-size:0.85rem;">' + esc(row.name) + '</div><div style="font-size:0.7rem;color:var(--text-muted);">' + esc(row.code) + '</div>' + overBadge + '</td>' +
+              '<td style="padding:0.5rem;"><div style="font-weight:800;color:var(--text-heading);font-size:0.85rem;">' + esc(row.name) + '</div><div style="font-size:0.7rem;color:var(--text-muted);">' + esc(row.code) + '</div><span data-over="' + i + '">' + overBadge + '</span></td>' +
               '<td style="padding:0.4rem;"><input type="number" step="0.01" min="0.01" value="' + esc(row.qty) + '" data-f="qty" style="' + inputStyle + '" /></td>' +
               '<td style="padding:0.4rem;"><input type="number" step="0.01" min="0" value="' + esc(row.sale_price) + '" data-f="sale_price" style="' + inputStyle + '" /></td>' +
               '<td style="padding:0.4rem;"><input type="number" step="0.01" min="0" value="' + esc(row.discount) + '" data-f="discount" style="' + inputStyle + '" /></td>' +
               '<td style="padding:0.4rem;"><input type="number" step="0.01" min="0" value="' + esc(row.tax) + '" data-f="tax" style="' + inputStyle + '" /></td>' +
-              '<td style="padding:0.5rem;font-weight:800;color:var(--gold-soft);white-space:nowrap;">' + money(lineTotal(row)) + '</td>' +
+              '<td data-total="' + i + '" style="padding:0.5rem;font-weight:800;color:var(--gold-soft);white-space:nowrap;">' + money(lineTotal(row)) + '</td>' +
               '<td style="padding:0.4rem;"><button type="button" data-del="' + i + '" class="op-btn-chip op-btn-chip--danger" style="padding:4px 10px;">✕</button></td>' +
               '</tr>';
           }).join("");
@@ -729,7 +729,15 @@
               var idx = Number(tr.getAttribute("data-row"));
               var field = inp.getAttribute("data-f");
               cart[idx][field] = Number(inp.value) || 0;
-              renderCart();
+              var row = cart[idx];
+              var totalCell = tr.querySelector('[data-total="' + idx + '"]');
+              if (totalCell) totalCell.textContent = money(lineTotal(row));
+              var overCell = tr.querySelector('[data-over="' + idx + '"]');
+              if (overCell) {
+                var over = Number(row.qty) > Number(row.available);
+                overCell.innerHTML = over ? '<div style="color:#dc2626;font-size:0.68rem;font-weight:800;">الكمية أكبر من المتاح (' + esc(row.available) + ')</div>' : "";
+              }
+              renderSummary();
             });
           });
           body.querySelectorAll("[data-del]").forEach(function (btn) {
