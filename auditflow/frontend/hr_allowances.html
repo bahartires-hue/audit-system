@@ -503,7 +503,7 @@
           var tr = document.createElement("tr");
           var statusTxt = a.recurring ? "🟢 نشط دائم" : (a.applied ? "🟢 مطبّق" : "🟡 بالانتظار");
           tr.innerHTML =
-            "<td style='font-weight:800;'><a href='/hr/employees/" + a.employee_id + "?tab=allowances' style='color:inherit;text-decoration:underline;'>" + a.employee_name + "</a></td>" +
+            "<td style='font-weight:800;'><a href='/hr/employee?id=" + a.employee_id + "&tab=allowances' style='color:inherit;text-decoration:underline;'>" + a.employee_name + "</a></td>" +
             "<td>" + (a.allowance_type || "—") + "</td>" +
             "<td>" + a.amount.toLocaleString() + "</td>" +
             "<td>" + (a.recurring ? "نعم" : "لا") + "</td>" +

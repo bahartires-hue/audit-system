@@ -505,7 +505,7 @@
           var tr = document.createElement("tr");
           var statusMap = {active:"🟢 نشطة", completed:"⚪ مكتملة", cancelled:"🔴 ملغاة"};
           tr.innerHTML =
-            "<td style='font-weight:800;'><a href='/hr/employees/" + a.employee_id + "?tab=advances' style='color:inherit;text-decoration:underline;'>" + a.employee_name + "</a></td>" +
+            "<td style='font-weight:800;'><a href='/hr/employee?id=" + a.employee_id + "&tab=advances' style='color:inherit;text-decoration:underline;'>" + a.employee_name + "</a></td>" +
             "<td>" + (a.date || "—") + "</td>" +
             "<td>" + a.amount.toLocaleString() + "</td>" +
             "<td>" + (a.reason || "—") + "</td>" +

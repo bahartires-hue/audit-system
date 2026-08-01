@@ -502,7 +502,7 @@
         function renderRow(c) {
           var tr = document.createElement("tr");
           tr.innerHTML =
-            "<td style='font-weight:800;'><a href='/hr/employees/" + c.employee_id + "?tab=commissions' style='color:inherit;text-decoration:underline;'>" + c.employee_name + "</a></td>" +
+            "<td style='font-weight:800;'><a href='/hr/employee?id=" + c.employee_id + "&tab=commissions' style='color:inherit;text-decoration:underline;'>" + c.employee_name + "</a></td>" +
             "<td>" + c.sales_amount.toLocaleString() + "</td>" +
             "<td>" + c.percentage + "%</td>" +
             "<td style='font-weight:800;'>" + c.commission_value.toLocaleString() + "</td>" +

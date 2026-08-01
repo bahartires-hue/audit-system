@@ -502,7 +502,7 @@
         function renderRow(d) {
           var tr = document.createElement("tr");
           tr.innerHTML =
-            "<td style='font-weight:800;'><a href='/hr/employees/" + d.employee_id + "?tab=deductions' style='color:inherit;text-decoration:underline;'>" + d.employee_name + "</a></td>" +
+            "<td style='font-weight:800;'><a href='/hr/employee?id=" + d.employee_id + "&tab=deductions' style='color:inherit;text-decoration:underline;'>" + d.employee_name + "</a></td>" +
             "<td>" + (d.deduction_type || "—") + "</td>" +
             "<td>" + d.amount.toLocaleString() + "</td>" +
             "<td>" + (d.reason || "—") + "</td>" +

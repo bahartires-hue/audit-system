@@ -513,7 +513,7 @@
         function renderRow(a) {
           var tr = document.createElement("tr");
           tr.innerHTML =
-            "<td style='font-weight:800;'><a href='/hr/employees/" + a.employee_id + "?tab=attendance' style='color:inherit;text-decoration:underline;'>" + a.employee_name + "</a></td>" +
+            "<td style='font-weight:800;'><a href='/hr/employee?id=" + a.employee_id + "&tab=attendance' style='color:inherit;text-decoration:underline;'>" + a.employee_name + "</a></td>" +
             "<td>" + a.date + "</td>" + "<td>" + (a.check_in || "—") + "</td>" + "<td>" + (a.check_out || "—") + "</td>" +
             "<td>" + a.late_minutes + "</td>" + "<td>" + a.overtime_minutes + "</td>" +
             "<td>" + (a.is_absent ? "🔴 غياب" : "🟢 حضور") + "</td>" + "<td></td>";

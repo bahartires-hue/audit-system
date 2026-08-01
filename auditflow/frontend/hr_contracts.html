@@ -504,7 +504,7 @@
           var endTxt = c.end_date ? (c.end_days_left != null && c.end_days_left < 0 ? c.end_date + " (منتهي)" : c.end_date) : "—";
           var fileCell = c.file_url ? ('<a href="' + c.file_url + '" target="_blank" style="color:var(--gold-soft);">📎 عرض/تحميل</a>') : "—";
           tr.innerHTML =
-            "<td style='font-weight:800;'><a href='/hr/employees/" + c.employee_id + "?tab=contract' style='color:inherit;text-decoration:underline;'>" + c.employee_name + "</a></td>" +
+            "<td style='font-weight:800;'><a href='/hr/employee?id=" + c.employee_id + "&tab=contract' style='color:inherit;text-decoration:underline;'>" + c.employee_name + "</a></td>" +
             "<td>" + (c.contract_type || "—") + "</td>" + "<td>" + (c.start_date || "—") + "</td>" + "<td>" + endTxt + "</td>" +
             "<td>" + c.salary.toLocaleString() + "</td>" +
             "<td>" + (c.status === "active" ? "🟢 ساري" : "⚪ منتهي") + "</td>" +
