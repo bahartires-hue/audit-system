@@ -434,7 +434,6 @@
 
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.9rem;flex-wrap:wrap;gap:8px;">
           <select id="flEmployee" style="padding:8px 12px;border-radius:10px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);min-width:220px;"><option value="">كل الموظفين</option></select>
-          <button type="button" class="op-btn-chip op-btn-chip--gold" id="addBtn">➕ عمولة جديدة</button>
         </div>
         <div class="op-shell-card" style="padding:0;overflow:auto;">
           <table class="op-admin-table" style="width:100%;">
@@ -442,19 +441,6 @@
             <tbody id="listBody"></tbody>
           </table>
           <div id="listEmpty" style="display:none;padding:2rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد عمولات مسجّلة</div>
-        </div>
-        <div class="op-tool-modal-overlay" id="addModal" style="display:none;">
-          <div class="op-tool-modal">
-            <div class="op-tool-modal-head"><div><h3>عمولة جديدة</h3></div><button type="button" id="modalClose">✕</button></div>
-            <div class="op-tool-field"><label>الموظف</label><select id="fEmployee"></select></div>
-            <div class="op-tool-field"><label>المبيعات</label><input type="number" id="fSales" step="0.01" /></div>
-            <div class="op-tool-field"><label>النسبة % (فارغ = نسبة الموظف الافتراضية)</label><input type="number" id="fPct" step="0.01" /></div>
-            <div class="op-tool-field"><label>التاريخ</label><input type="date" id="fDate" /></div>
-            <div class="op-tool-modal-actions">
-              <button type="button" class="op-tool-btn-secondary" id="modalCancel">إلغاء</button>
-              <button type="button" class="op-btn-chip op-btn-chip--gold" id="modalSave">حفظ</button>
-            </div>
-          </div>
         </div>
       </main>
     </div>
@@ -509,15 +495,14 @@
             var res = await apiGet("/api/hr/employees");
             _employeesCache = res.items || [];
             var flSel = document.getElementById("flEmployee");
-            var fSel = document.getElementById("fEmployee");
-            _employeesCache.forEach(function (e) { flSel.appendChild(new Option(e.name, e.id)); fSel.appendChild(new Option(e.name, e.id)); });
+            _employeesCache.forEach(function (e) { flSel.appendChild(new Option(e.name, e.id)); });
           } catch (e) {}
         }
 
         function renderRow(c) {
           var tr = document.createElement("tr");
           tr.innerHTML =
-            "<td style='font-weight:800;'>" + c.employee_name + "</td>" +
+            "<td style='font-weight:800;'><a href='/hr/employees/" + c.employee_id + "?tab=commissions' style='color:inherit;text-decoration:underline;'>" + c.employee_name + "</a></td>" +
             "<td>" + c.sales_amount.toLocaleString() + "</td>" +
             "<td>" + c.percentage + "%</td>" +
             "<td style='font-weight:800;'>" + c.commission_value.toLocaleString() + "</td>" +
@@ -549,37 +534,6 @@
         }
         document.getElementById("flEmployee").addEventListener("change", loadList);
 
-        document.getElementById("addBtn").addEventListener("click", function () {
-          document.getElementById("fEmployee").value = "";
-          document.getElementById("fSales").value = "";
-          document.getElementById("fPct").value = "";
-          document.getElementById("fDate").value = new Date().toISOString().slice(0,10);
-          document.getElementById("addModal").style.display = "flex";
-        });
-        document.getElementById("modalClose").addEventListener("click", function () { document.getElementById("addModal").style.display = "none"; });
-        document.getElementById("modalCancel").addEventListener("click", function () { document.getElementById("addModal").style.display = "none"; });
-        document.getElementById("addModal").addEventListener("click", function (ev) { if (ev.target === this) this.style.display = "none"; });
-
-        document.getElementById("modalSave").addEventListener("click", async function () {
-          var __saveBtn = this;
-          await guardedSave(__saveBtn, async function () {
-          var employee_id = document.getElementById("fEmployee").value;
-          var sales = parseFloat(document.getElementById("fSales").value || "0");
-          if (!employee_id || sales <= 0) { showToast("اختر الموظف وأدخل مبيعات صحيحة", "#dc2626"); return; }
-          var pctVal = document.getElementById("fPct").value;
-          try {
-            await apiPostJson("/api/hr/commissions", {
-              employee_id: employee_id, sales_amount: sales,
-              percentage: pctVal ? parseFloat(pctVal) : null, date: document.getElementById("fDate").value
-            });
-            showToast("تمت الإضافة ✔️", "#22c55e");
-            if (window.__markSaved) window.__markSaved();
-            document.getElementById("addModal").style.display = "none";
-            await loadList();
-          } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
-        
-          }, "جارٍ الحفظ ...");
-        });
 
         async function deleteItem(id) {
           if (!confirm("حذف هذه العمولة؟")) return;
@@ -589,7 +543,6 @@
 
         (async function () { await loadEmployeeOptions(); await loadList(); })();
     
-        initUnsavedGuard({ modals: ["addModal"] });
     </script>
 
   </body>

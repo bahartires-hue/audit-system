@@ -438,7 +438,6 @@
             <select id="flMonth" style="padding:8px 12px;border-radius:10px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);"></select>
             <input type="number" id="flYear" style="width:100px;padding:8px 12px;border-radius:10px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--input-text);" />
           </div>
-          <button type="button" class="op-btn-chip op-btn-chip--gold" id="addBtn">➕ تسجيل يوم جديد</button>
         </div>
         <div class="op-shell-card" style="padding:0;overflow:auto;">
           <table class="op-admin-table" style="width:100%;">
@@ -446,22 +445,6 @@
             <tbody id="listBody"></tbody>
           </table>
           <div id="listEmpty" style="display:none;padding:2rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد سجلات حضور</div>
-        </div>
-        <div class="op-tool-modal-overlay" id="addModal" style="display:none;">
-          <div class="op-tool-modal">
-            <div class="op-tool-modal-head"><div><h3>تسجيل حضور</h3></div><button type="button" id="modalClose">✕</button></div>
-            <div class="op-tool-field"><label>الموظف</label><select id="fEmployee"></select></div>
-            <div class="op-tool-field"><label>التاريخ</label><input type="date" id="fDate" /></div>
-            <div class="op-tool-field" style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="fAbsent" style="width:auto;" /><label style="margin:0;">غياب كامل اليوم</label></div>
-            <div class="op-tool-field"><label>وقت الدخول</label><input type="time" id="fCheckIn" /></div>
-            <div class="op-tool-field"><label>وقت الخروج</label><input type="time" id="fCheckOut" /></div>
-            <div class="op-tool-field"><label>دقائق التأخير</label><input type="number" id="fLate" value="0" /></div>
-            <div class="op-tool-field"><label>دقائق الإضافي</label><input type="number" id="fOvertime" value="0" /></div>
-            <div class="op-tool-modal-actions">
-              <button type="button" class="op-tool-btn-secondary" id="modalCancel">إلغاء</button>
-              <button type="button" class="op-btn-chip op-btn-chip--gold" id="modalSave">حفظ</button>
-            </div>
-          </div>
         </div>
       </main>
     </div>
@@ -517,8 +500,7 @@
             var res = await apiGet("/api/hr/employees");
             _employeesCache = res.items || [];
             var flSel = document.getElementById("flEmployee");
-            var fSel = document.getElementById("fEmployee");
-            _employeesCache.forEach(function (e) { flSel.appendChild(new Option(e.name, e.id)); fSel.appendChild(new Option(e.name, e.id)); });
+            _employeesCache.forEach(function (e) { flSel.appendChild(new Option(e.name, e.id)); });
           } catch (e) {}
         }
 
@@ -531,7 +513,7 @@
         function renderRow(a) {
           var tr = document.createElement("tr");
           tr.innerHTML =
-            "<td style='font-weight:800;'>" + a.employee_name + "</td>" +
+            "<td style='font-weight:800;'><a href='/hr/employees/" + a.employee_id + "?tab=attendance' style='color:inherit;text-decoration:underline;'>" + a.employee_name + "</a></td>" +
             "<td>" + a.date + "</td>" + "<td>" + (a.check_in || "—") + "</td>" + "<td>" + (a.check_out || "—") + "</td>" +
             "<td>" + a.late_minutes + "</td>" + "<td>" + a.overtime_minutes + "</td>" +
             "<td>" + (a.is_absent ? "🔴 غياب" : "🟢 حضور") + "</td>" + "<td></td>";
@@ -564,40 +546,6 @@
         document.getElementById("flMonth").addEventListener("change", loadList);
         document.getElementById("flYear").addEventListener("change", loadList);
 
-        document.getElementById("addBtn").addEventListener("click", function () {
-          document.getElementById("fEmployee").value = "";
-          document.getElementById("fDate").value = new Date().toISOString().slice(0,10);
-          document.getElementById("fAbsent").checked = false;
-          document.getElementById("fCheckIn").value = ""; document.getElementById("fCheckOut").value = "";
-          document.getElementById("fLate").value = "0"; document.getElementById("fOvertime").value = "0";
-          document.getElementById("addModal").style.display = "flex";
-        });
-        document.getElementById("modalClose").addEventListener("click", function () { document.getElementById("addModal").style.display = "none"; });
-        document.getElementById("modalCancel").addEventListener("click", function () { document.getElementById("addModal").style.display = "none"; });
-        document.getElementById("addModal").addEventListener("click", function (ev) { if (ev.target === this) this.style.display = "none"; });
-
-        document.getElementById("modalSave").addEventListener("click", async function () {
-          var __saveBtn = this;
-          await guardedSave(__saveBtn, async function () {
-          var employee_id = document.getElementById("fEmployee").value;
-          var date = document.getElementById("fDate").value;
-          if (!employee_id || !date) { showToast("اختر الموظف والتاريخ", "#dc2626"); return; }
-          try {
-            await apiPostJson("/api/hr/attendance", {
-              employee_id: employee_id, date: date,
-              check_in: document.getElementById("fCheckIn").value, check_out: document.getElementById("fCheckOut").value,
-              late_minutes: parseInt(document.getElementById("fLate").value || "0", 10),
-              overtime_minutes: parseInt(document.getElementById("fOvertime").value || "0", 10),
-              is_absent: document.getElementById("fAbsent").checked
-            });
-            showToast("تم الحفظ ✔️", "#22c55e");
-            if (window.__markSaved) window.__markSaved();
-            document.getElementById("addModal").style.display = "none";
-            await loadList();
-          } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
-        
-          }, "جارٍ الحفظ ...");
-        });
 
         async function deleteItem(id) {
           if (!confirm("حذف هذا السجل؟")) return;
@@ -607,7 +555,6 @@
 
         (async function () { await loadEmployeeOptions(); await loadList(); })();
     
-        initUnsavedGuard({ modals: ["addModal"] });
     </script>
 
   </body>
