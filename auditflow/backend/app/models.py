@@ -247,6 +247,8 @@ class Item(Base):
     last_cost = Column(Float, nullable=False, default=0.0)
     notes = Column(Text, nullable=True)
     image_url = Column(String, nullable=True)
+    unit_id = Column(String, ForeignKey("units.id"), nullable=True, index=True)
+    is_price_tax_inclusive = Column(Integer, nullable=False, default=0, index=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
 

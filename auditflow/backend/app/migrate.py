@@ -32,6 +32,9 @@ def _migrate_postgresql() -> None:
         "ALTER TABLE items ADD COLUMN IF NOT EXISTS is_taxable INTEGER DEFAULT 1",
         "ALTER TABLE items ADD COLUMN IF NOT EXISTS tax_rate DOUBLE PRECISION DEFAULT 0",
         "ALTER TABLE items ADD COLUMN IF NOT EXISTS is_active INTEGER DEFAULT 1",
+        # items (finance module v2)
+        "ALTER TABLE items ADD COLUMN IF NOT EXISTS unit_id VARCHAR",
+        "ALTER TABLE items ADD COLUMN IF NOT EXISTS is_price_tax_inclusive INTEGER DEFAULT 0",
         # purchases
         "ALTER TABLE purchases ADD COLUMN IF NOT EXISTS branch_id VARCHAR",
         "ALTER TABLE purchases ADD COLUMN IF NOT EXISTS supplier_id VARCHAR",
@@ -200,6 +203,10 @@ def run_migrations() -> None:
                 conn.execute(text("ALTER TABLE items ADD COLUMN tax_rate REAL DEFAULT 0"))
             if "is_active" not in item_cols:
                 conn.execute(text("ALTER TABLE items ADD COLUMN is_active INTEGER DEFAULT 1"))
+            if "unit_id" not in item_cols:
+                conn.execute(text("ALTER TABLE items ADD COLUMN unit_id VARCHAR"))
+            if "is_price_tax_inclusive" not in item_cols:
+                conn.execute(text("ALTER TABLE items ADD COLUMN is_price_tax_inclusive INTEGER DEFAULT 0"))
 
         r_purchase = conn.execute(text("PRAGMA table_info(purchases)"))
         purchase_cols = [row[1] for row in r_purchase.fetchall()]
