@@ -440,6 +440,32 @@
           <a href="/inventory-management" style="padding:7px 14px;border-radius:999px;font-weight:800;font-size:0.85rem;background:linear-gradient(270deg, #8a6a1f 0%, var(--gold) 45%, var(--gold-soft) 100%);color:#1a1406;border:none;">🧾 نقطة البيع</a>
           <a href="/trade/reports" style="padding:7px 14px;border-radius:999px;font-weight:800;font-size:0.85rem;border:1px solid var(--gold-dim);color:var(--text-heading);">📊 التقارير</a>
         </div>
+        
+        <style>
+          @media (max-width: 900px) { .dash-lists-grid { grid-template-columns: 1fr !important; } }
+          .dash-mini-row { display:flex; justify-content:space-between; gap:8px; padding:6px 8px; border-radius:8px; font-size:0.82rem; margin-bottom:4px; background:var(--surface-soft); }
+        </style>
+        <div class="op-shell-card" style="padding:1.25rem;margin-bottom:1rem;" id="finDashboard">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:1rem;flex-wrap:wrap;">
+            <h2 style="font-weight:800;color:var(--text-heading);font-size:1.05rem;">📊 نظرة عامة على المالية</h2>
+            <button type="button" id="dashRefreshBtn" class="op-icon-btn" title="تحديث">🔄</button>
+          </div>
+          <div class="op-stats" id="dashStats"></div>
+          <div class="dash-lists-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-top:1.25rem;">
+            <div>
+              <div style="font-weight:800;margin-bottom:6px;color:var(--text-heading);">⚠️ أصناف منخفضة / نافذة</div>
+              <div id="dashLowStock"></div>
+            </div>
+            <div>
+              <div style="font-weight:800;margin-bottom:6px;color:var(--text-heading);">🏆 الأكثر مبيعاً</div>
+              <div id="dashTopItems"></div>
+            </div>
+            <div>
+              <div style="font-weight:800;margin-bottom:6px;color:var(--text-heading);">🧾 آخر الفواتير</div>
+              <div id="dashLatestInvoices"></div>
+            </div>
+          </div>
+        </div>
         <div class="op-content-panel">
           <div class="op-hero" style="margin-bottom:1rem;">
             <h1>🧾 <b>نقطة البيع</b></h1>
@@ -1022,11 +1048,75 @@
         var resumeOverlay = document.getElementById("posResumeModal");
         if (resumeOverlay) resumeOverlay.addEventListener("click", function (ev) { if (ev.target === resumeOverlay) closeResumeModal(); });
 
+
+        function statusColor(qty, minQty) {
+          if (qty <= 0) return "#ef4444";
+          if (qty <= minQty) return "#f59e0b";
+          return "#10b981";
+        }
+
+        function renderDashStats(t) {
+          var cards = [
+            { icon: "📦", label: "عدد الأصناف", value: esc(t.item_count) },
+            { icon: "🧮", label: "إجمالي الكمية", value: esc(t.inventory_qty) },
+            { icon: "💰", label: "قيمة المخزون", value: money(t.inventory_value) },
+            { icon: "🧾", label: "عدد الفواتير", value: esc(t.invoice_count) },
+            { icon: "📈", label: "إجمالي المبيعات", value: money(t.sales) },
+            { icon: "📉", label: "إجمالي المشتريات", value: money(t.purchases) },
+            { icon: "✅", label: "الربح", value: money(t.profit) },
+            { icon: "🧾", label: "الضريبة المستحقة", value: money(t.tax_due) },
+          ];
+          document.getElementById("dashStats").innerHTML = cards.map(function (c) {
+            return '<div class="op-stat-card"><div class="op-stat-icon">' + c.icon + '</div><div class="op-stat-value">' + c.value + '</div><div class="op-stat-label">' + c.label + '</div></div>';
+          }).join("");
+        }
+
+        function renderDashLowStock(list) {
+          var host = document.getElementById("dashLowStock");
+          if (!list || !list.length) { host.innerHTML = '<div class="opacity-60 text-sm">لا توجد أصناف منخفضة</div>'; return; }
+          host.innerHTML = list.map(function (x) {
+            return '<div class="dash-mini-row"><span>' + esc(x.name) + '</span><span style="font-weight:800;color:' + statusColor(x.quantity, x.min_qty) + ';">' + esc(x.quantity) + '</span></div>';
+          }).join("");
+        }
+
+        function renderDashTopItems(list) {
+          var host = document.getElementById("dashTopItems");
+          if (!list || !list.length) { host.innerHTML = '<div class="opacity-60 text-sm">لا توجد مبيعات بعد</div>'; return; }
+          host.innerHTML = list.map(function (x) {
+            return '<div class="dash-mini-row"><span>' + esc(x.item) + '</span><span style="font-weight:800;">' + money(x.sales) + '</span></div>';
+          }).join("");
+        }
+
+        function renderDashLatestInvoices(list) {
+          var host = document.getElementById("dashLatestInvoices");
+          if (!list || !list.length) { host.innerHTML = '<div class="opacity-60 text-sm">لا توجد فواتير بعد</div>'; return; }
+          host.innerHTML = list.map(function (x) {
+            return '<div class="dash-mini-row"><span>' + esc(x.invoice_no) + ' — ' + esc(x.customer_name) + '</span><span style="font-weight:800;">' + money(x.total_amount) + '</span></div>';
+          }).join("");
+        }
+
+        async function loadDashboardSummary() {
+          try {
+            var d = await apiGet("/api/trade/dashboard-summary");
+            renderDashStats(d.totals || {});
+            renderDashLowStock(d.low_stock_items || []);
+            renderDashTopItems(d.top_items || []);
+            renderDashLatestInvoices(d.latest_invoices || []);
+          } catch (e) {
+            var host = document.getElementById("dashStats");
+            if (host) host.innerHTML = '<div class="opacity-60 text-sm">تعذر تحميل بيانات لوحة المعلومات</div>';
+          }
+        }
+        var dashRefreshBtnEl = document.getElementById("dashRefreshBtn");
+        if (dashRefreshBtnEl) dashRefreshBtnEl.addEventListener("click", loadDashboardSummary);
+
         (async function init() {
           await loadCompanyProfile();
           await loadPosSettings();
           resetInvoiceForm();
           setInterval(refreshDateTime, 30000);
+          loadDashboardSummary();
+          setInterval(loadDashboardSummary, 60000);
         })();
       })();
     </script>

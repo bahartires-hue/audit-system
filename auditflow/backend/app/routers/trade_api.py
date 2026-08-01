@@ -1974,18 +1974,76 @@ def dashboard_summary(request: Request, date_from: str = Query(""), date_to: str
 
         total_sales = round(sum(float(x.total_amount or 0.0) for x in sales_rows), 2)
         total_purchases = round(sum(float(x.total_amount or 0.0) for x in purchase_rows), 2)
+        sales_tax = round(sum(float(x.tax_amount or 0.0) for x in sales_rows), 2)
+        purchases_tax = round(sum(float(x.tax_amount or 0.0) for x in purchase_rows), 2)
+        tax_due = round(sales_tax - purchases_tax, 2)
         total_inventory_value = round(
             sum(round(float(x.quantity or 0.0), 4) * round(float(x.last_cost or 0.0), 4) for x in items),
             2,
         )
         total_items_qty = round(sum(float(x.quantity or 0.0) for x in items), 4)
+
+        low_stock_items = []
+        out_of_stock_count = 0
+        for x in items:
+            qty = round(float(x.quantity or 0.0), 4)
+            min_qty = round(float(x.min_qty or 0.0), 4)
+            if qty <= 0:
+                out_of_stock_count += 1
+            if qty <= min_qty:
+                low_stock_items.append({"id": x.id, "code": x.code, "name": x.name, "quantity": qty, "min_qty": min_qty})
+
+        sale_ids = [s.id for s in sales_rows]
+        profit_total = 0.0
+        if sale_ids:
+            lines = db.query(SaleLine).filter(SaleLine.sale_id.in_(sale_ids)).all()
+            profit_total = round(sum(float(ln.profit or 0.0) for ln in lines), 2)
+
+        top_q = (
+            db.query(Sale, SaleLine, Item)
+            .join(SaleLine, SaleLine.sale_id == Sale.id)
+            .join(Item, Item.id == SaleLine.item_id)
+            .filter(Sale.user_id == user.id, Item.user_id == user.id)
+        )
+        if df:
+            top_q = top_q.filter(Sale.sale_date >= df)
+        if dt_to:
+            top_q = top_q.filter(Sale.sale_date <= dt_to)
+        agg: dict[str, dict[str, Any]] = {}
+        for _, ln, item in top_q.all():
+            cur = agg.setdefault(item.id, {"item": item.name, "code": item.code, "qty": 0.0, "sales": 0.0})
+            qty = round(float(ln.qty or 0.0), 4)
+            cur["qty"] = round(float(cur["qty"]) + qty, 4)
+            cur["sales"] = round(float(cur["sales"]) + round(float(ln.sale_price or 0.0) * qty, 2), 2)
+        top_items = sorted(agg.values(), key=lambda x: (float(x["qty"]), float(x["sales"])), reverse=True)[:5]
+
+        latest_invoices = [
+            {
+                "id": s.id,
+                "invoice_no": s.invoice_no,
+                "customer_name": s.customer_name,
+                "date": s.sale_date.strftime("%Y-%m-%d") if s.sale_date else "",
+                "total_amount": round(float(s.total_amount or 0.0), 2),
+            }
+            for s in sorted(sales_rows, key=lambda x: x.created_at or x.sale_date, reverse=True)[:5]
+        ]
+
         return {
             "totals": {
                 "sales": total_sales,
                 "purchases": total_purchases,
                 "inventory_value": total_inventory_value,
                 "inventory_qty": total_items_qty,
-            }
+                "item_count": len(items),
+                "invoice_count": len(sales_rows),
+                "profit": profit_total,
+                "tax_due": tax_due,
+                "low_stock_count": len(low_stock_items),
+                "out_of_stock_count": out_of_stock_count,
+            },
+            "low_stock_items": low_stock_items[:10],
+            "top_items": top_items,
+            "latest_invoices": latest_invoices,
         }
     finally:
         db.close()
