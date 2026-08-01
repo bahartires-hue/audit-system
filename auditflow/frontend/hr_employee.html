@@ -516,7 +516,7 @@
             </div>
             <div class="op-shell-card" style="padding:0;overflow:auto;">
               <table class="op-admin-table" style="width:100%;">
-                <thead><tr><th>الشهر</th><th>السنة</th><th>الأساسي</th><th>البدلات</th><th>الاستقطاعات</th><th>الصافي</th><th>الحالة</th></tr></thead>
+                <thead><tr><th>الشهر</th><th>السنة</th><th>الأساسي</th><th>البدلات</th><th>الاستقطاعات</th><th>الصافي</th><th>الحالة</th><th>إجراءات</th></tr></thead>
                 <tbody id="payrollBody"></tbody>
               </table>
               <div id="payrollEmpty" style="display:none;padding:1.5rem;text-align:center;color:var(--text-muted);font-weight:700;">لا يوجد سجل رواتب لهذا الموظف</div>
@@ -706,6 +706,19 @@
           <div class="op-tool-modal">
             <div class="op-tool-modal-head"><div><h3>سجل التجديد</h3></div><button type="button" id="historyModalClose">✕</button></div>
             <div id="historyList" style="max-height:340px;overflow:auto;"></div>
+          </div>
+        </div>
+
+        <div class="op-tool-modal-overlay" id="payslipModal" style="display:none;">
+          <div class="op-tool-modal">
+            <div class="op-tool-modal-head"><div><h3>قسيمة الراتب</h3></div><button type="button" id="payslipModalClose">✕</button></div>
+            <div id="payslipList" style="max-height:360px;overflow:auto;margin-bottom:0.75rem;"></div>
+            <div class="op-tool-modal-actions" style="display:flex;flex-wrap:wrap;gap:0.5rem;">
+              <button type="button" class="op-btn-chip op-btn-chip--gold" id="payslipPdfBtn">تنزيل PDF</button>
+              <button type="button" class="op-btn-chip op-btn-chip--gold" id="payslipExcelBtn">تنزيل Excel</button>
+              <button type="button" class="op-btn-chip" id="payslipPrintBtn">طباعة</button>
+              <button type="button" class="op-btn-chip" id="payslipRecalcBtn" style="display:none;">إعادة حساب</button>
+            </div>
           </div>
         </div>
       </main>
@@ -928,12 +941,104 @@
               var tr = document.createElement("tr");
               tr.innerHTML = "<td>" + MONTHS[p.month-1] + "</td><td>" + p.year + "</td><td>" + p.base_salary.toLocaleString() + "</td>" +
                 "<td>" + p.total_allowances.toLocaleString() + "</td><td>" + p.total_deductions.toLocaleString() + "</td>" +
-                "<td style='font-weight:800;'>" + p.net_salary.toLocaleString() + "</td><td>" + (statusMap[p.status] || p.status) + "</td>";
+                "<td style='font-weight:800;'>" + p.net_salary.toLocaleString() + "</td><td>" + (statusMap[p.status] || p.status) + "</td>" +
+                "<td><button type='button' class='op-btn-chip' style='padding:4px 10px;font-size:0.75rem;' data-open-payslip='" + p.id + "'>فتح</button></td>";
               body.appendChild(tr);
             });
             document.getElementById("payrollEmpty").style.display = items.length ? "none" : "block";
+            body.querySelectorAll("[data-open-payslip]").forEach(function (btn) {
+              btn.addEventListener("click", function () { openPayslip(btn.getAttribute("data-open-payslip")); });
+            });
           } catch (e) { showToast(e.message || "تعذر التحميل", "#dc2626"); }
         }
+
+        var _currentPayslipId = null;
+        var _currentPayslipStatus = null;
+
+        async function openPayslip(payrollId) {
+          try {
+            var p = await apiGet("/api/hr/payrolls/" + encodeURIComponent(payrollId));
+            _currentPayslipId = p.id;
+            _currentPayslipStatus = p.status;
+            var statusMap = {unpaid:"🟡 غير مدفوع", paid:"🟢 مدفوع", cancelled:"⚪ ملغى"};
+            var rows = [
+              ["الشهر", MONTHS[p.month-1] + " " + p.year],
+              ["الراتب الأساسي", p.base_salary.toLocaleString()],
+            ];
+            (p.allowances || []).forEach(function (a) { rows.push(["بدل: " + a.label, a.amount.toLocaleString()]); });
+            rows.push(["إجمالي البدلات", p.total_allowances.toLocaleString()]);
+            rows.push(["الإجمالي قبل الضريبة", p.gross_before_tax.toLocaleString()]);
+            if (p.tax_amount) rows.push(["الضريبة", p.tax_amount.toLocaleString()]);
+            (p.deductions || []).forEach(function (d) { rows.push(["استقطاع: " + d.label, d.amount.toLocaleString()]); });
+            rows.push(["إجمالي الاستقطاعات", p.total_deductions.toLocaleString()]);
+            rows.push(["صافي الراتب", p.net_salary.toLocaleString()]);
+            rows.push(["الحالة", statusMap[p.status] || p.status]);
+            if (p.paid_at) rows.push(["تاريخ الصرف", p.paid_at]);
+            if (p.notes) rows.push(["ملاحظات", p.notes]);
+            var html = rows.map(function (r) {
+              return "<div style='display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.08);'>" +
+                "<span style='color:var(--text-muted)'>" + r[0] + "</span><span style='font-weight:700;'>" + r[1] + "</span></div>";
+            }).join("");
+            document.getElementById("payslipList").innerHTML = html;
+            document.getElementById("payslipRecalcBtn").style.display = (p.status === "unpaid") ? "inline-block" : "none";
+            document.getElementById("payslipModal").style.display = "flex";
+          } catch (e) { showToast(e.message || "تعذر فتح القسيمة", "#dc2626"); }
+        }
+
+        function parseFilenameFromDisposition(cd, fallback) {
+          if (!cd) return fallback;
+          var m = /filename\*=UTF-8''([^;]+)/i.exec(cd) || /filename="?([^";]+)"?/i.exec(cd);
+          if (!m) return fallback;
+          try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
+        }
+
+        async function fetchPayslipBlob() {
+          syncCsrfFromCookie();
+          var res = await fetch("/api/hr/payrolls/" + encodeURIComponent(_currentPayslipId) + "/payslip/pdf", { method: "GET", credentials: "include" });
+          if (!res.ok) throw new Error(await readErrorMessage(res));
+          return res.blob();
+        }
+
+        async function downloadPayslip(kind) {
+          try {
+            syncCsrfFromCookie();
+            var url = "/api/hr/payrolls/" + encodeURIComponent(_currentPayslipId) + "/payslip/" + kind;
+            var res = await fetch(url, { method: "GET", credentials: "include" });
+            if (!res.ok) throw new Error(await readErrorMessage(res));
+            var blob = await res.blob();
+            var filename = parseFilenameFromDisposition(res.headers.get("Content-Disposition"), "قسيمة_راتب." + (kind === "pdf" ? "pdf" : "xlsx"));
+            var a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            URL.revokeObjectURL(a.href);
+            a.remove();
+          } catch (e) { showToast(e.message || "تعذر التنزيل", "#dc2626"); }
+        }
+
+        document.getElementById("payslipPdfBtn").addEventListener("click", function () { downloadPayslip("pdf"); });
+        document.getElementById("payslipExcelBtn").addEventListener("click", function () { downloadPayslip("excel"); });
+        document.getElementById("payslipPrintBtn").addEventListener("click", async function () {
+          try {
+            var blob = await fetchPayslipBlob();
+            var win = window.open(URL.createObjectURL(blob), "_blank");
+            if (!win) showToast("يرجى السماح بالنوافذ المنبثقة للطباعة", "#dc2626");
+          } catch (e) { showToast(e.message || "تعذر تجهيز الطباعة", "#dc2626"); }
+        });
+        document.getElementById("payslipRecalcBtn").addEventListener("click", async function () {
+          if (!confirm("سيتم إعادة بناء هذا المسير بالكامل من أحدث بيانات السلف/الاستقطاعات/البدلات الحالية. متابعة؟")) return;
+          var btn = this;
+          await guardedSave(btn, async function () {
+            try {
+              await apiPostJson("/api/hr/payrolls/" + encodeURIComponent(_currentPayslipId) + "/recalculate", {});
+              showToast("تمت إعادة الحساب ✔️", "#22c55e");
+              document.getElementById("payslipModal").style.display = "none";
+              await loadPayrollTab();
+            } catch (e) { showToast(e.message || "تعذر إعادة الحساب", "#dc2626"); }
+          }, "جارٍ إعادة الحساب ...");
+        });
+        document.getElementById("payslipModalClose").addEventListener("click", function () { document.getElementById("payslipModal").style.display = "none"; });
 
         async function loadAdvancesTab() {
           try {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import io
+import json
 import os as _os
 import uuid
 from urllib.parse import quote as _quote
@@ -1898,6 +1899,141 @@ def get_payroll(payroll_id: str, request: Request):
         db.close()
 
 
+def _build_payroll_record(db, user, employee, month: int, year: int, base_salary_override, extra_allowances: list, extra_deductions: list, notes: str):
+    """يبني سجل راتب فعليًا من البيانات الحقيقية الحالية في القاعدة (بدون commit) —
+    نفس منطق الحساب يُستخدم في الإنشاء وفي إعادة الحساب لاحقًا، بمصدر واحد للحقيقة
+    لعملية البناء نفسها (لا يوجد منطقان مختلفان قد يتعارضان)."""
+    base_salary = base_salary_override if base_salary_override is not None else (employee.basic_salary or 0.0)
+    daily_rate = (base_salary / 30.0) if base_salary else 0.0
+
+    allow_lines = []
+    ded_lines = []
+
+    # 1) البدلات (متكررة كل شهر + مرة واحدة غير مطبّقة)
+    allowances = db.query(AllowanceRecord).filter(
+        AllowanceRecord.user_id == user.id, AllowanceRecord.employee_id == employee.id,
+    ).filter((AllowanceRecord.recurring == 1) | (AllowanceRecord.applied == 0)).all()
+    consumed_allowance_ids = []
+    for a in allowances:
+        allow_lines.append((a.allowance_type or "بدل", a.amount))
+        if not a.recurring:
+            consumed_allowance_ids.append(a.id)
+
+    # 2) العمولات غير المطبّقة
+    commissions = db.query(CommissionRecord).filter(
+        CommissionRecord.user_id == user.id, CommissionRecord.employee_id == employee.id, CommissionRecord.applied == 0,
+    ).all()
+    for c in commissions:
+        allow_lines.append((f"عمولة ({c.percentage}% من {c.sales_amount})", c.commission_value))
+
+    # 3) الاستقطاعات غير المطبّقة
+    deductions = db.query(DeductionRecord).filter(
+        DeductionRecord.user_id == user.id, DeductionRecord.employee_id == employee.id, DeductionRecord.applied == 0,
+    ).all()
+    for d in deductions:
+        ded_lines.append((d.deduction_type or "استقطاع", d.amount))
+
+    # 4) السلف السارية — خصم قسط واحد تلقائياً
+    advances = db.query(Advance).filter(
+        Advance.user_id == user.id, Advance.employee_id == employee.id, Advance.status == "active",
+    ).all()
+    for adv in advances:
+        installment = min(adv.installment_amount, adv.remaining_amount)
+        if installment > 0:
+            ded_lines.append((f"قسط سلفة بتاريخ {_fmt_date(adv.date)}", installment))
+
+    # 5) الغياب من سجل الحضور لنفس الشهر/السنة
+    attendance_rows = db.query(Attendance).filter(
+        Attendance.user_id == user.id, Attendance.employee_id == employee.id, Attendance.is_absent == 1,
+    ).all()
+    absent_days = sum(1 for a in attendance_rows if a.date and a.date.month == month and a.date.year == year)
+    if absent_days and daily_rate:
+        ded_lines.append((f"خصم غياب ({absent_days} يوم)", round(daily_rate * absent_days, 2)))
+
+    # 6) الإجازات غير المدفوعة المقبولة ضمن نفس الشهر
+    leaves = db.query(LeaveRequest).filter(
+        LeaveRequest.user_id == user.id, LeaveRequest.employee_id == employee.id,
+        LeaveRequest.status == "accepted", LeaveRequest.paid == 0, LeaveRequest.applied == 0,
+    ).all()
+    consumed_leave_ids = []
+    for lv in leaves:
+        in_month = (lv.start_date and lv.start_date.month == month and lv.start_date.year == year) or \
+                   (lv.end_date and lv.end_date.month == month and lv.end_date.year == year)
+        if in_month and daily_rate:
+            ded_lines.append((f"خصم إجازة غير مدفوعة ({lv.days_count} يوم)", round(daily_rate * lv.days_count, 2)))
+            consumed_leave_ids.append(lv.id)
+
+    # 7) السحبيات المعلّقة — تُخصم بالكامل من راتب الشهر القادم
+    withdrawals = db.query(WithdrawalRecord).filter(
+        WithdrawalRecord.user_id == user.id, WithdrawalRecord.employee_id == employee.id, WithdrawalRecord.status == "pending",
+    ).all()
+    for w in withdrawals:
+        ded_lines.append((f"سحبية بتاريخ {_fmt_date(w.date)}", w.amount))
+
+    # 8) بنود يدوية إضافية من المستخدم
+    for item in extra_allowances:
+        allow_lines.append((item["label"], item["amount"]))
+    for item in extra_deductions:
+        ded_lines.append((item["label"], item["amount"]))
+
+    total_allowances = round(sum(x[1] for x in allow_lines), 2)
+    total_deductions_no_advance = round(sum(x[1] for x in ded_lines), 2)
+    gross_before_tax = round(base_salary + total_allowances, 2)
+
+    settings = _get_hr_settings(db)
+    tax_amount = round(gross_before_tax * (settings.get("tax_percentage") or 0) / 100.0, 2) if settings.get("tax_enabled") else 0.0
+
+    net_salary = round(gross_before_tax - tax_amount - total_deductions_no_advance, 2)
+
+    payroll = Payroll(
+        id=uuid.uuid4().hex, user_id=user.id, employee_id=employee.id,
+        month=month, year=year, base_salary=base_salary,
+        total_allowances=total_allowances, total_deductions=total_deductions_no_advance,
+        gross_before_tax=gross_before_tax, tax_amount=tax_amount, net_salary=net_salary,
+        status="unpaid", notes=(notes or "").strip() or None,
+        extra_allowances_json=json.dumps(extra_allowances, ensure_ascii=False) if extra_allowances else None,
+        extra_deductions_json=json.dumps(extra_deductions, ensure_ascii=False) if extra_deductions else None,
+    )
+    db.add(payroll)
+    db.flush()
+
+    for label, amount in allow_lines:
+        db.add(PayrollAllowance(payroll_id=payroll.id, label=label, amount=amount))
+    for label, amount in ded_lines:
+        db.add(PayrollDeduction(payroll_id=payroll.id, label=label, amount=amount))
+
+    # تحديث حالة السلف/الاستقطاعات/العمولات/البدلات/الإجازات المستهلكة
+    for adv in advances:
+        installment = min(adv.installment_amount, adv.remaining_amount)
+        if installment > 0:
+            adv.remaining_amount = round(adv.remaining_amount - installment, 2)
+            if adv.remaining_amount <= 0.009:
+                adv.remaining_amount = 0.0
+                adv.status = "completed"
+    for d in deductions:
+        d.applied = 1
+        d.payroll_id = payroll.id
+    for c in commissions:
+        c.applied = 1
+        c.payroll_id = payroll.id
+    for aid in consumed_allowance_ids:
+        a = db.query(AllowanceRecord).get(aid)
+        if a:
+            a.applied = 1
+            a.payroll_id = payroll.id
+    for lid in consumed_leave_ids:
+        lv = db.query(LeaveRequest).get(lid)
+        if lv:
+            lv.applied = 1
+            lv.payroll_id = payroll.id
+    for w in withdrawals:
+        w.status = "settled"
+        w.applied = 1
+        w.payroll_id = payroll.id
+
+    return payroll
+
+
 @router.post("/payrolls")
 def create_payroll(request: Request, body: PayrollCreate = Body(...)):
     db = SessionLocal()
@@ -1914,135 +2050,53 @@ def create_payroll(request: Request, body: PayrollCreate = Body(...)):
         if existing:
             raise HTTPException(400, "يوجد بالفعل راتب لهذا الموظف لنفس الشهر والسنة")
 
-        base_salary = body.base_salary if body.base_salary is not None else (employee.basic_salary or 0.0)
-        daily_rate = (base_salary / 30.0) if base_salary else 0.0
-
-        allow_lines = []
-        ded_lines = []
-
-        # 1) البدلات (متكررة كل شهر + مرة واحدة غير مطبّقة)
-        allowances = db.query(AllowanceRecord).filter(
-            AllowanceRecord.user_id == user.id, AllowanceRecord.employee_id == body.employee_id,
-        ).filter((AllowanceRecord.recurring == 1) | (AllowanceRecord.applied == 0)).all()
-        consumed_allowance_ids = []
-        for a in allowances:
-            allow_lines.append((a.allowance_type or "بدل", a.amount))
-            if not a.recurring:
-                consumed_allowance_ids.append(a.id)
-
-        # 2) العمولات غير المطبّقة
-        commissions = db.query(CommissionRecord).filter(
-            CommissionRecord.user_id == user.id, CommissionRecord.employee_id == body.employee_id, CommissionRecord.applied == 0,
-        ).all()
-        for c in commissions:
-            allow_lines.append((f"عمولة ({c.percentage}% من {c.sales_amount})", c.commission_value))
-
-        # 3) الاستقطاعات غير المطبّقة
-        deductions = db.query(DeductionRecord).filter(
-            DeductionRecord.user_id == user.id, DeductionRecord.employee_id == body.employee_id, DeductionRecord.applied == 0,
-        ).all()
-        for d in deductions:
-            ded_lines.append((d.deduction_type or "استقطاع", d.amount))
-
-        # 4) السلف السارية — خصم قسط واحد تلقائياً
-        advances = db.query(Advance).filter(
-            Advance.user_id == user.id, Advance.employee_id == body.employee_id, Advance.status == "active",
-        ).all()
-        for adv in advances:
-            installment = min(adv.installment_amount, adv.remaining_amount)
-            if installment > 0:
-                ded_lines.append((f"قسط سلفة بتاريخ {_fmt_date(adv.date)}", installment))
-
-        # 5) الغياب من سجل الحضور لنفس الشهر/السنة
-        attendance_rows = db.query(Attendance).filter(
-            Attendance.user_id == user.id, Attendance.employee_id == body.employee_id, Attendance.is_absent == 1,
-        ).all()
-        absent_days = sum(1 for a in attendance_rows if a.date and a.date.month == body.month and a.date.year == body.year)
-        if absent_days and daily_rate:
-            ded_lines.append((f"خصم غياب ({absent_days} يوم)", round(daily_rate * absent_days, 2)))
-
-        # 6) الإجازات غير المدفوعة المقبولة ضمن نفس الشهر
-        leaves = db.query(LeaveRequest).filter(
-            LeaveRequest.user_id == user.id, LeaveRequest.employee_id == body.employee_id,
-            LeaveRequest.status == "accepted", LeaveRequest.paid == 0, LeaveRequest.applied == 0,
-        ).all()
-        consumed_leave_ids = []
-        for lv in leaves:
-            in_month = (lv.start_date and lv.start_date.month == body.month and lv.start_date.year == body.year) or \
-                       (lv.end_date and lv.end_date.month == body.month and lv.end_date.year == body.year)
-            if in_month and daily_rate:
-                ded_lines.append((f"خصم إجازة غير مدفوعة ({lv.days_count} يوم)", round(daily_rate * lv.days_count, 2)))
-                consumed_leave_ids.append(lv.id)
-
-        # 7) السحبيات المعلّقة — تُخصم بالكامل من راتب الشهر القادم
-        withdrawals = db.query(WithdrawalRecord).filter(
-            WithdrawalRecord.user_id == user.id, WithdrawalRecord.employee_id == body.employee_id, WithdrawalRecord.status == "pending",
-        ).all()
-        for w in withdrawals:
-            ded_lines.append((f"سحبية بتاريخ {_fmt_date(w.date)}", w.amount))
-
-        # 8) بنود يدوية إضافية من المستخدم
-        for item in body.extra_allowances:
-            allow_lines.append((item.label, item.amount))
-        for item in body.extra_deductions:
-            ded_lines.append((item.label, item.amount))
-
-        total_allowances = round(sum(x[1] for x in allow_lines), 2)
-        total_deductions_no_advance = round(sum(x[1] for x in ded_lines), 2)
-        gross_before_tax = round(base_salary + total_allowances, 2)
-
-        settings = _get_hr_settings(db)
-        tax_amount = round(gross_before_tax * (settings.get("tax_percentage") or 0) / 100.0, 2) if settings.get("tax_enabled") else 0.0
-
-        net_salary = round(gross_before_tax - tax_amount - total_deductions_no_advance, 2)
-
-        payroll = Payroll(
-            id=uuid.uuid4().hex, user_id=user.id, employee_id=body.employee_id,
-            month=body.month, year=body.year, base_salary=base_salary,
-            total_allowances=total_allowances, total_deductions=total_deductions_no_advance,
-            gross_before_tax=gross_before_tax, tax_amount=tax_amount, net_salary=net_salary,
-            status="unpaid", notes=(body.notes or "").strip() or None,
+        extra_allowances = [{"label": i.label, "amount": i.amount} for i in body.extra_allowances]
+        extra_deductions = [{"label": i.label, "amount": i.amount} for i in body.extra_deductions]
+        payroll = _build_payroll_record(
+            db, user, employee, body.month, body.year, body.base_salary,
+            extra_allowances, extra_deductions, body.notes,
         )
-        db.add(payroll)
-        db.flush()
-
-        for label, amount in allow_lines:
-            db.add(PayrollAllowance(payroll_id=payroll.id, label=label, amount=amount))
-        for label, amount in ded_lines:
-            db.add(PayrollDeduction(payroll_id=payroll.id, label=label, amount=amount))
-
-        # تحديث حالة السلف/الاستقطاعات/العمولات/البدلات/الإجازات المستهلكة
-        for adv in advances:
-            installment = min(adv.installment_amount, adv.remaining_amount)
-            if installment > 0:
-                adv.remaining_amount = round(adv.remaining_amount - installment, 2)
-                if adv.remaining_amount <= 0.009:
-                    adv.remaining_amount = 0.0
-                    adv.status = "completed"
-        for d in deductions:
-            d.applied = 1
-            d.payroll_id = payroll.id
-        for c in commissions:
-            c.applied = 1
-            c.payroll_id = payroll.id
-        for aid in consumed_allowance_ids:
-            a = db.query(AllowanceRecord).get(aid)
-            if a:
-                a.applied = 1
-                a.payroll_id = payroll.id
-        for lid in consumed_leave_ids:
-            lv = db.query(LeaveRequest).get(lid)
-            if lv:
-                lv.applied = 1
-                lv.payroll_id = payroll.id
-        for w in withdrawals:
-            w.status = "settled"
-            w.applied = 1
-            w.payroll_id = payroll.id
-
         db.commit()
         log_event(db, "hr.payroll.create", user.id, {"payroll_id": payroll.id}, employee_id=body.employee_id)
         return _payroll_out(db, payroll, employee.name)
+    finally:
+        db.close()
+
+
+@router.post("/payrolls/{payroll_id}/recalculate")
+def recalculate_payroll(payroll_id: str, request: Request):
+    """يعيد بناء مسير الراتب من الصفر باستخدام أحدث بيانات حقيقية في القاعدة (سلف/استقطاعات/
+    بدلات/عمولات/إجازات/سحبيات/حضور محدّثة) — وليس مجرد تعديل شكلي. يعمل فقط على راتب لم يُصرف
+    بعد؛ البنود اليدوية التي أُدخلت عند الإنشاء تُعاد بدقّة من extra_allowances_json/extra_deductions_json."""
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        p = db.query(Payroll).filter(Payroll.user_id == user.id, Payroll.id == payroll_id).first()
+        if not p:
+            raise HTTPException(404, "الراتب غير موجود")
+        if p.status == "paid":
+            raise HTTPException(400, "لا يمكن إعادة حساب راتب تم صرفه بالفعل")
+        employee = db.query(Employee).filter(Employee.id == p.employee_id).first()
+        if not employee:
+            raise HTTPException(404, "الموظف غير موجود")
+
+        month, year, notes = p.month, p.year, p.notes
+        extra_allowances = json.loads(p.extra_allowances_json) if p.extra_allowances_json else []
+        extra_deductions = json.loads(p.extra_deductions_json) if p.extra_deductions_json else []
+
+        _rollback_payroll_links(db, payroll_id)
+        db.query(PayrollAllowance).filter(PayrollAllowance.payroll_id == payroll_id).delete()
+        db.query(PayrollDeduction).filter(PayrollDeduction.payroll_id == payroll_id).delete()
+        db.delete(p)
+        db.flush()
+
+        new_payroll = _build_payroll_record(
+            db, user, employee, month, year, None, extra_allowances, extra_deductions, notes,
+        )
+        db.commit()
+        log_event(db, "hr.payroll.recalculate", user.id, {"payroll_id": new_payroll.id}, employee_id=employee.id)
+        return _payroll_out(db, new_payroll, employee.name)
     finally:
         db.close()
 
@@ -2137,6 +2191,73 @@ def cancel_payroll(payroll_id: str, request: Request):
         db.commit()
         e = db.query(Employee).filter(Employee.id == p.employee_id).first()
         return _payroll_out(db, p, e.name if e else "")
+    finally:
+        db.close()
+
+
+PAYROLL_STATUS_LABELS = {"unpaid": "غير مصروف", "paid": "مصروف", "cancelled": "ملغى"}
+
+
+def _payslip_rows(db, p: Payroll, employee_name: str):
+    allowances = db.query(PayrollAllowance).filter(PayrollAllowance.payroll_id == p.id).all()
+    deductions = db.query(PayrollDeduction).filter(PayrollDeduction.payroll_id == p.id).all()
+    month_label = MONTHS_AR[p.month - 1] if 1 <= p.month <= 12 else str(p.month)
+    rows = [
+        ["الموظف", employee_name],
+        ["الشهر", f"{month_label} {p.year}"],
+        ["الراتب الأساسي", round(float(p.base_salary or 0.0), 2)],
+    ]
+    for a in allowances:
+        rows.append([f"بدل: {a.label}", round(float(a.amount or 0.0), 2)])
+    rows.append(["إجمالي البدلات", round(float(p.total_allowances or 0.0), 2)])
+    rows.append(["الإجمالي قبل الضريبة", round(float(p.gross_before_tax or 0.0), 2)])
+    if p.tax_amount:
+        rows.append(["الضريبة", round(float(p.tax_amount or 0.0), 2)])
+    for d in deductions:
+        rows.append([f"استقطاع: {d.label}", round(float(d.amount or 0.0), 2)])
+    rows.append(["إجمالي الاستقطاعات", round(float(p.total_deductions or 0.0), 2)])
+    rows.append(["صافي الراتب", round(float(p.net_salary or 0.0), 2)])
+    rows.append(["الحالة", PAYROLL_STATUS_LABELS.get(p.status, p.status)])
+    if p.paid_at:
+        rows.append(["تاريخ الصرف", _fmt_dt(p.paid_at)])
+    if p.notes:
+        rows.append(["ملاحظات", p.notes])
+    return rows
+
+
+@router.get("/payrolls/{payroll_id}/payslip/pdf")
+def payslip_pdf(payroll_id: str, request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        p = db.query(Payroll).filter(Payroll.user_id == user.id, Payroll.id == payroll_id).first()
+        if not p:
+            raise HTTPException(404, "الراتب غير موجود")
+        e = db.query(Employee).filter(Employee.id == p.employee_id).first()
+        employee_name = e.name if e else ""
+        rows = _payslip_rows(db, p, employee_name)
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+        month_label = MONTHS_AR[p.month - 1] if 1 <= p.month <= 12 else str(p.month)
+        title = f"قسيمة راتب — {employee_name} — {month_label} {p.year}"
+        filename = f"قسيمة_راتب_{employee_name}_{p.month}_{p.year}.pdf"
+        return generate_pdf_report(["البند", "القيمة"], rows, title, filename, company_name, logo_url, generated_by)
+    finally:
+        db.close()
+
+
+@router.get("/payrolls/{payroll_id}/payslip/excel")
+def payslip_excel(payroll_id: str, request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        p = db.query(Payroll).filter(Payroll.user_id == user.id, Payroll.id == payroll_id).first()
+        if not p:
+            raise HTTPException(404, "الراتب غير موجود")
+        e = db.query(Employee).filter(Employee.id == p.employee_id).first()
+        employee_name = e.name if e else ""
+        rows = _payslip_rows(db, p, employee_name)
+        filename = f"قسيمة_راتب_{employee_name}_{p.month}_{p.year}.xlsx"
+        return _xlsx_response(["البند", "القيمة"], rows, filename)
     finally:
         db.close()
 

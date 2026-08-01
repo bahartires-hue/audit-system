@@ -85,6 +85,9 @@ def _migrate_postgresql() -> None:
         "ALTER TABLE employees ADD COLUMN IF NOT EXISTS bank_salary DOUBLE PRECISION",
         # audit_logs (Employee timeline)
         "ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS employee_id VARCHAR",
+        # payrolls (بنود يدوية إضافية تُحفظ لإعادة الحساب بدقة)
+        "ALTER TABLE payrolls ADD COLUMN IF NOT EXISTS extra_allowances_json TEXT",
+        "ALTER TABLE payrolls ADD COLUMN IF NOT EXISTS extra_deductions_json TEXT",
     ]
     with engine.begin() as conn:
         for sql in stmts:

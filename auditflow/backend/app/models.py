@@ -616,6 +616,10 @@ class Payroll(Base):
     status = Column(String, nullable=False, default="unpaid", index=True)  # unpaid | paid | cancelled
     paid_at = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
+    # بنود يدوية إضافية أدخلها المستخدم عند الإنشاء — تُحفظ هنا (JSON) كي تُعاد نفسها بدقة
+    # عند "إعادة الحساب" لاحقًا، بدل محاولة تخمينها من نصوص البنود المحفوظة.
+    extra_allowances_json = Column(Text, nullable=True)
+    extra_deductions_json = Column(Text, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 
 
