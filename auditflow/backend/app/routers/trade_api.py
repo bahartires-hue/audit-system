@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from ..auth_core import log_event, require_csrf, require_user
 from ..db import SessionLocal
 from ..models import BranchTransfer, BranchTransferLine, Item, Purchase, PurchaseLine, Sale, SaleLine, StockAdjustment, StockMovement
-from ..models import Branch, Customer, Supplier
+from ..models import Branch, Customer, Supplier, Category, Unit
 from ..models import SuspendedSale, SuspendedSaleLine
 from ..models import ReturnLine, ReturnTxn
 
@@ -22,10 +22,11 @@ router = APIRouter(prefix="/api/trade", tags=["trade"])
 
 
 class ItemCreate(BaseModel):
-    code: str = Field(min_length=1, max_length=60)
+    code: str = ""
     barcode: str = ""
     name: str = Field(min_length=1, max_length=200)
     category: str = "rim"
+    category_id: Optional[str] = None
     brand: str = ""
     size: str = ""
     pcd: str = ""
@@ -33,10 +34,13 @@ class ItemCreate(BaseModel):
     item_condition: str = ""
     location: str = ""
     unit: str = "قطعة"
+    unit_id: Optional[str] = None
     is_set: bool = False
+    min_qty: float = 0.0
     default_sale_price: float = 0.0
+    is_price_tax_inclusive: bool = False
     is_taxable: bool = True
-    tax_rate: float = 0.0
+    tax_rate: float = 15.0
     is_active: bool = True
     notes: str = ""
     image_url: str = ""
@@ -48,6 +52,7 @@ class ItemUpdate(BaseModel):
     barcode: Optional[str] = None
     name: Optional[str] = None
     category: Optional[str] = None
+    category_id: Optional[str] = None
     brand: Optional[str] = None
     size: Optional[str] = None
     pcd: Optional[str] = None
@@ -55,8 +60,11 @@ class ItemUpdate(BaseModel):
     item_condition: Optional[str] = None
     location: Optional[str] = None
     unit: Optional[str] = None
+    unit_id: Optional[str] = None
     is_set: Optional[bool] = None
+    min_qty: Optional[float] = None
     default_sale_price: Optional[float] = None
+    is_price_tax_inclusive: Optional[bool] = None
     is_taxable: Optional[bool] = None
     tax_rate: Optional[float] = None
     is_active: Optional[bool] = None
@@ -254,6 +262,129 @@ def _reverse_sale_effects(db: Any, user_id: str, sale_id: str) -> None:
         db.delete(ln)
 
 
+class CategoryCreate(BaseModel):
+    code: str = ""
+    name: str = Field(min_length=1, max_length=200)
+    notes: str = ""
+
+
+class UnitCreate(BaseModel):
+    code: str = ""
+    name: str = Field(min_length=1, max_length=200)
+    notes: str = ""
+
+
+@router.get("/categories")
+def list_categories(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = db.query(Category).filter(Category.user_id == user.id).order_by(Category.name.asc()).all()
+        return {"categories": [{"id": r.id, "code": r.code, "name": r.name, "notes": r.notes or ""} for r in rows]}
+    finally:
+        db.close()
+
+
+@router.post("/categories")
+def create_category(request: Request, body: CategoryCreate = Body(...)):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        name = body.name.strip()
+        if not name:
+            raise HTTPException(400, "اسم التصنيف مطلوب")
+        dup = db.query(Category).filter(Category.user_id == user.id, Category.name == name).first()
+        if dup:
+            raise HTTPException(400, "التصنيف موجود مسبقاً")
+        code = (body.code or "").strip() or ("CAT-" + uuid.uuid4().hex[:8].upper())
+        rec = Category(id=uuid.uuid4().hex, user_id=user.id, code=code, name=name, notes=(body.notes or "").strip() or None)
+        db.add(rec)
+        db.commit()
+        return {"id": rec.id, "code": rec.code, "name": rec.name}
+    finally:
+        db.close()
+
+
+@router.delete("/categories/{category_id}")
+def delete_category(category_id: str, request: Request):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        rec = db.query(Category).filter(Category.user_id == user.id, Category.id == category_id).first()
+        if not rec:
+            raise HTTPException(404, "التصنيف غير موجود")
+        in_use = db.query(Item).filter(Item.user_id == user.id, Item.category_id == category_id).first()
+        if in_use:
+            raise HTTPException(400, "لا يمكن حذف التصنيف لارتباطه بأصناف")
+        db.delete(rec)
+        db.commit()
+        return {"deleted": True}
+    finally:
+        db.close()
+
+
+@router.get("/units")
+def list_units(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        rows = db.query(Unit).filter(Unit.user_id == user.id).order_by(Unit.name.asc()).all()
+        return {"units": [{"id": r.id, "code": r.code, "name": r.name, "notes": r.notes or ""} for r in rows]}
+    finally:
+        db.close()
+
+
+@router.post("/units")
+def create_unit(request: Request, body: UnitCreate = Body(...)):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        name = body.name.strip()
+        if not name:
+            raise HTTPException(400, "اسم الوحدة مطلوب")
+        dup = db.query(Unit).filter(Unit.user_id == user.id, Unit.name == name).first()
+        if dup:
+            raise HTTPException(400, "الوحدة موجودة مسبقاً")
+        code = (body.code or "").strip() or ("UNT-" + uuid.uuid4().hex[:8].upper())
+        rec = Unit(id=uuid.uuid4().hex, user_id=user.id, code=code, name=name, notes=(body.notes or "").strip() or None)
+        db.add(rec)
+        db.commit()
+        return {"id": rec.id, "code": rec.code, "name": rec.name}
+    finally:
+        db.close()
+
+
+@router.delete("/units/{unit_id}")
+def delete_unit(unit_id: str, request: Request):
+    db = SessionLocal()
+    try:
+        require_csrf(request)
+        user = require_user(db, request)
+        rec = db.query(Unit).filter(Unit.user_id == user.id, Unit.id == unit_id).first()
+        if not rec:
+            raise HTTPException(404, "الوحدة غير موجودة")
+        in_use = db.query(Item).filter(Item.user_id == user.id, Item.unit_id == unit_id).first()
+        if in_use:
+            raise HTTPException(400, "لا يمكن حذف الوحدة لارتباطها بأصناف")
+        db.delete(rec)
+        db.commit()
+        return {"deleted": True}
+    finally:
+        db.close()
+
+
+def _norm_rate(tax_rate, is_taxable) -> float:
+    if not is_taxable:
+        return 0.0
+    r = float(tax_rate or 0.0)
+    if r > 1:
+        r = r / 100.0
+    return r
+
+
 @router.get("/items")
 def list_items(
     request: Request,
@@ -279,39 +410,61 @@ def list_items(
             rows = [r for r in rows if qn in (f"{r.code} {r.barcode or ''} {r.name} {r.brand or ''} {r.size or ''}").lower()]
         else:
             rows = query.order_by(Item.created_at.desc()).all()
-        return {
-            "items": [
-                {
-                    "id": r.id,
-                    "code": r.code,
-                    "barcode": r.barcode or "",
-                    "name": r.name,
-                    "category": r.category,
-                    "brand": r.brand or "",
-                    "size": r.size or "",
-                    "pcd": r.pcd or "",
-                    "color": r.color or "",
-                    "item_condition": r.item_condition or "",
-                    "location": r.location or "",
-                    "unit": r.unit or "قطعة",
-                    "branch_id": r.branch_id or "",
-                    "category_id": r.category_id or "",
-                    "is_set": bool(int(r.is_set or 0)),
-                    "is_unique": bool(int(r.is_unique or 0)),
-                    "needs_service": bool(int(r.needs_service or 0)),
-                    "quantity": round(float(r.quantity or 0.0), 4),
-                    "min_qty": round(float(r.min_qty or 0.0), 4),
-                    "default_sale_price": round(float(r.default_sale_price or 0.0), 2),
-                    "is_taxable": bool(int(r.is_taxable or 0)),
-                    "tax_rate": round(float(r.tax_rate or 0.0), 4),
-                    "is_active": bool(int(r.is_active or 0)),
-                    "last_cost": round(float(r.last_cost or 0.0), 2),
-                    "notes": r.notes or "",
-                    "image_url": r.image_url or "",
-                }
-                for r in rows
-            ]
-        }
+        cat_ids = {r.category_id for r in rows if r.category_id}
+        unit_ids = {getattr(r, "unit_id", None) for r in rows if getattr(r, "unit_id", None)}
+        cat_names = {}
+        if cat_ids:
+            for c in db.query(Category).filter(Category.id.in_(cat_ids)).all():
+                cat_names[c.id] = c.name
+        unit_names = {}
+        if unit_ids:
+            for u in db.query(Unit).filter(Unit.id.in_(unit_ids)).all():
+                unit_names[u.id] = u.name
+
+        def _row_json(r):
+            qty = round(float(r.quantity or 0.0), 4)
+            min_qty = round(float(r.min_qty or 0.0), 4)
+            status = "out" if qty <= 0 else ("low" if qty <= min_qty else "available")
+            rate = _norm_rate(r.tax_rate, r.is_taxable)
+            excl = round(float(r.default_sale_price or 0.0), 2)
+            incl = round(excl * (1 + rate), 2)
+            return {
+                "id": r.id,
+                "code": r.code,
+                "barcode": r.barcode or "",
+                "name": r.name,
+                "category": r.category,
+                "category_id": r.category_id or "",
+                "category_name": cat_names.get(r.category_id, ""),
+                "brand": r.brand or "",
+                "size": r.size or "",
+                "pcd": r.pcd or "",
+                "color": r.color or "",
+                "item_condition": r.item_condition or "",
+                "location": r.location or "",
+                "unit": r.unit or "قطعة",
+                "unit_id": getattr(r, "unit_id", None) or "",
+                "unit_name": unit_names.get(getattr(r, "unit_id", None), ""),
+                "branch_id": r.branch_id or "",
+                "is_set": bool(int(r.is_set or 0)),
+                "is_unique": bool(int(r.is_unique or 0)),
+                "needs_service": bool(int(r.needs_service or 0)),
+                "quantity": qty,
+                "min_qty": min_qty,
+                "status": status,
+                "default_sale_price": excl,
+                "sale_price_incl_tax": incl,
+                "is_price_tax_inclusive": bool(int(getattr(r, "is_price_tax_inclusive", 0) or 0)),
+                "is_taxable": bool(int(r.is_taxable or 0)),
+                "tax_rate": round(float(r.tax_rate or 0.0), 4),
+                "is_active": bool(int(r.is_active or 0)),
+                "last_cost": round(float(r.last_cost or 0.0), 2),
+                "stock_value": round(qty * round(float(r.last_cost or 0.0), 4), 2),
+                "notes": r.notes or "",
+                "image_url": r.image_url or "",
+            }
+
+        return {"items": [_row_json(r) for r in rows]}
     finally:
         db.close()
 
@@ -322,28 +475,66 @@ def create_item(request: Request, body: ItemCreate = Body(...)):
     try:
         require_csrf(request)
         user = require_user(db, request)
-        code = body.code.strip()
-        if db.query(Item).filter(Item.user_id == user.id, Item.code == code).first():
+        code = (body.code or "").strip()
+        if not code:
+            for _ in range(20):
+                candidate = _new_item_code()
+                if not db.query(Item).filter(Item.user_id == user.id, Item.code == candidate).first():
+                    code = candidate
+                    break
+            if not code:
+                raise HTTPException(400, "تعذّر توليد كود صنف فريد، حاول مرة أخرى")
+        elif db.query(Item).filter(Item.user_id == user.id, Item.code == code).first():
             raise HTTPException(400, "كود الصنف مستخدم مسبقاً")
+
+        category_name = (body.category or "rim").strip().lower()
+        category_id = (body.category_id or "").strip() or None
+        if category_id:
+            cat = db.query(Category).filter(Category.user_id == user.id, Category.id == category_id).first()
+            if not cat:
+                raise HTTPException(400, "التصنيف غير موجود")
+            category_name = cat.name
+
+        unit_name = (body.unit or "قطعة").strip() or "قطعة"
+        unit_id = (body.unit_id or "").strip() or None
+        if unit_id:
+            un = db.query(Unit).filter(Unit.user_id == user.id, Unit.id == unit_id).first()
+            if not un:
+                raise HTTPException(400, "الوحدة غير موجودة")
+            unit_name = un.name
+
+        is_taxable = 1 if body.is_taxable else 0
+        tax_rate = round(abs(float(body.tax_rate or 0.0)), 4)
+        raw_price = round(abs(float(body.default_sale_price or 0.0)), 2)
+        rate = _norm_rate(tax_rate, is_taxable)
+        if body.is_price_tax_inclusive and rate > 0:
+            sale_price_excl = round(raw_price / (1 + rate), 2)
+        else:
+            sale_price_excl = raw_price
+
         rec = Item(
             id=uuid.uuid4().hex,
             user_id=user.id,
             code=code,
             barcode=(body.barcode or "").strip() or None,
             name=body.name.strip(),
-            category=(body.category or "rim").strip().lower(),
+            category=category_name,
+            category_id=category_id,
             brand=(body.brand or "").strip() or None,
             size=(body.size or "").strip() or None,
             pcd=(body.pcd or "").strip() or None,
             color=(body.color or "").strip() or None,
             item_condition=(body.item_condition or "").strip() or None,
             location=(body.location or "").strip() or None,
-            unit=(body.unit or "قطعة").strip() or "قطعة",
+            unit=unit_name,
+            unit_id=unit_id,
             is_set=1 if body.is_set else 0,
             quantity=0.0,
-            default_sale_price=round(abs(float(body.default_sale_price or 0.0)), 2),
-            is_taxable=1 if body.is_taxable else 0,
-            tax_rate=round(abs(float(body.tax_rate or 0.0)), 4),
+            min_qty=round(abs(float(body.min_qty or 0.0)), 4),
+            default_sale_price=sale_price_excl,
+            is_price_tax_inclusive=1 if body.is_price_tax_inclusive else 0,
+            is_taxable=is_taxable,
+            tax_rate=tax_rate,
             is_active=1 if body.is_active else 0,
             last_cost=round(abs(float(body.default_purchase_price or 0.0)), 2),
             notes=(body.notes or "").strip() or None,
@@ -381,18 +572,48 @@ def update_item(item_id: str, request: Request, body: ItemUpdate = Body(...)):
                     setattr(rec, k, vv if vv else "قطعة")
                 else:
                     setattr(rec, k, vv if vv else None)
+        if body.category_id is not None:
+            cid = body.category_id.strip() or None
+            if cid:
+                cat = db.query(Category).filter(Category.user_id == user.id, Category.id == cid).first()
+                if not cat:
+                    raise HTTPException(400, "التصنيف غير موجود")
+                rec.category_id = cid
+                rec.category = cat.name
+            else:
+                rec.category_id = None
+        if body.unit_id is not None:
+            uid = body.unit_id.strip() or None
+            if uid:
+                un = db.query(Unit).filter(Unit.user_id == user.id, Unit.id == uid).first()
+                if not un:
+                    raise HTTPException(400, "الوحدة غير موجودة")
+                rec.unit_id = uid
+                rec.unit = un.name
+            else:
+                rec.unit_id = None
         if body.name is not None and not (body.name or "").strip():
             raise HTTPException(400, "name لا يمكن أن يكون فارغاً")
         if body.name is not None:
             rec.name = body.name.strip()
         if body.is_set is not None:
             rec.is_set = 1 if body.is_set else 0
-        if body.default_sale_price is not None:
-            rec.default_sale_price = round(abs(float(body.default_sale_price or 0.0)), 2)
+        if body.min_qty is not None:
+            rec.min_qty = round(abs(float(body.min_qty or 0.0)), 4)
         if body.is_taxable is not None:
             rec.is_taxable = 1 if body.is_taxable else 0
         if body.tax_rate is not None:
             rec.tax_rate = round(abs(float(body.tax_rate or 0.0)), 4)
+        if body.is_price_tax_inclusive is not None:
+            rec.is_price_tax_inclusive = 1 if body.is_price_tax_inclusive else 0
+        if body.default_sale_price is not None:
+            raw_price = round(abs(float(body.default_sale_price or 0.0)), 2)
+            incl_flag = bool(body.is_price_tax_inclusive) if body.is_price_tax_inclusive is not None else bool(int(rec.is_price_tax_inclusive or 0))
+            rate = _norm_rate(rec.tax_rate, rec.is_taxable)
+            if incl_flag and rate > 0:
+                rec.default_sale_price = round(raw_price / (1 + rate), 2)
+            else:
+                rec.default_sale_price = raw_price
         if body.is_active is not None:
             rec.is_active = 1 if body.is_active else 0
         if body.default_purchase_price is not None:
@@ -1799,33 +2020,52 @@ def _find_header_index(header: list[str], *names: str) -> int:
 
 
 @router.get("/items/export")
-def export_items(request: Request):
+def export_items(request: Request, template: str = Query("full")):
     db = SessionLocal()
     try:
         user = require_user(db, request)
-        rows = db.query(Item).filter(Item.user_id == user.id).order_by(Item.created_at.desc()).all()
+        rows = db.query(Item).filter(Item.user_id == user.id).order_by(Item.code.asc(), Item.created_at.desc()).all()
         wb = Workbook()
         ws = wb.active
-        ws.title = "الأصناف"
-        ws.append(["الكود", "اسم الصنف", "سعر الشراء الافتراضي", "سعر البيع الافتراضي", "الكمية الحالية", "ملاحظات"])
-        for r in rows:
-            ws.append(
-                [
-                    r.code,
-                    r.name,
-                    round(float(r.last_cost or 0.0), 2),
-                    round(float(r.default_sale_price or 0.0), 2),
-                    round(float(r.quantity or 0.0), 4),
-                    r.notes or "",
-                ]
-            )
-        return _xlsx_response(wb, "items.xlsx")
+        tpl = (template or "full").strip().lower()
+        if tpl == "price":
+            ws.title = "تحديث الأسعار"
+            ws.append(["الكود", "اسم الصنف (للعرض فقط)", "سعر الشراء", "سعر البيع (غير شامل الضريبة)"])
+            for r in rows:
+                ws.append([r.code, r.name, round(float(r.last_cost or 0.0), 2), round(float(r.default_sale_price or 0.0), 2)])
+            fname = "items_price_template.xlsx"
+        elif tpl == "qty":
+            ws.title = "تحديث الكميات"
+            ws.append(["الكود", "اسم الصنف (للعرض فقط)", "الكمية الفعلية"])
+            for r in rows:
+                ws.append([r.code, r.name, round(float(r.quantity or 0.0), 4)])
+            fname = "items_qty_template.xlsx"
+        else:
+            ws.title = "الأصناف"
+            ws.append(["الكود", "اسم الصنف", "التصنيف", "الوحدة", "سعر الشراء", "سعر البيع (غير شامل الضريبة)", "نسبة الضريبة %", "خاضع للضريبة (1/0)", "الحد الأدنى للكمية", "ملاحظات"])
+            for r in rows:
+                ws.append(
+                    [
+                        r.code,
+                        r.name,
+                        r.category or "",
+                        r.unit or "قطعة",
+                        round(float(r.last_cost or 0.0), 2),
+                        round(float(r.default_sale_price or 0.0), 2),
+                        round(float(r.tax_rate or 0.0), 4),
+                        1 if r.is_taxable else 0,
+                        round(float(r.min_qty or 0.0), 4),
+                        r.notes or "",
+                    ]
+                )
+            fname = "items_full_template.xlsx"
+        return _xlsx_response(wb, fname)
     finally:
         db.close()
 
 
 @router.post("/items/import")
-async def import_items(request: Request, file: UploadFile = File(...)):
+async def import_items(request: Request, file: UploadFile = File(...), template: str = Query("full")):
     db = SessionLocal()
     try:
         require_csrf(request)
@@ -1837,52 +2077,145 @@ async def import_items(request: Request, file: UploadFile = File(...)):
         if not rows:
             raise HTTPException(400, "الملف فارغ")
         header = [str(c or "").strip() for c in rows[0]]
-        idx_name = _find_header_index(header, "اسم الصنف", "الاسم", "name")
-        idx_purchase = _find_header_index(header, "سعر الشراء الافتراضي", "سعر الشراء", "purchase_price")
-        idx_sale = _find_header_index(header, "سعر البيع الافتراضي", "سعر البيع", "sale_price")
-        idx_notes = _find_header_index(header, "ملاحظات", "notes")
-        if idx_name == -1:
-            raise HTTPException(400, "لم يتم العثور على عمود اسم الصنف في الملف")
+        idx_code = _find_header_index(header, "الكود", "code")
+        tpl = (template or "full").strip().lower()
         created = 0
         updated = 0
         errors: list[str] = []
+
+        if tpl == "price":
+            idx_purchase = _find_header_index(header, "سعر الشراء", "purchase_price")
+            idx_sale = _find_header_index(header, "سعر البيع (غير شامل الضريبة)", "سعر البيع", "sale_price")
+            if idx_code == -1:
+                raise HTTPException(400, "لم يتم العثور على عمود الكود في الملف")
+            for rn, row in enumerate(rows[1:], start=2):
+                code = str(row[idx_code] or "").strip() if idx_code < len(row) and row[idx_code] is not None else ""
+                if not code:
+                    continue
+                rec = db.query(Item).filter(Item.user_id == user.id, Item.code == code).first()
+                if not rec:
+                    errors.append(f"صف {rn}: الكود {code} غير موجود")
+                    continue
+                try:
+                    if idx_purchase != -1 and idx_purchase < len(row) and row[idx_purchase] is not None:
+                        rec.last_cost = round(abs(float(row[idx_purchase])), 2)
+                    if idx_sale != -1 and idx_sale < len(row) and row[idx_sale] is not None:
+                        rec.default_sale_price = round(abs(float(row[idx_sale])), 2)
+                except (TypeError, ValueError):
+                    errors.append(f"صف {rn}: قيمة سعر غير صالحة")
+                    continue
+                updated += 1
+            db.commit()
+            log_event(db, "trade.items.import_price", user.id, {"updated": updated, "errors": len(errors)})
+            return {"created": 0, "updated": updated, "errors": errors}
+
+        if tpl == "qty":
+            idx_qty = _find_header_index(header, "الكمية الفعلية", "الكمية", "quantity")
+            if idx_code == -1 or idx_qty == -1:
+                raise HTTPException(400, "لم يتم العثور على أعمدة الكود/الكمية في الملف")
+            now = dt.datetime.utcnow()
+            for rn, row in enumerate(rows[1:], start=2):
+                code = str(row[idx_code] or "").strip() if idx_code < len(row) and row[idx_code] is not None else ""
+                if not code:
+                    continue
+                rec = db.query(Item).filter(Item.user_id == user.id, Item.code == code).first()
+                if not rec:
+                    errors.append(f"صف {rn}: الكود {code} غير موجود")
+                    continue
+                try:
+                    new_qty = round(abs(float(row[idx_qty])), 4) if row[idx_qty] is not None else None
+                except (TypeError, ValueError):
+                    errors.append(f"صف {rn}: قيمة كمية غير صالحة")
+                    continue
+                if new_qty is None:
+                    continue
+                before = round(float(rec.quantity or 0.0), 4)
+                diff = round(new_qty - before, 4)
+                if abs(diff) < 0.0001:
+                    continue
+                rec.quantity = new_qty
+                db.add(StockAdjustment(id=uuid.uuid4().hex, user_id=user.id, item_id=rec.id, branch_id=rec.branch_id, adjust_date=now, qty_before=before, qty_after=new_qty, difference=diff, reason="استيراد الكميات من Excel"))
+                db.add(StockMovement(id=uuid.uuid4().hex, user_id=user.id, item_id=rec.id, movement_type="adjust", qty_in=diff if diff > 0 else 0.0, qty_out=abs(diff) if diff < 0 else 0.0, unit_cost=round(float(rec.last_cost or 0.0), 4), reference_type="adjust", reference_id=rec.id, movement_date=now, notes="استيراد Excel"))
+                updated += 1
+            db.commit()
+            log_event(db, "trade.items.import_qty", user.id, {"updated": updated, "errors": len(errors)})
+            return {"created": 0, "updated": updated, "errors": errors}
+
+        idx_name = _find_header_index(header, "اسم الصنف", "الاسم", "name")
+        idx_category = _find_header_index(header, "التصنيف", "category")
+        idx_unit = _find_header_index(header, "الوحدة", "unit")
+        idx_purchase = _find_header_index(header, "سعر الشراء", "سعر الشراء الافتراضي", "purchase_price")
+        idx_sale = _find_header_index(header, "سعر البيع (غير شامل الضريبة)", "سعر البيع الافتراضي", "سعر البيع", "sale_price")
+        idx_rate = _find_header_index(header, "نسبة الضريبة %", "نسبة الضريبة", "tax_rate")
+        idx_taxable = _find_header_index(header, "خاضع للضريبة (1/0)", "خاضع للضريبة", "is_taxable")
+        idx_minqty = _find_header_index(header, "الحد الأدنى للكمية", "min_qty")
+        idx_notes = _find_header_index(header, "ملاحظات", "notes")
+        if idx_name == -1:
+            raise HTTPException(400, "لم يتم العثور على عمود اسم الصنف في الملف")
+
+        def _cell(row, idx, cast=None):
+            if idx == -1 or idx >= len(row) or row[idx] is None:
+                return None
+            v = row[idx]
+            if cast is None:
+                return str(v).strip()
+            try:
+                return cast(v)
+            except (TypeError, ValueError):
+                return None
+
         for rn, row in enumerate(rows[1:], start=2):
-            name = str(row[idx_name] or "").strip() if idx_name < len(row) and row[idx_name] is not None else ""
+            name = _cell(row, idx_name)
             if not name:
                 continue
-            purchase_price = 0.0
-            sale_price = 0.0
-            notes = ""
-            try:
-                if idx_purchase != -1 and idx_purchase < len(row) and row[idx_purchase] is not None:
-                    purchase_price = float(row[idx_purchase])
-                if idx_sale != -1 and idx_sale < len(row) and row[idx_sale] is not None:
-                    sale_price = float(row[idx_sale])
-                if idx_notes != -1 and idx_notes < len(row) and row[idx_notes] is not None:
-                    notes = str(row[idx_notes]).strip()
-            except (TypeError, ValueError):
-                errors.append(f"صف {rn}: قيمة سعر غير صالحة")
-                continue
-            existing = db.query(Item).filter(Item.user_id == user.id, Item.name == name).first()
+            code = _cell(row, idx_code) or ""
+            existing = db.query(Item).filter(Item.user_id == user.id, Item.code == code).first() if code else None
+            purchase_price = _cell(row, idx_purchase, float) or 0.0
+            sale_price = _cell(row, idx_sale, float) or 0.0
+            rate = _cell(row, idx_rate, float)
+            taxable_raw = _cell(row, idx_taxable, float)
+            min_qty = _cell(row, idx_minqty, float) or 0.0
+            category = _cell(row, idx_category) or "rim"
+            unit = _cell(row, idx_unit) or "قطعة"
+            notes = _cell(row, idx_notes) or ""
             if existing:
+                existing.name = name
+                existing.category = category
+                existing.unit = unit
                 existing.last_cost = round(abs(purchase_price), 2)
                 existing.default_sale_price = round(abs(sale_price), 2)
+                if rate is not None:
+                    existing.tax_rate = round(abs(rate), 4)
+                if taxable_raw is not None:
+                    existing.is_taxable = 1 if taxable_raw else 0
+                existing.min_qty = round(abs(min_qty), 4)
                 if notes:
                     existing.notes = notes
                 updated += 1
             else:
+                new_code = code
+                if not new_code:
+                    for _ in range(20):
+                        cand = _new_item_code()
+                        if not db.query(Item).filter(Item.user_id == user.id, Item.code == cand).first():
+                            new_code = cand
+                            break
+                elif db.query(Item).filter(Item.user_id == user.id, Item.code == new_code).first():
+                    errors.append(f"صف {rn}: الكود {new_code} مستخدم مسبقاً")
+                    continue
                 db.add(
                     Item(
                         id=uuid.uuid4().hex,
                         user_id=user.id,
-                        code=_new_item_code(),
+                        code=new_code,
                         name=name,
-                        category="rim",
-                        unit="قطعة",
+                        category=category,
+                        unit=unit,
                         quantity=0.0,
+                        min_qty=round(abs(min_qty), 4),
                         default_sale_price=round(abs(sale_price), 2),
-                        is_taxable=1,
-                        tax_rate=0.0,
+                        is_taxable=1 if (taxable_raw is None or taxable_raw) else 0,
+                        tax_rate=round(abs(rate), 4) if rate is not None else 15.0,
                         is_active=1,
                         last_cost=round(abs(purchase_price), 2),
                         notes=notes or None,
