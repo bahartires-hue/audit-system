@@ -266,6 +266,21 @@ def ui_hr_advances(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "hr_advances.html", "op-hr")
 
 
+@app.get("/hr/withdrawals", response_class=HTMLResponse)
+def ui_hr_withdrawals(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "hr_withdrawals.html", "op-hr")
+
+
+@app.get("/hr/travel", response_class=HTMLResponse)
+def ui_hr_travel(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "hr_travel.html", "op-hr")
+
+
+@app.get("/hr/custody", response_class=HTMLResponse)
+def ui_hr_custody(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "hr_custody.html", "op-hr")
+
+
 @app.get("/hr/deductions", response_class=HTMLResponse)
 def ui_hr_deductions(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "hr_deductions.html", "op-hr")

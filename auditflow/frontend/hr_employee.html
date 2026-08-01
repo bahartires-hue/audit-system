@@ -451,10 +451,17 @@
           <span id="empHeaderStatus" style="padding:6px 14px;border-radius:999px;font-weight:800;font-size:0.8rem;"></span>
         </div>
 
+        <div class="op-shell-card" id="quickInfoCard" style="padding:1rem 1.2rem;margin-bottom:0.9rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.6rem 1.2rem;">
+        </div>
+
+        <div id="statCardsWrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0.7rem;margin-bottom:1.1rem;">
+        </div>
+
         <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;border-radius:14px;background:var(--surface-soft);border:1px solid var(--gold-dim);margin-bottom:14px;">
           <button type="button" class="op-tab-btn" data-tab="basic">📄 البيانات الأساسية</button>
           <button type="button" class="op-tab-btn" data-tab="payroll">💰 الرواتب</button>
           <button type="button" class="op-tab-btn" data-tab="advances">💳 السلف</button>
+          <button type="button" class="op-tab-btn" data-tab="withdrawals">🧾 السحبيات</button>
           <button type="button" class="op-tab-btn" data-tab="deductions">📉 الاستقطاعات</button>
           <button type="button" class="op-tab-btn" data-tab="allowances">🎁 البدلات</button>
           <button type="button" class="op-tab-btn" data-tab="commissions">📈 العمولات</button>
@@ -462,9 +469,12 @@
           <button type="button" class="op-tab-btn" data-tab="attendance">⏰ الحضور</button>
           <button type="button" class="op-tab-btn" data-tab="docs">📁 الوثائق</button>
           <button type="button" class="op-tab-btn" data-tab="contract">📑 العقد</button>
+          <button type="button" class="op-tab-btn" data-tab="travel">✈️ السفر</button>
+          <button type="button" class="op-tab-btn" data-tab="custody">📦 العهد</button>
           <button type="button" class="op-tab-btn" data-tab="alerts">⚠️ التنبيهات</button>
           <button type="button" class="op-tab-btn" data-tab="reports">📊 التقارير</button>
           <button type="button" class="op-tab-btn" data-tab="eos">🔚 نهاية الخدمة</button>
+          <button type="button" class="op-tab-btn" data-tab="timeline">🕐 السجل الزمني</button>
         </div>
 
           <div class="op-tab-panel" id="tab-basic">
@@ -519,6 +529,15 @@
             <div class="op-shell-card" style="padding:0;overflow:auto;">
               <table class="op-admin-table" style="width:100%;" id="advancesTable"></table>
               <div id="advancesEmpty" style="display:none;padding:1.5rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد سجلات بعد</div>
+            </div>
+          </div>
+          <div class="op-tab-panel" id="tab-withdrawals" style="display:none;">
+            <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:end;margin-bottom:0.9rem;" id="withdrawalsAddRow">
+<div class="op-tool-field" style="margin-bottom:0;"><label>المبلغ</label><input type="number" id="wdAmount" step="0.01" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>السبب</label><input type="text" id="wdReason"  /></div><div class="op-tool-field" style="margin-bottom:0;"><label>التاريخ</label><input type="date" id="wdDate"  /></div><button type="button" class="op-btn-chip op-btn-chip--gold" id="wdAddBtn" style="height:38px;">إضافة</button>
+            </div>
+            <div class="op-shell-card" style="padding:0;overflow:auto;">
+              <table class="op-admin-table" style="width:100%;" id="withdrawalsTable"></table>
+              <div id="withdrawalsEmpty" style="display:none;padding:1.5rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد سجلات بعد</div>
             </div>
           </div>
           <div class="op-tab-panel" id="tab-deductions" style="display:none;">
@@ -593,6 +612,26 @@
             <div id="contractCard"></div>
           </div>
 
+          <div class="op-tab-panel" id="tab-travel" style="display:none;">
+            <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:end;margin-bottom:0.9rem;" id="travelAddRow">
+<div class="op-tool-field" style="margin-bottom:0;"><label>نوع السفر</label><select id="travelType"><option value="domestic">داخل المملكة</option><option value="international">خارج المملكة</option></select></div><div class="op-tool-field" style="margin-bottom:0;"><label>الوجهة</label><input type="text" id="travelDestination" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>تاريخ السفر</label><input type="date" id="travelDeparture" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>تاريخ العودة المتوقع</label><input type="date" id="travelReturn" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>سبب السفر</label><input type="text" id="travelPurpose" /></div><button type="button" class="op-btn-chip op-btn-chip--gold" id="travelAddBtn" style="height:38px;">تسجيل سفر</button>
+            </div>
+            <div class="op-shell-card" style="padding:0;overflow:auto;">
+              <table class="op-admin-table" style="width:100%;" id="travelTable"></table>
+              <div id="travelEmpty" style="display:none;padding:1.5rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد سجلات سفر بعد</div>
+            </div>
+          </div>
+
+          <div class="op-tab-panel" id="tab-custody" style="display:none;">
+            <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:end;margin-bottom:0.9rem;" id="custodyAddRow">
+<div class="op-tool-field" style="margin-bottom:0;"><label>اسم العهدة</label><input type="text" id="custItemName" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>النوع</label><input type="text" id="custItemType" placeholder="جهاز / سيارة / أخرى" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>الرقم التسلسلي</label><input type="text" id="custSerial" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>القيمة</label><input type="number" id="custValue" step="0.01" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>تاريخ التسليم</label><input type="date" id="custAssignedDate" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>تاريخ الإرجاع المتوقع</label><input type="date" id="custExpectedReturn" /></div><button type="button" class="op-btn-chip op-btn-chip--gold" id="custAddBtn" style="height:38px;">تسليم عهدة</button>
+            </div>
+            <div class="op-shell-card" style="padding:0;overflow:auto;">
+              <table class="op-admin-table" style="width:100%;" id="custodyTable"></table>
+              <div id="custodyEmpty" style="display:none;padding:1.5rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد عهد مسجّلة بعد</div>
+            </div>
+          </div>
+
           <div class="op-tab-panel" id="tab-alerts" style="display:none;">
             <div id="empAlertsWrap" style="display:flex;flex-direction:column;gap:8px;"></div>
             <div id="empAlertsEmpty" style="display:none;padding:1.5rem;text-align:center;color:var(--text-muted);font-weight:700;">لا توجد تنبيهات لهذا الموظف 🎉</div>
@@ -621,6 +660,11 @@
               <div id="eosPreviewBody" style="margin-top:1rem;"></div>
               <button type="button" class="op-btn-chip op-btn-chip--gold" id="eosConfirmBtn" style="display:none;margin-top:1rem;">تأكيد إنهاء الخدمة وطباعة المخالصة</button>
             </div>
+          </div>
+
+          <div class="op-tab-panel" id="tab-timeline" style="display:none;">
+            <div id="timelineWrap" style="display:flex;flex-direction:column;gap:0;position:relative;padding-inline-start:1.2rem;"></div>
+            <div id="timelineEmpty" style="display:none;padding:1.5rem;text-align:center;color:var(--text-muted);font-weight:700;">لا يوجد سجل بعد</div>
           </div>
         </div>
 
@@ -723,7 +767,7 @@
           document.querySelectorAll(".op-tab-btn").forEach(function (b) {
             b.classList.toggle("op-tab-btn--active", b.getAttribute("data-tab") === key);
           });
-          ["basic","payroll","advances","deductions","allowances","commissions","leaves","attendance","docs","contract","alerts","reports","eos"].forEach(function (k) {
+          ["basic","payroll","advances","withdrawals","deductions","allowances","commissions","leaves","attendance","docs","contract","travel","custody","alerts","reports","eos","timeline"].forEach(function (k) {
             var el = document.getElementById("tab-" + k);
             if (el) el.style.display = (k === key) ? "" : "none";
           });
@@ -731,6 +775,7 @@
           _loadedTabs[key] = true;
           if (key === "payroll") loadPayrollTab();
           if (key === "advances") loadAdvancesTab();
+          if (key === "withdrawals") loadWithdrawalsTab();
           if (key === "deductions") loadDeductionsTab();
           if (key === "allowances") loadAllowancesTab();
           if (key === "commissions") loadCommissionsTab();
@@ -738,8 +783,11 @@
           if (key === "attendance") loadAttendanceTab();
           if (key === "docs") loadDocsTab();
           if (key === "contract") loadContractTab();
+          if (key === "travel") loadTravelTab();
+          if (key === "custody") loadCustodyTab();
           if (key === "alerts") loadAlertsTab();
           if (key === "eos") loadEosTab();
+          if (key === "timeline") loadTimelineTab();
         }
         document.querySelectorAll(".op-tab-btn").forEach(function (b) {
           b.addEventListener("click", function () { switchTab(b.getAttribute("data-tab")); });
@@ -775,6 +823,58 @@
           } catch (e) { showToast(e.message || "تعذر تحميل بيانات الموظف", "#dc2626"); }
         }
 
+        function _fieldBlock(label, value) {
+          return "<div><div style='font-size:0.7rem;color:var(--text-muted);font-weight:800;'>" + label + "</div><div style='font-weight:800;'>" + (value == null || value === "" ? "—" : value) + "</div></div>";
+        }
+        function _statCard(icon, label, value) {
+          return "<div class='op-shell-card' style='padding:0.8rem 1rem;'>" +
+            "<div style='font-size:0.7rem;color:var(--text-muted);font-weight:800;'>" + icon + " " + label + "</div>" +
+            "<div style='font-size:1.3rem;font-weight:800;margin-top:2px;'>" + value + "</div></div>";
+        }
+
+        async function loadProfileSummary() {
+          if (!_empId) return;
+          try {
+            var res = await apiGet("/api/hr/employees/" + encodeURIComponent(_empId) + "/profile-summary");
+            var q = res.quick_info || {}, s = res.stats || {};
+            var card = document.getElementById("quickInfoCard");
+            card.innerHTML =
+              _fieldBlock("الرقم الوظيفي", q.employee_number) +
+              _fieldBlock("الحالة", q.status_label) +
+              _fieldBlock("الفرع", q.branch_name) +
+              _fieldBlock("القسم", q.department) +
+              _fieldBlock("الوظيفة", q.position) +
+              _fieldBlock("المدير المباشر", q.manager_name) +
+              _fieldBlock("تاريخ التعيين", q.hire_date) +
+              _fieldBlock("سنوات الخدمة", q.years_of_service != null ? q.years_of_service + " سنة" : "—") +
+              _fieldBlock("الراتب الأساسي", q.basic_salary != null ? q.basic_salary.toLocaleString() : "—") +
+              _fieldBlock("آخر صافي راتب", q.last_net_salary != null ? (q.last_net_salary.toLocaleString() + (q.last_salary_period ? " (" + q.last_salary_period + ")" : "")) : "لا يوجد") +
+              _fieldBlock("آخر حضور", q.last_attendance_date) +
+              _fieldBlock("آخر إجازة", q.last_leave ? (q.last_leave.type || "") + " — " + q.last_leave.start_date : "لا يوجد") +
+              _fieldBlock("آخر سلفة", q.last_advance ? q.last_advance.amount.toLocaleString() + " (" + q.last_advance.date + ")" : "لا يوجد") +
+              _fieldBlock("حالة العقد", q.contract_status + (q.contract_end_date ? (" حتى " + q.contract_end_date) : "")) +
+              _fieldBlock("حالة الإقامة", q.residency_status) +
+              _fieldBlock("حالة الجواز", q.passport_status);
+
+            var wrap = document.getElementById("statCardsWrap");
+            wrap.innerHTML =
+              _statCard("💰", "إجمالي السلف", s.advances_total.toLocaleString() + " (" + s.advances_count + ")") +
+              _statCard("💵", "متبقي السلف", s.advances_remaining.toLocaleString()) +
+              _statCard("🧾", "سحبيات معلّقة", s.withdrawals_pending_total.toLocaleString()) +
+              _statCard("➖", "استقطاعات مستحقة", s.deductions_pending_total.toLocaleString()) +
+              _statCard("➕", "بدلات مستحقة", s.allowances_pending_total.toLocaleString()) +
+              _statCard("📈", "عمولات مستحقة", s.commissions_pending_total.toLocaleString()) +
+              _statCard("🏖️", "أيام إجازة مستخدمة هذا العام", s.leave_days_used_this_year) +
+              _statCard("📅", "رصيد الإجازات", s.leave_balance_days) +
+              _statCard("🚫", "أيام الغياب", s.absent_days_count) +
+              _statCard("⏰", "مرات التأخير", s.late_count) +
+              _statCard("🧮", "إجمالي الرواتب المصروفة", s.total_salaries_paid.toLocaleString()) +
+              _statCard("🏁", "مكافأة نهاية الخدمة (تقديرية)", s.eos_gratuity_estimate.toLocaleString()) +
+              _statCard("📦", "عهد حالية", s.active_custody_count) +
+              _statCard("✈️", "عدد رحلات السفر", s.travel_count);
+          } catch (e) { /* لا نوقف الصفحة إذا فشل تحميل الملخص */ }
+        }
+
         document.getElementById("basicSaveBtn").addEventListener("click", async function () {
           var __saveBtn = this;
           await guardedSave(__saveBtn, async function () {
@@ -798,6 +898,7 @@
             showToast("تم حفظ البيانات ✔️", "#22c55e");
             if (window.__markSaved) window.__markSaved();
             await loadEmployeeHeader();
+            await loadProfileSummary();
           } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
         
           }, "جارٍ الحفظ ...");
@@ -855,6 +956,32 @@
             showToast("تمت الإضافة ✔️", "#22c55e");
             document.getElementById("advAmount").value=""; document.getElementById("advReason").value="";
             await loadAdvancesTab();
+            await loadProfileSummary();
+          } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
+        });
+
+        async function loadWithdrawalsTab() {
+          try {
+            var res = await apiGet("/api/hr/withdrawals?employee_id=" + encodeURIComponent(_empId));
+            var items = res.items || [];
+            var table = document.getElementById("withdrawalsTable");
+            table.innerHTML = "<thead><tr><th>التاريخ</th><th>المبلغ</th><th>السبب</th><th>الحالة</th></tr></thead><tbody></tbody>";
+            var body = table.querySelector("tbody");
+            items.forEach(function (x) {
+              var tr = document.createElement("tr");
+              tr.innerHTML = "<td>" + x.date + "</td><td>" + x.amount.toLocaleString() + "</td><td>" + (x.reason||"—") + "</td><td>" + x.status_label + "</td>";
+              body.appendChild(tr);
+            });
+            document.getElementById("withdrawalsEmpty").style.display = items.length ? "none" : "block";
+          } catch (e) { showToast(e.message || "تعذر التحميل", "#dc2626"); }
+        }
+        document.getElementById("wdAddBtn").addEventListener("click", async function () {
+          try {
+            await apiPostJson("/api/hr/withdrawals", { employee_id: _empId, date: document.getElementById("wdDate").value, amount: parseFloat(document.getElementById("wdAmount").value || "0"), reason: document.getElementById("wdReason").value });
+            showToast("تمت الإضافة ✔️ — ستُخصم تلقائيًا من راتب الشهر القادم", "#22c55e");
+            document.getElementById("wdAmount").value=""; document.getElementById("wdReason").value="";
+            await loadWithdrawalsTab();
+            await loadProfileSummary();
           } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
         });
 
@@ -1223,8 +1350,95 @@
             document.getElementById("ctrOther").value = "0"; document.getElementById("ctrProbation").value = "90"; document.getElementById("ctrAnnualLeave").value = "21";
             document.getElementById("ctrFile").value = "";
             await loadContractTab();
+            await loadProfileSummary();
           } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
           }, "جارٍ الحفظ ...");
+        });
+
+        var TRAVEL_STATUS_ICON = {scheduled:"🕓 مجدول", ongoing:"✈️ قيد السفر", completed:"✅ مكتمل", cancelled:"⚪ ملغى"};
+        async function loadTravelTab() {
+          try {
+            var res = await apiGet("/api/hr/travel?employee_id=" + encodeURIComponent(_empId));
+            var items = res.items || [];
+            var table = document.getElementById("travelTable");
+            table.innerHTML = "<thead><tr><th>النوع</th><th>الوجهة</th><th>تاريخ السفر</th><th>تاريخ العودة</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody></tbody>";
+            var body = table.querySelector("tbody");
+            items.forEach(function (x) {
+              var tr = document.createElement("tr");
+              var actionCell = (x.status === "ongoing") ? ("<button type='button' class='op-tool-btn-secondary' data-return-id='" + x.id + "' style='padding:4px 10px;font-size:0.75rem;'>تسجيل العودة</button>") : "—";
+              tr.innerHTML = "<td>" + x.travel_type_label + "</td><td>" + (x.destination||"—") + "</td><td>" + x.departure_date + "</td><td>" + (x.actual_return_date || x.return_date || "—") + "</td><td>" + (TRAVEL_STATUS_ICON[x.status]||x.status_label) + "</td><td>" + actionCell + "</td>";
+              body.appendChild(tr);
+            });
+            document.getElementById("travelEmpty").style.display = items.length ? "none" : "block";
+            body.querySelectorAll("[data-return-id]").forEach(function (btn) {
+              btn.addEventListener("click", async function () {
+                try {
+                  await apiPostJson("/api/hr/travel/" + btn.getAttribute("data-return-id") + "/return", {});
+                  showToast("تم تسجيل العودة ✔️", "#22c55e");
+                  await loadTravelTab();
+                  await loadProfileSummary();
+                } catch (e) { showToast(e.message || "تعذر الإجراء", "#dc2626"); }
+              });
+            });
+          } catch (e) { showToast(e.message || "تعذر التحميل", "#dc2626"); }
+        }
+        document.getElementById("travelAddBtn").addEventListener("click", async function () {
+          try {
+            await apiPostJson("/api/hr/travel", {
+              employee_id: _empId, travel_type: document.getElementById("travelType").value,
+              destination: document.getElementById("travelDestination").value,
+              departure_date: document.getElementById("travelDeparture").value,
+              return_date: document.getElementById("travelReturn").value,
+              purpose: document.getElementById("travelPurpose").value,
+            });
+            showToast("تم تسجيل السفر ✔️", "#22c55e");
+            document.getElementById("travelDestination").value=""; document.getElementById("travelDeparture").value=""; document.getElementById("travelReturn").value=""; document.getElementById("travelPurpose").value="";
+            await loadTravelTab();
+            await loadProfileSummary();
+          } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
+        });
+
+        var CUSTODY_STATUS_ICON = {assigned:"📦 بعهدة الموظف", returned:"✅ تم الإرجاع", lost:"❌ مفقودة", damaged:"⚠️ تالفة"};
+        async function loadCustodyTab() {
+          try {
+            var res = await apiGet("/api/hr/custody?employee_id=" + encodeURIComponent(_empId));
+            var items = res.items || [];
+            var table = document.getElementById("custodyTable");
+            table.innerHTML = "<thead><tr><th>العهدة</th><th>النوع</th><th>الرقم التسلسلي</th><th>القيمة</th><th>تاريخ التسليم</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody></tbody>";
+            var body = table.querySelector("tbody");
+            items.forEach(function (x) {
+              var tr = document.createElement("tr");
+              var actionCell = (x.status === "assigned") ?
+                ("<button type='button' class='op-tool-btn-secondary' data-return-cust='" + x.id + "' style='padding:4px 10px;font-size:0.75rem;'>إرجاع</button>") : "—";
+              tr.innerHTML = "<td>" + x.item_name + "</td><td>" + (x.item_type||"—") + "</td><td>" + (x.serial_number||"—") + "</td><td>" + (x.value!=null ? x.value.toLocaleString() : "—") + "</td><td>" + x.assigned_date + "</td><td>" + (CUSTODY_STATUS_ICON[x.status]||x.status_label) + "</td><td>" + actionCell + "</td>";
+              body.appendChild(tr);
+            });
+            document.getElementById("custodyEmpty").style.display = items.length ? "none" : "block";
+            body.querySelectorAll("[data-return-cust]").forEach(function (btn) {
+              btn.addEventListener("click", async function () {
+                try {
+                  await apiPostJson("/api/hr/custody/" + btn.getAttribute("data-return-cust") + "/return", { condition: "returned" });
+                  showToast("تم تسجيل الإرجاع ✔️", "#22c55e");
+                  await loadCustodyTab();
+                  await loadProfileSummary();
+                } catch (e) { showToast(e.message || "تعذر الإجراء", "#dc2626"); }
+              });
+            });
+          } catch (e) { showToast(e.message || "تعذر التحميل", "#dc2626"); }
+        }
+        document.getElementById("custAddBtn").addEventListener("click", async function () {
+          try {
+            await apiPostJson("/api/hr/custody", {
+              employee_id: _empId, item_name: document.getElementById("custItemName").value,
+              item_type: document.getElementById("custItemType").value, serial_number: document.getElementById("custSerial").value,
+              value: document.getElementById("custValue").value ? parseFloat(document.getElementById("custValue").value) : null,
+              assigned_date: document.getElementById("custAssignedDate").value, expected_return_date: document.getElementById("custExpectedReturn").value,
+            });
+            showToast("تم تسجيل العهدة ✔️", "#22c55e");
+            document.getElementById("custItemName").value=""; document.getElementById("custItemType").value=""; document.getElementById("custSerial").value=""; document.getElementById("custValue").value="";
+            await loadCustodyTab();
+            await loadProfileSummary();
+          } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
         });
 
         var SEV_META = {
@@ -1246,6 +1460,25 @@
             });
             document.getElementById("empAlertsEmpty").style.display = items.length ? "none" : "block";
           } catch (e) {}
+        }
+
+        async function loadTimelineTab() {
+          try {
+            var res = await apiGet("/api/hr/employees/" + encodeURIComponent(_empId) + "/timeline");
+            var items = res.items || [];
+            var wrap = document.getElementById("timelineWrap");
+            wrap.innerHTML = "";
+            items.forEach(function (it) {
+              var row = document.createElement("div");
+              row.style.cssText = "position:relative;padding:0 0 1.1rem 0;border-inline-start:2px solid var(--gold-dim);padding-inline-start:1rem;";
+              row.innerHTML =
+                "<div style='position:absolute;inline-size:10px;block-size:10px;border-radius:50%;background:var(--gold);inset-inline-start:-6px;top:4px;'></div>" +
+                "<div style='font-weight:800;'>" + it.icon + " " + it.label + "</div>" +
+                "<div style='font-size:0.75rem;color:var(--text-muted);margin-top:2px;'>" + it.created_at + "</div>";
+              wrap.appendChild(row);
+            });
+            document.getElementById("timelineEmpty").style.display = items.length ? "none" : "block";
+          } catch (e) { showToast(e.message || "تعذر تحميل السجل الزمني", "#dc2626"); }
         }
 
         async function loadEosTab() {
@@ -1303,6 +1536,7 @@
             printSettlement(rec);
             await loadEmployeeHeader();
             await loadEosTab();
+            await loadProfileSummary();
           } catch (e) { showToast(e.message || "تعذر الإجراء", "#dc2626"); }
         });
 
@@ -1325,7 +1559,8 @@
 
         (async function () {
           await loadEmployeeHeader();
-          var _validTabs = ["basic","payroll","advances","deductions","allowances","commissions","leaves","attendance","docs","contract","alerts","reports","eos"];
+          await loadProfileSummary();
+          var _validTabs = ["basic","payroll","advances","withdrawals","deductions","allowances","commissions","leaves","attendance","docs","contract","travel","custody","alerts","reports","eos","timeline"];
           var _requestedTab = new URLSearchParams(window.location.search).get("tab");
           var initialTab = _validTabs.indexOf(_requestedTab) !== -1 ? _requestedTab : "basic";
           switchTab(initialTab);
