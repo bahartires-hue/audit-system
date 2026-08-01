@@ -833,7 +833,7 @@
           } catch (e) { showToast(e.message || "تعذر التحميل", "#dc2626"); }
         }
 
-        async function loadAdvTab() {
+        async function loadAdvancesTab() {
           try {
             var res = await apiGet("/api/hr/advances?employee_id=" + encodeURIComponent(_empId));
             var items = res.items || [];
@@ -853,11 +853,11 @@
             await apiPostJson("/api/hr/advances", { employee_id: _empId, date: document.getElementById("advDate").value, amount: parseFloat(document.getElementById("advAmount").value || "0"), reason: document.getElementById("advReason").value, installments_count: parseInt(document.getElementById("advInstallments").value || "1", 10) });
             showToast("تمت الإضافة ✔️", "#22c55e");
             document.getElementById("advAmount").value=""; document.getElementById("advReason").value="";
-            await loadAdvTab();
+            await loadAdvancesTab();
           } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
         });
 
-        async function loadDedTab() {
+        async function loadDeductionsTab() {
           try {
             var res = await apiGet("/api/hr/deductions?employee_id=" + encodeURIComponent(_empId));
             var items = res.items || [];
@@ -877,11 +877,11 @@
             await apiPostJson("/api/hr/deductions", { employee_id: _empId, deduction_type: document.getElementById("dedType").value, amount: parseFloat(document.getElementById("dedAmount").value || "0"), reason: document.getElementById("dedReason").value, date: document.getElementById("dedDate").value });
             showToast("تمت الإضافة ✔️", "#22c55e");
             document.getElementById("dedType").value=""; document.getElementById("dedAmount").value=""; document.getElementById("dedReason").value="";
-            await loadDedTab();
+            await loadDeductionsTab();
           } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
         });
 
-        async function loadAllowTab() {
+        async function loadAllowancesTab() {
           try {
             var res = await apiGet("/api/hr/allowances?employee_id=" + encodeURIComponent(_empId));
             var items = res.items || [];
@@ -901,11 +901,11 @@
             await apiPostJson("/api/hr/allowances", { employee_id: _empId, allowance_type: document.getElementById("allowType").value, amount: parseFloat(document.getElementById("allowAmount").value || "0"), recurring: document.getElementById("allowRecurring").checked, date: document.getElementById("allowDate").value });
             showToast("تمت الإضافة ✔️", "#22c55e");
             document.getElementById("allowType").value=""; document.getElementById("allowAmount").value="";
-            await loadAllowTab();
+            await loadAllowancesTab();
           } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
         });
 
-        async function loadCommTab() {
+        async function loadCommissionsTab() {
           try {
             var res = await apiGet("/api/hr/commissions?employee_id=" + encodeURIComponent(_empId));
             var items = res.items || [];
@@ -925,7 +925,7 @@
             await apiPostJson("/api/hr/commissions", { employee_id: _empId, sales_amount: parseFloat(document.getElementById("commSales").value || "0"), percentage: document.getElementById("commPct").value ? parseFloat(document.getElementById("commPct").value) : null, date: document.getElementById("commDate").value });
             showToast("تمت الإضافة ✔️", "#22c55e");
             document.getElementById("commSales").value=""; document.getElementById("commPct").value="";
-            await loadCommTab();
+            await loadCommissionsTab();
           } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
         });
 
@@ -1268,7 +1268,9 @@
 
         (async function () {
           await loadEmployeeHeader();
-          var initialTab = new URLSearchParams(window.location.search).get("tab") === "docs" ? "docs" : "basic";
+          var _validTabs = ["basic","payroll","advances","deductions","allowances","commissions","leaves","attendance","docs","contract","alerts","reports","eos"];
+          var _requestedTab = new URLSearchParams(window.location.search).get("tab");
+          var initialTab = _validTabs.indexOf(_requestedTab) !== -1 ? _requestedTab : "basic";
           switchTab(initialTab);
         })();
     
