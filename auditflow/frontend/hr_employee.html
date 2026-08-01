@@ -577,8 +577,19 @@
             </div>
           </div>
           <div class="op-tab-panel" id="tab-attendance" style="display:none;">
+            <div class="op-shell-card" style="padding:1rem;margin-bottom:0.9rem;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+                <button type="button" class="op-btn-chip" id="attCalPrevBtn" style="padding:4px 12px;">◀</button>
+                <div style="font-weight:800;" id="attCalLabel"></div>
+                <button type="button" class="op-btn-chip" id="attCalNextBtn" style="padding:4px 12px;">▶</button>
+              </div>
+              <div id="attCalGrid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;"></div>
+              <div style="display:flex;flex-wrap:wrap;gap:0.9rem;margin-top:0.75rem;font-size:0.75rem;color:var(--text-muted);">
+                <span>🟢 حضور</span><span>🔴 غياب</span><span>🟡 تأخير</span><span>🟠 انصراف مبكر</span><span style="opacity:0.5;">⚪ لا يوجد سجل</span>
+              </div>
+            </div>
             <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:end;margin-bottom:0.9rem;" id="attendanceAddRow">
-<div class="op-tool-field" style="margin-bottom:0;"><label>التاريخ</label><input type="date" id="attDate"  /></div><div class="op-tool-field" style="margin-bottom:0;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="attAbsent" style="width:auto;" /><label style="margin:0;">غياب</label></div><div class="op-tool-field" style="margin-bottom:0;"><label>الدخول</label><input type="time" id="attCheckIn"  /></div><div class="op-tool-field" style="margin-bottom:0;"><label>الخروج</label><input type="time" id="attCheckOut"  /></div><div class="op-tool-field" style="margin-bottom:0;"><label>تأخير(د)</label><input type="number" id="attLate" value="0" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>إضافي(د)</label><input type="number" id="attOvertime" value="0" /></div><button type="button" class="op-btn-chip op-btn-chip--gold" id="attAddBtn" style="height:38px;">إضافة</button>
+<div class="op-tool-field" style="margin-bottom:0;"><label>التاريخ</label><input type="date" id="attDate"  /></div><div class="op-tool-field" style="margin-bottom:0;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="attAbsent" style="width:auto;" /><label style="margin:0;">غياب</label></div><div class="op-tool-field" style="margin-bottom:0;display:flex;align-items:center;gap:6px;"><input type="checkbox" id="attEarlyLeave" style="width:auto;" /><label style="margin:0;">انصراف مبكر</label></div><div class="op-tool-field" style="margin-bottom:0;"><label>الدخول</label><input type="time" id="attCheckIn"  /></div><div class="op-tool-field" style="margin-bottom:0;"><label>الخروج</label><input type="time" id="attCheckOut"  /></div><div class="op-tool-field" style="margin-bottom:0;"><label>تأخير(د)</label><input type="number" id="attLate" value="0" /></div><div class="op-tool-field" style="margin-bottom:0;"><label>إضافي(د)</label><input type="number" id="attOvertime" value="0" /></div><button type="button" class="op-btn-chip op-btn-chip--gold" id="attAddBtn" style="height:38px;">إضافة</button>
             </div>
             <div class="op-shell-card" style="padding:0;overflow:auto;">
               <table class="op-admin-table" style="width:100%;" id="attendanceTable"></table>
@@ -1203,6 +1214,61 @@
           } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }
         });
 
+        var _attCalDate = new Date();
+        var _attCalMonth = _attCalDate.getMonth() + 1;
+        var _attCalYear = _attCalDate.getFullYear();
+
+        function _attStatusFor(rec) {
+          if (!rec) return {emoji: "⚪", label: "لا يوجد سجل", detail: ""};
+          if (rec.is_absent) return {emoji: "🔴", label: "غياب", detail: rec.notes || ""};
+          if (rec.is_early_leave) return {emoji: "🟠", label: "انصراف مبكر", detail: (rec.check_out ? "الخروج: " + rec.check_out : "")};
+          if (rec.late_minutes > 0) return {emoji: "🟡", label: "تأخير " + rec.late_minutes + " د", detail: (rec.check_in ? "الدخول: " + rec.check_in : "")};
+          return {emoji: "🟢", label: "حضور", detail: (rec.check_in && rec.check_out) ? (rec.check_in + " → " + rec.check_out) : ""};
+        }
+
+        async function renderAttendanceCalendar() {
+          try {
+            document.getElementById("attCalLabel").textContent = MONTHS[_attCalMonth - 1] + " " + _attCalYear;
+            var res = await apiGet("/api/hr/attendance?employee_id=" + encodeURIComponent(_empId) + "&month=" + _attCalMonth + "&year=" + _attCalYear);
+            var items = res.items || [];
+            var byDay = {};
+            items.forEach(function (a) { byDay[a.date] = a; });
+            var grid = document.getElementById("attCalGrid");
+            grid.innerHTML = "";
+            var dowNames = ["أحد","اثنين","ثلاثاء","أربعاء","خميس","جمعة","سبت"];
+            dowNames.forEach(function (d) {
+              var head = document.createElement("div");
+              head.style.cssText = "text-align:center;font-size:0.72rem;font-weight:800;color:var(--text-muted);padding:4px 0;";
+              head.textContent = d;
+              grid.appendChild(head);
+            });
+            var firstOfMonth = new Date(_attCalYear, _attCalMonth - 1, 1);
+            var daysInMonth = new Date(_attCalYear, _attCalMonth, 0).getDate();
+            var leadBlanks = firstOfMonth.getDay();
+            for (var b = 0; b < leadBlanks; b++) { grid.appendChild(document.createElement("div")); }
+            for (var day = 1; day <= daysInMonth; day++) {
+              var iso = _attCalYear + "-" + String(_attCalMonth).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+              var rec = byDay[iso];
+              var st = _attStatusFor(rec);
+              var cell = document.createElement("div");
+              cell.title = st.label + (st.detail ? (" — " + st.detail) : "");
+              cell.style.cssText = "border:1px solid rgba(0,0,0,0.08);border-radius:8px;padding:6px 4px;text-align:center;font-size:0.75rem;min-height:44px;";
+              cell.innerHTML = "<div style='font-weight:700;'>" + day + "</div><div style='font-size:0.95rem;'>" + st.emoji + "</div>";
+              grid.appendChild(cell);
+            }
+          } catch (e) { showToast(e.message || "تعذر تحميل التقويم", "#dc2626"); }
+        }
+        document.getElementById("attCalPrevBtn").addEventListener("click", function () {
+          _attCalMonth -= 1;
+          if (_attCalMonth < 1) { _attCalMonth = 12; _attCalYear -= 1; }
+          renderAttendanceCalendar();
+        });
+        document.getElementById("attCalNextBtn").addEventListener("click", function () {
+          _attCalMonth += 1;
+          if (_attCalMonth > 12) { _attCalMonth = 1; _attCalYear += 1; }
+          renderAttendanceCalendar();
+        });
+
         async function loadAttendanceTab() {
           try {
             var res = await apiGet("/api/hr/attendance?employee_id=" + encodeURIComponent(_empId));
@@ -1212,11 +1278,13 @@
             var body = table.querySelector("tbody");
             items.forEach(function (a) {
               var tr = document.createElement("tr");
+              var statusLabel = a.is_absent ? "🔴 غياب" : (a.is_early_leave ? "🟠 انصراف مبكر" : "🟢 حضور");
               tr.innerHTML = "<td>" + a.date + "</td><td>" + (a.check_in||"—") + "</td><td>" + (a.check_out||"—") + "</td>" +
-                "<td>" + a.late_minutes + "</td><td>" + a.overtime_minutes + "</td><td>" + (a.is_absent ? "🔴 غياب" : "🟢 حضور") + "</td>";
+                "<td>" + a.late_minutes + "</td><td>" + a.overtime_minutes + "</td><td>" + statusLabel + "</td>";
               body.appendChild(tr);
             });
             document.getElementById("attendanceEmpty").style.display = items.length ? "none" : "block";
+            await renderAttendanceCalendar();
           } catch (e) { showToast(e.message || "تعذر التحميل", "#dc2626"); }
         }
         document.getElementById("attAddBtn").addEventListener("click", async function () {
@@ -1226,10 +1294,11 @@
             await apiPostJson("/api/hr/attendance", {
               employee_id: _empId, date: date, check_in: document.getElementById("attCheckIn").value, check_out: document.getElementById("attCheckOut").value,
               late_minutes: parseInt(document.getElementById("attLate").value || "0", 10), overtime_minutes: parseInt(document.getElementById("attOvertime").value || "0", 10),
-              is_absent: document.getElementById("attAbsent").checked
+              is_absent: document.getElementById("attAbsent").checked, is_early_leave: document.getElementById("attEarlyLeave").checked
             });
             showToast("تم الحفظ ✔️", "#22c55e");
-            document.getElementById("attAbsent").checked = false; document.getElementById("attCheckIn").value = ""; document.getElementById("attCheckOut").value = "";
+            document.getElementById("attAbsent").checked = false; document.getElementById("attEarlyLeave").checked = false;
+            document.getElementById("attCheckIn").value = ""; document.getElementById("attCheckOut").value = "";
             document.getElementById("attLate").value = "0"; document.getElementById("attOvertime").value = "0";
             await loadAttendanceTab();
           } catch (e) { showToast(e.message || "تعذر الحفظ", "#dc2626"); }

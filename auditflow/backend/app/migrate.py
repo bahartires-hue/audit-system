@@ -88,6 +88,8 @@ def _migrate_postgresql() -> None:
         # payrolls (بنود يدوية إضافية تُحفظ لإعادة الحساب بدقة)
         "ALTER TABLE payrolls ADD COLUMN IF NOT EXISTS extra_allowances_json TEXT",
         "ALTER TABLE payrolls ADD COLUMN IF NOT EXISTS extra_deductions_json TEXT",
+        # hr_attendance (تقويم الحضور الشهري: انصراف مبكر)
+        "ALTER TABLE hr_attendance ADD COLUMN IF NOT EXISTS is_early_leave INTEGER DEFAULT 0",
     ]
     with engine.begin() as conn:
         for sql in stmts:

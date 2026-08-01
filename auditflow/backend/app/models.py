@@ -753,6 +753,7 @@ class Attendance(Base):
     late_minutes = Column(Integer, nullable=False, default=0)
     overtime_minutes = Column(Integer, nullable=False, default=0)
     is_absent = Column(Integer, nullable=False, default=0, index=True)
+    is_early_leave = Column(Integer, nullable=False, default=0, index=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
 

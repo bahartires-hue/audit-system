@@ -516,7 +516,7 @@
             "<td style='font-weight:800;'><a href='/hr/employee?id=" + a.employee_id + "&tab=attendance' style='color:inherit;text-decoration:underline;'>" + a.employee_name + "</a></td>" +
             "<td>" + a.date + "</td>" + "<td>" + (a.check_in || "—") + "</td>" + "<td>" + (a.check_out || "—") + "</td>" +
             "<td>" + a.late_minutes + "</td>" + "<td>" + a.overtime_minutes + "</td>" +
-            "<td>" + (a.is_absent ? "🔴 غياب" : "🟢 حضور") + "</td>" + "<td></td>";
+            "<td>" + (a.is_absent ? "🔴 غياب" : (a.is_early_leave ? "🟠 انصراف مبكر" : "🟢 حضور")) + "</td>" + "<td></td>";
           var td = tr.lastElementChild;
           var delBtn = document.createElement("button");
           delBtn.type = "button"; delBtn.className = "op-tool-btn-secondary"; delBtn.style.cssText = "padding:4px 9px;font-size:0.72rem;";

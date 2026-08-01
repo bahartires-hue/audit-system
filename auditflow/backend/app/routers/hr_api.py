@@ -1756,6 +1756,7 @@ class AttendanceCreate(BaseModel):
     late_minutes: int = 0
     overtime_minutes: int = 0
     is_absent: bool = False
+    is_early_leave: bool = False
     notes: str = ""
 
 
@@ -1764,7 +1765,7 @@ def _attendance_out(a: Attendance, employee_name: str = "") -> dict:
         "id": a.id, "employee_id": a.employee_id, "employee_name": employee_name,
         "date": _fmt_date(a.date), "check_in": a.check_in or "", "check_out": a.check_out or "",
         "late_minutes": a.late_minutes, "overtime_minutes": a.overtime_minutes,
-        "is_absent": bool(a.is_absent), "notes": a.notes or "",
+        "is_absent": bool(a.is_absent), "is_early_leave": bool(a.is_early_leave), "notes": a.notes or "",
     }
 
 
@@ -1800,7 +1801,8 @@ def create_attendance(request: Request, body: AttendanceCreate = Body(...)):
             id=uuid.uuid4().hex, user_id=user.id, employee_id=body.employee_id, date=day,
             check_in=(body.check_in or "").strip() or None, check_out=(body.check_out or "").strip() or None,
             late_minutes=body.late_minutes or 0, overtime_minutes=body.overtime_minutes or 0,
-            is_absent=1 if body.is_absent else 0, notes=(body.notes or "").strip() or None,
+            is_absent=1 if body.is_absent else 0, is_early_leave=1 if body.is_early_leave else 0,
+            notes=(body.notes or "").strip() or None,
         )
         db.add(rec)
         db.commit()
