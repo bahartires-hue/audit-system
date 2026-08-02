@@ -721,6 +721,19 @@ def _reframe_ledger_columns_clean(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _dataframe_has_cid_corruption(df: pd.DataFrame) -> bool:
+    """يكشف بقايا (cid:NNNN) الناتجة عن استخراج نص من خط PDF بدون خريطة يونيكود صحيحة."""
+    cid_re = re.compile(r"\(cid:\d+\)")
+    hits = 0
+    for col in df.columns:
+        for val in df[col]:
+            if isinstance(val, str) and cid_re.search(val):
+                hits += 1
+                if hits >= 3:
+                    return True
+    return False
+
+
 def pdf_to_excel_bytes(file_path: str) -> bytes:
     df = read_pdf(file_path)
     if df is not None and len(df) <= 2:
@@ -744,6 +757,14 @@ def pdf_to_excel_bytes(file_path: str) -> bytes:
     df = _reframe_ledger_columns_clean(df)
 
     df = _apply_arabic_for_excel_export(df)
+
+    if _dataframe_has_cid_corruption(df):
+        raise ValueError(
+            "تعذّر استخراج النص العربي بشكل صحيح من هذا الملف: الخط المضمّن داخل ملف PDF الأصلي لا يحتوي على "
+            "خريطة يونيكود صحيحة لحروفه (هذه مشكلة في ملف PDF المصدر نفسه، وليست خللاً في النظام). "
+            "الحل: أعد تصدير/طباعة الملف إلى PDF من البرنامج الأصلي الذي أنشأه (Word, Excel, نظام الفوترة الأصلي...)، "
+            "ثم أعد المحاولة، أو استخدم Excel/CSV إن كان متوفراً."
+        )
 
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine="openpyxl") as writer:
