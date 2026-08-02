@@ -17,6 +17,8 @@ from ..models import BranchTransfer, BranchTransferLine, Item, Purchase, Purchas
 from ..models import Branch, Customer, Supplier, Category, Unit
 from ..models import SuspendedSale, SuspendedSaleLine
 from ..models import ReturnLine, ReturnTxn
+from ..models import CompanyProfile
+from ..pdf_utils import generate_pdf_report
 
 router = APIRouter(prefix="/api/trade", tags=["trade"])
 
@@ -2050,6 +2052,168 @@ def tax_return_report(request: Request, date_from: str = Query(""), date_to: str
         }
     finally:
         db.close()
+
+
+def _pdf_meta(db, user):
+    company = db.query(CompanyProfile).filter(CompanyProfile.id == "default").first()
+    company_name = (company.trade_name or company.company_name) if company else None
+    logo_url = company.logo_url if company else None
+    generated_by = getattr(user, "username", None) or getattr(user, "email", None)
+    return company_name, logo_url, generated_by
+
+
+@router.get("/reports/inventory/export-pdf")
+def export_inventory_pdf(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+    finally:
+        db.close()
+    data = inventory_report(request)
+    headers = ["الكود", "اسم الصنف", "الكمية", "تكلفة الوحدة", "سعر البيع", "قيمة المخزون"]
+    rows = [[r["code"], r["name"], r["quantity"], r["cost_price"], r["sale_price"], r["stock_value"]] for r in data["items"]]
+    return generate_pdf_report(headers, rows, "تقرير المخزون الحالي", "inventory.pdf", company_name, logo_url, generated_by)
+
+
+@router.get("/sales/export-pdf")
+def export_sales_pdf(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+        rows_q = db.query(Sale).filter(Sale.user_id == user.id).order_by(Sale.sale_date.desc()).all()
+        headers = ["رقم الفاتورة", "العميل", "التاريخ", "طريقة الدفع", "الخصم", "الضريبة", "الإجمالي", "المدفوع", "المتبقي"]
+        rows = [
+            [
+                r.invoice_no, r.customer_name, _fmt_date(r.sale_date), r.payment_type,
+                round(float(r.discount or 0.0), 2), round(float(r.tax_amount or 0.0), 2),
+                round(float(r.total_amount or 0.0), 2), round(float(r.paid_amount or 0.0), 2),
+                round(float(r.due_amount or 0.0), 2),
+            ]
+            for r in rows_q
+        ]
+    finally:
+        db.close()
+    return generate_pdf_report(headers, rows, "تقرير المبيعات", "sales.pdf", company_name, logo_url, generated_by)
+
+
+@router.get("/purchases/export-pdf")
+def export_purchases_pdf(request: Request):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+        rows_q = db.query(Purchase).filter(Purchase.user_id == user.id).order_by(Purchase.purchase_date.desc()).all()
+        headers = ["رقم الفاتورة", "المورد", "التاريخ", "طريقة الدفع", "الضريبة", "الخصم", "المدفوع", "المتبقي", "الإجمالي"]
+        rows = [
+            [
+                r.invoice_no, r.supplier_name, _fmt_date(r.purchase_date), r.payment_type,
+                round(float(r.tax_amount or 0.0), 2), round(float(r.discount or 0.0), 2),
+                round(float(r.paid_amount or 0.0), 2), round(float(r.due_amount or 0.0), 2),
+                round(float(r.total_amount or 0.0), 2),
+            ]
+            for r in rows_q
+        ]
+    finally:
+        db.close()
+    return generate_pdf_report(headers, rows, "تقرير المشتريات", "purchases.pdf", company_name, logo_url, generated_by)
+
+
+@router.get("/reports/profit/export-pdf")
+def export_profit_pdf(request: Request, date_from: str = Query(""), date_to: str = Query("")):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+    finally:
+        db.close()
+    data = profit_report(request, date_from=date_from, date_to=date_to)
+    headers = ["التاريخ", "رقم الفاتورة", "الصنف", "الكمية", "صافي المبيعات", "التكلفة", "الربح"]
+    rows = [[r["date"], r["invoice_no"], r["item"], r["qty"], r["net_sales"], r["cost_total"], r["profit"]] for r in data["items"]]
+    t = data["totals"]
+    rows.append(["الإجمالي", "", "", "", t["net_sales"], t["cost_total"], t["profit"]])
+    return generate_pdf_report(headers, rows, "تقرير الأرباح", "profit.pdf", company_name, logo_url, generated_by)
+
+
+@router.get("/reports/top-items/export-pdf")
+def export_top_items_pdf(
+    request: Request,
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    limit: int = Query(20, ge=1, le=100),
+    worst: bool = Query(False),
+):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+    finally:
+        db.close()
+    data = top_items_report(request, date_from=date_from, date_to=date_to, limit=limit)
+    key = "worst_selling" if worst else "best_selling"
+    headers = ["الصنف", "الكمية", "المبيعات", "الربح"]
+    rows = [[r["item"], r["qty"], r["sales"], r["profit"]] for r in data[key]]
+    title = "تقرير الأصناف الأقل مبيعاً" if worst else "تقرير الأصناف الأكثر مبيعاً"
+    fname = "worst_items.pdf" if worst else "top_items.pdf"
+    return generate_pdf_report(headers, rows, title, fname, company_name, logo_url, generated_by)
+
+
+@router.get("/reports/stock-ledger/export-pdf")
+def export_stock_ledger_pdf(request: Request, date_from: str = Query(""), date_to: str = Query("")):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+    finally:
+        db.close()
+    data = stock_ledger_report(request, date_from=date_from, date_to=date_to)
+    headers = ["التاريخ", "نوع الحركة", "كود الصنف", "اسم الصنف", "وارد", "صادر", "تكلفة الوحدة", "ملاحظات"]
+    rows = [
+        [x["date"], x["movement_type_label"], x["item_code"], x["item_name"], x["qty_in"], x["qty_out"], x["unit_cost"], x["notes"]]
+        for x in data["items"]
+    ]
+    return generate_pdf_report(headers, rows, "سجل حركة المخزون", "stock_ledger.pdf", company_name, logo_url, generated_by)
+
+
+@router.get("/reports/tax-return/export-pdf")
+def export_tax_return_pdf(request: Request, date_from: str = Query(""), date_to: str = Query("")):
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        company_name, logo_url, generated_by = _pdf_meta(db, user)
+    finally:
+        db.close()
+    data = tax_return_report(request, date_from=date_from, date_to=date_to)
+    ov = data["output_vat"]
+    iv = data["input_vat"]
+    nv = data["net_vat"]
+    headers = ["البند", "القيمة (ر.س)"]
+    rows = [
+        ["المبيعات قبل الضريبة", ov["sales_before_tax"]],
+        ["ضريبة المبيعات (مخرجات)", ov["sales_tax"]],
+        ["المبيعات شاملة الضريبة", ov["sales_with_tax"]],
+        ["مرتجعات المبيعات قبل الضريبة", ov["returns_before_tax"]],
+        ["ضريبة مرتجعات المبيعات", ov["returns_tax"]],
+        ["صافي المبيعات قبل الضريبة", ov["net_sales_before_tax"]],
+        ["صافي ضريبة المخرجات", ov["net_sales_tax"]],
+        ["المشتريات قبل الضريبة", iv["purchases_before_tax"]],
+        ["ضريبة المشتريات (مدخلات)", iv["purchases_tax"]],
+        ["المشتريات شاملة الضريبة", iv["purchases_with_tax"]],
+        ["مرتجعات المشتريات قبل الضريبة", iv["returns_before_tax"]],
+        ["ضريبة مرتجعات المشتريات", iv["returns_tax"]],
+        ["صافي المشتريات قبل الضريبة", iv["net_purchases_before_tax"]],
+        ["صافي ضريبة المدخلات", iv["net_purchases_tax"]],
+        [
+            "صافي الضريبة المستحقة" if nv["status"] == "payable" else "رصيد ضريبي دائن",
+            nv["payable_amount"] if nv["status"] == "payable" else nv["credit_amount"],
+        ],
+    ]
+    period = data.get("period", {})
+    title = "الإقرار الضريبي"
+    if period.get("date_from") or period.get("date_to"):
+        title += f" ({period.get('date_from','')} - {period.get('date_to','')})"
+    return generate_pdf_report(headers, rows, title, "tax_return.pdf", company_name, logo_url, generated_by)
 
 
 @router.get("/dashboard-summary")
