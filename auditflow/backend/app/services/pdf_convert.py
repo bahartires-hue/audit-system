@@ -32,6 +32,39 @@ def _has_arabic_script(s: str) -> bool:
     return False
 
 
+_ARABIC_CHAR_RE = re.compile(r"[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]")
+_ARABIC_RUN_RE = re.compile(r"[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿ ]+")
+
+def _reverse_arabic_run(m: "re.Match") -> str:
+    run = m.group(0)
+    if not _ARABIC_CHAR_RE.search(run):
+        return run
+    lead_len = len(run) - len(run.lstrip(" "))
+    trail_len = len(run) - len(run.rstrip(" "))
+    leading = run[:lead_len]
+    trailing = run[len(run) - trail_len:]
+    stripped = run[lead_len: len(run) - trail_len]
+    return leading + stripped[::-1] + trailing
+
+
+def fix_reversed_arabic_text(value: Any) -> Any:
+    """يعيد ترتيب مقاطع النص العربي المعكوسة الناتجة عن استخراج pdfplumber بترتيب بصري
+    (من اليمين لليسار حسب موقع الحرف على الصفحة) بدل الترتيب المنطقي الصحيح للنص.
+    يُطبَّق فقط على مقاطع الحروف العربية المتصلة؛ لا يمس الأرقام أو النصوص الإنجليزية."""
+    if value is None:
+        return value
+    if isinstance(value, float) and pd.isna(value):
+        return value
+    if not isinstance(value, str):
+        return value
+    if not _ARABIC_CHAR_RE.search(value):
+        return value
+    try:
+        return _ARABIC_RUN_RE.sub(_reverse_arabic_run, value)
+    except Exception:
+        return value
+
+
 def _excel_arabic_display(value: Any) -> Any:
     """تطبيع خفيف للنص العربي دون قلب ترتيب الأرقام داخل Excel."""
     if value is None:
@@ -804,11 +837,11 @@ def _format_converted_excel_sheet(ws: Any) -> None:
 
 
 def _apply_arabic_for_excel_export(df: pd.DataFrame) -> pd.DataFrame:
-    """يُطبَّق على الأعمدة والخلايا النصية فقط؛ الأرقام تبقى أرقاماً."""
+    """يُطبَّق على الأعمدة والخلايا النصية فقط؛ الأرقام تبقى أرقاماً."""
     out = df.copy()
-    out.columns = [_excel_arabic_display(str(c)) for c in out.columns]
+    out.columns = [_excel_arabic_display(fix_reversed_arabic_text(str(c))) for c in out.columns]
     for col in out.columns:
-        out[col] = out[col].map(lambda x: _excel_arabic_display(x) if isinstance(x, str) else x)
+        out[col] = out[col].map(lambda x: _excel_arabic_display(fix_reversed_arabic_text(x)) if isinstance(x, str) else x)
     return out
 
 
