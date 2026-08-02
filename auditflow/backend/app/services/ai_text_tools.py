@@ -7,56 +7,64 @@ import urllib.request
 from typing import Any, Dict
 
 
-def _api_key() -> str:
+def _anthropic_api_key() -> str:
+    return (os.getenv("ANTHROPIC_API_KEY") or "").strip()
+
+
+def _openai_api_key() -> str:
     return (os.getenv("OPENAI_API_KEY") or "").strip()
 
 
 def ai_text_enabled() -> bool:
-    return bool(_api_key())
+    return bool(_anthropic_api_key())
 
 
-def _extract_output_text(data: Dict[str, Any]) -> str:
-    out_text = data.get("output_text") or ""
-    if out_text:
-        return out_text
+def audio_transcribe_enabled() -> bool:
+    return bool(_openai_api_key())
+
+
+def _extract_claude_text(data: Dict[str, Any]) -> str:
     try:
-        chunks = data.get("output") or []
-        for c in chunks:
-            for part in c.get("content") or []:
-                if part.get("type") == "output_text":
-                    out_text += part.get("text") or ""
+        parts = data.get("content") or []
+        out = ""
+        for p in parts:
+            if p.get("type") == "text":
+                out += p.get("text") or ""
+        return out
     except Exception:
-        pass
-    return out_text
+        return ""
 
 
 def generate_text(system_prompt: str, user_text: str, max_chars: int = 12000) -> str:
-    """يستدعي OpenAI Responses API برسالة نظام + نص مستخدم، ويعيد نصًا عاديًا (بدون JSON).
+    """يستدعي Anthropic Messages API (Claude) برسالة نظام + نص مستخدم، ويعيد نصاً عادياً.
 
     يرفع RuntimeError برسالة عربية عند الفشل.
     """
     if not ai_text_enabled():
-        raise RuntimeError("خدمة الذكاء الاصطناعي غير مفعّلة حالياً (مفتاح OPENAI_API_KEY غير موجود)")
+        raise RuntimeError("خدمة الذكاء الاصطناعي غير مفعّلة حالياً (مفتاح ANTHROPIC_API_KEY غير موجود)")
 
     body = json.dumps(
         {
-            "model": "gpt-4.1-mini",
-            "input": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": (user_text or "")[:max_chars]},
-            ],
+            "model": "claude-sonnet-4-5",
+            "max_tokens": 4096,
+            "system": system_prompt,
+            "messages": [{"role": "user", "content": (user_text or "")[:max_chars]}],
         },
         ensure_ascii=False,
     ).encode("utf-8")
 
     req = urllib.request.Request(
-        "https://api.openai.com/v1/responses",
+        "https://api.anthropic.com/v1/messages",
         data=body,
-        headers={"Authorization": f"Bearer {_api_key()}", "Content-Type": "application/json"},
+        headers={
+            "x-api-key": _anthropic_api_key(),
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        },
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=45) as resp:
+        with urllib.request.urlopen(req, timeout=60) as resp:
             raw = resp.read().decode("utf-8")
     except urllib.error.HTTPError as e:
         txt = e.read().decode("utf-8", errors="ignore")
@@ -65,15 +73,19 @@ def generate_text(system_prompt: str, user_text: str, max_chars: int = 12000) ->
         raise RuntimeError(f"تعذر تشغيل التحليل الذكي: {str(e)}")
 
     data = json.loads(raw)
-    return _extract_output_text(data).strip()
+    text = _extract_claude_text(data).strip()
+    if not text:
+        raise RuntimeError("لم يتم استلام أي نص من خدمة الذكاء الاصطناعي")
+    return text
 
 
 def transcribe_audio(content: bytes, filename: str) -> str:
-    """يرفع ملف صوتي إلى OpenAI Whisper ويعيد النص المفرّغ (بالعربية أو أي لغة أخرى).
+    """يرفع ملف صوتي إلى OpenAI Whisper ويعيد النص المفرغ.
 
+    ملاحظة: تبقى هذه الأداة تحديداً على OpenAI لعدم وجود بديل من Anthropic لتحويل الصوت إلى نص.
     يرفع RuntimeError برسالة عربية عند الفشل.
     """
-    if not ai_text_enabled():
+    if not audio_transcribe_enabled():
         raise RuntimeError("خدمة تحويل الصوت إلى نص غير مفعّلة حالياً (مفتاح OPENAI_API_KEY غير موجود)")
 
     import requests
@@ -81,11 +93,11 @@ def transcribe_audio(content: bytes, filename: str) -> str:
     try:
         resp = requests.post(
             "https://api.openai.com/v1/audio/transcriptions",
-            headers={"Authorization": f"Bearer {_api_key()}"},
+            headers={"Authorization": f"Bearer {_openai_api_key()}"},
             data={"model": "whisper-1"},
             files={"file": (filename or "audio.mp3", content, "application/octet-stream")},
             timeout=120,
-        )
+       #)
     except Exception as e:
         raise RuntimeError(f"تعذر الاتصال بخدمة تحويل الصوت إلى نص: {str(e)}")
 
@@ -99,5 +111,5 @@ def transcribe_audio(content: bytes, filename: str) -> str:
 
     text = (data or {}).get("text") or ""
     if not text.strip():
-        raise RuntimeError("لم يتم التعرف على أي كلام داخل الملف الصوتي")
+        raise RuntimeError("لم يتم التعرف على أي كلام في الملف الصوتي")
     return text.strip()
