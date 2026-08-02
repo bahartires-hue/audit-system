@@ -97,7 +97,7 @@ def transcribe_audio(content: bytes, filename: str) -> str:
             data={"model": "whisper-1"},
             files={"file": (filename or "audio.mp3", content, "application/octet-stream")},
             timeout=120,
-       #)
+        )
     except Exception as e:
         raise RuntimeError(f"تعذر الاتصال بخدمة تحويل الصوت إلى نص: {str(e)}")
 
