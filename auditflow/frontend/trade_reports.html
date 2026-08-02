@@ -70,7 +70,7 @@
           var d = await apiGet("/api/trade/inventory");
           var rows = (d.items||[]).map(function(x){return [esc(x.code), esc(x.name), esc(x.quantity), money(x.cost_price), money(x.sale_price), money(x.stock_value)];});
           document.getElementById("tabContent").innerHTML =
-            '<div class="mb-2"><a href="/api/trade/reports/export-all" class="text-sm underline">تصدير Excel</a></div>' +
+            '<div class="mb-2 flex gap-3"><a href="/api/trade/reports/export-all" class="text-sm underline">تصدير Excel</a><a href="/api/trade/reports/inventory/export-pdf" class="text-sm underline">تصدير PDF</a></div>' +
             table(["الكود","اسم الصنف","الكمية","تكلفة الوحدة","سعر البيع","قيمة المخزون"], rows);
         }
 
@@ -78,7 +78,7 @@
           var d = await apiGet("/api/trade/sales?limit=200");
           var rows = (d.items||[]).map(function(x){return [esc(x.invoice_no), esc(x.customer_name), esc(x.sale_date), esc(x.payment_type), money(x.total_amount)];});
           document.getElementById("tabContent").innerHTML =
-            '<div class="mb-2"><a href="/api/trade/sales/export" class="text-sm underline">تصدير Excel</a></div>' +
+            '<div class="mb-2 flex gap-3"><a href="/api/trade/sales/export" class="text-sm underline">تصدير Excel</a><a href="/api/trade/sales/export-pdf" class="text-sm underline">تصدير PDF</a></div>' +
             table(["رقم الفاتورة","العميل","التاريخ","طريقة الدفع","الإجمالي"], rows);
         }
 
@@ -86,7 +86,7 @@
           var d = await apiGet("/api/trade/purchases?limit=200");
           var rows = (d.items||[]).map(function(x){return [esc(x.invoice_no), esc(x.supplier_name), esc(x.purchase_date), money(x.total_amount)];});
           document.getElementById("tabContent").innerHTML =
-            '<div class="mb-2"><a href="/api/trade/purchases/export" class="text-sm underline">تصدير Excel</a></div>' +
+            '<div class="mb-2 flex gap-3"><a href="/api/trade/purchases/export" class="text-sm underline">تصدير Excel</a><a href="/api/trade/purchases/export-pdf" class="text-sm underline">تصدير PDF</a></div>' +
             table(["رقم الفاتورة","المورد","التاريخ","الإجمالي"], rows);
         }
 
@@ -100,7 +100,7 @@
             '<div>التكلفة<div class="font-extrabold text-lg">'+money(t.cost_total)+'</div></div>' +
             '<div>الربح<div class="font-extrabold text-lg text-emerald-600">'+money(t.profit)+'</div></div>' +
             '<div>هامش الربح<div class="font-extrabold text-lg">'+esc(t.profit_margin_pct)+'%</div></div>' +
-            '</div>' + table(["التاريخ","رقم الفاتورة","الصنف","الكمية","صافي المبيعات","التكلفة","الربح"], rows);
+            '</div><div class="mb-2"><a href="/api/trade/reports/profit/export-pdf" class="text-sm underline">تصدير PDF</a></div>' + table(["التاريخ","رقم الفاتورة","الصنف","الكمية","صافي المبيعات","التكلفة","الربح"], rows);
         }
 
         async function renderMovement() {
@@ -125,7 +125,7 @@
           var list = worst ? d.worst_selling : d.best_selling;
           var rows = (list||[]).map(function(x){return [esc(x.item), esc(x.qty), money(x.sales), money(x.profit)];});
           document.getElementById("tabContent").innerHTML =
-            '<div class="mb-2"><a href="/api/trade/reports/export-all" class="text-sm underline">تصدير Excel</a></div>' +
+            '<div class="mb-2 flex gap-3"><a href="/api/trade/reports/export-all" class="text-sm underline">تصدير Excel</a><a href="/api/trade/reports/top-items/export-pdf?worst=' + (worst ? "1" : "0") + '" class="text-sm underline">تصدير PDF</a></div>' +
             table(["الصنف","الكمية المباعة","المبيعات","الربح"], rows);
         }
 
@@ -139,7 +139,7 @@
 
         async function renderLedger() {
           var host = document.getElementById("tabContent");
-          host.innerHTML = '<div class="mb-2"><a href="/api/trade/reports/stock-ledger/export" class="text-sm underline">تصدير Excel</a></div><div id="ledgerHost">جارِ التحميل...</div>';
+          host.innerHTML = '<div class="mb-2 flex gap-3"><a href="/api/trade/reports/stock-ledger/export" class="text-sm underline">تصدير Excel</a><a href="/api/trade/reports/stock-ledger/export-pdf" class="text-sm underline">تصدير PDF</a></div><div id="ledgerHost">جارِ التحميل...</div>';
           var d = await apiGet("/api/trade/reports/stock-ledger?limit=300");
           var rows = (d.items||[]).map(function(x){return [esc(x.date), esc(x.movement_type_label), esc(x.item_code), esc(x.item_name), esc(x.qty_in), esc(x.qty_out), money(x.unit_cost)];});
           document.getElementById("ledgerHost").innerHTML = table(["التاريخ","نوع الحركة","الكود","اسم الصنف","وارد","صادر","تكلفة الوحدة"], rows);
@@ -149,7 +149,7 @@
           var d = await apiGet("/api/trade/reports/tax-return");
           var ov = d.output_vat, iv = d.input_vat, nv = d.net_vat;
           document.getElementById("tabContent").innerHTML =
-            '<div class="mb-2"><a href="/api/trade/reports/tax-return/export" class="text-sm underline">تصدير Excel</a></div>' +
+            '<div class="mb-2 flex gap-3"><a href="/api/trade/reports/tax-return/export" class="text-sm underline">تصدير Excel</a><a href="/api/trade/reports/tax-return/export-pdf" class="text-sm underline">تصدير PDF</a></div>' +
             '<div class="grid grid-cols-1 md:grid-cols-2 gap-3">' +
             '<div class="rounded-xl border p-3"><div class="font-extrabold mb-2">ضريبة المخرجات (المبيعات)</div>' +
             '<div class="flex justify-between text-sm py-1"><span>صافي المبيعات قبل الضريبة</span><span class="font-bold">'+money(ov.net_sales_before_tax)+'</span></div>' +
