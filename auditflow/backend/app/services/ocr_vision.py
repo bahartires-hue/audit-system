@@ -8,69 +8,70 @@ import urllib.request
 from typing import Any, Dict
 
 
-def _api_key() -> str:
-    return (os.getenv("OPENAI_API_KEY") or "").strip()
+def _anthropic_api_key() -> str:
+    return (os.getenv("ANTHROPIC_API_KEY") or "").strip()
 
 
 def ocr_enabled() -> bool:
-    return bool(_api_key())
+    return bool(_anthropic_api_key())
 
 
-def _extract_output_text(data: Dict[str, Any]) -> str:
-    out_text = data.get("output_text") or ""
-    if out_text:
-        return out_text
+def _extract_claude_text(data: Dict[str, Any]) -> str:
     try:
-        chunks = data.get("output") or []
-        for c in chunks:
-            for part in c.get("content") or []:
-                if part.get("type") == "output_text":
-                    out_text += part.get("text") or ""
+        parts = data.get("content") or []
+        out = ""
+        for p in parts:
+            if p.get("type") == "text":
+                out += p.get("text") or ""
+        return out
     except Exception:
-        pass
-    return out_text
+        return ""
 
 
 def extract_text_from_image(image_bytes: bytes, mime: str = "image/png") -> str:
-    """Sends an image to OpenAI's vision-capable Responses API and returns the extracted text.
+    """يرسل صورة إلى Claude (Anthropic) القادر على قراءة الصور، ويعيد النص المستخرج.
 
-    Raises RuntimeError with an Arabic-friendly message on failure.
+    يرفع RuntimeError برسالة عربية عند الفشل.
     """
     if not ocr_enabled():
-        raise RuntimeError("خدمة استخراج النص غير مفعّلة حالياً (مفتاح الذكاء الاصطناعي غير موجود)")
+        raise RuntimeError("خدمة استخراج النص من الصور غير مفعّلة حالياً (مفتاح ANTHROPIC_API_KEY غير موجود)")
 
     b64 = base64.b64encode(image_bytes).decode("ascii")
-    data_url = f"data:{mime};base64,{b64}"
 
     body = json.dumps(
         {
-            "model": "gpt-4.1-mini",
-            "input": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an OCR engine. Extract ALL visible text from the image exactly as written, "
-                        "preserving line breaks and reading order. Return ONLY the extracted text with no "
-                        "commentary, no markdown fences, and no explanations. If no text is visible, return an "
-                        "empty string."
-                    ),
-                },
+            "model": "claude-sonnet-4-5",
+            "max_tokens": 4096,
+            "system": (
+                "You are an OCR engine. Extract ALL visible text from the image exactly as written, "
+                "preserving line breaks and reading order. Return ONLY the extracted text with no "
+                "commentary, no markdown fences, and no explanations. If no text is visible, return an "
+                "empty string."
+            ),
+            "messages": [
                 {
                     "role": "user",
                     "content": [
-                        {"type": "input_text", "text": "استخرج كل النص الموجود في هذه الصورة."},
-                        {"type": "input_image", "image_url": data_url},
+                        {"type": "text", "text": "استخرج كل النص الموجود في هذه الصورة."},
+                        {
+                            "type": "image",
+                            "source": {"type": "base64", "media_type": mime, "data": b64},
+                        },
                     ],
-                },
+                }
             ],
         },
         ensure_ascii=False,
     ).encode("utf-8")
 
     req = urllib.request.Request(
-        "https://api.openai.com/v1/responses",
+        "https://api.anthropic.com/v1/messages",
         data=body,
-        headers={"Authorization": f"Bearer {_api_key()}", "Content-Type": "application/json"},
+        headers={
+            "x-api-key": _anthropic_api_key(),
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        },
         method="POST",
     )
     try:
@@ -78,9 +79,9 @@ def extract_text_from_image(image_bytes: bytes, mime: str = "image/png") -> str:
             raw = resp.read().decode("utf-8")
     except urllib.error.HTTPError as e:
         txt = e.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(f"فشل الاتصال بخدمة استخراج النص: {txt[:220]}")
+        raise RuntimeError(f"فشل الاتصال بخدمة استخراج النص من الصور: {txt[:220]}")
     except Exception as e:
-        raise RuntimeError(f"تعذر تشغيل استخراج النص: {str(e)}")
+        raise RuntimeError(f"تعذر تشغيل استخراج النص من الصورة: {str(e)}")
 
     data = json.loads(raw)
-    return _extract_output_text(data).strip()
+    return _extract_claude_text(data).strip()
