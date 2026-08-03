@@ -25,11 +25,11 @@
     <main id="adminContent" class="admin2-content">
       <div class="a2-card" style="margin-bottom:1rem; border-right:3px solid var(--a2-accent);">
         <div style="display:flex; align-items:center; gap:0.6rem;">
-          <span style="font-size:1.3rem;">🚧</span>
+          <span style="font-size:1.3rem;">💳</span>
           <div>
-            <div style="font-weight:800;">نظام الفوترة الكامل قيد الإنشاء</div>
+            <div style="font-weight:800;">نظام اشتراكات يدوي (حوالة بنكية / نقداً)</div>
             <div style="font-size:0.82rem; color:var(--a2-text-muted); margin-top:0.2rem;">
-              هذه نظرة عامة مبدئية على اشتراكات المستخدمين الحاليين. نظام الدفع الكامل (خطط، فواتير، بوابات دفع مثل Stripe وميسر وHyperPay) قيد التطوير حالياً وسيتم تفعيله قريباً في هذه الصفحة نفسها.
+              الدفع حالياً عبر الحوالة البنكية أو نقداً فقط. راجع طلبات الاشتراك أدناه لقبولها أو رفضها، وأدر الحسابات البنكية من صفحة «الحسابات البنكية».
             </div>
           </div>
         </div>
@@ -41,7 +41,7 @@
           <div class="a2-stat-value" id="subTotalUsers">-</div>
         </div>
         <div class="a2-card">
-          <div class="a2-stat-label">مشتركون مدفوعون</div>
+          <div class="a2-stat-label">مشتركون مدفوعَن</div>
           <div class="a2-stat-value" id="subPaidUsers">-</div>
         </div>
         <div class="a2-card">
@@ -75,6 +75,39 @@
           </table>
         </div>
       </div>
+
+      <div class="a2-card">
+        <div style="display:flex; flex-wrap:wrap; gap:0.6rem; align-items:center; justify-content:space-between; margin-bottom:0.8rem;">
+          <h2 class="a2-card-title" style="margin:0;">🧾 طلبات الاشتراك</h2>
+          <select id="reqStatusFilter" class="a2-select">
+            <option value="">كل الحالات</option>
+            <option value="pending">قيد المراجعة</option>
+            <option value="approved">مقبول</option>
+            <option value="rejected">مرفوض</option>
+            <option value="info_requested">بانتظار معلومات إضافية</option>
+          </select>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="a2-table">
+            <thead>
+              <tr>
+                <th>العميل</th>
+                <th>الشركة</th>
+                <th>البريد/الجوال</th>
+                <th>الخطة</th>
+                <th>طريقة الدفع</th>
+                <th>التاريخ</th>
+                <th>الحالة</th>
+                <th>إجراء</th>
+              </tr>
+            </thead>
+            <tbody id="subRequestsHost">
+              <tr><td colspan="8" class="a2-empty">جارٍ التحميل...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </main>
 
     <script src="/static/app.js?v=19"></script>
@@ -166,6 +199,107 @@
       });
 
       loadSubscriptions();
+    </script>
+    <script>
+      const REQ_STATUS_LABELS = { pending: "قيد المراجعة", approved: "مقبول", rejected: "مرفوض", info_requested: "بانتظار معلومات إضافية" };
+      const REQ_STATUS_BADGE = { pending: "a2-badge-warning", approved: "a2-badge-success", rejected: "a2-badge-danger", info_requested: "a2-badge-neutral" };
+
+      function fmtReqDT2(iso) {
+        if (!iso) return "-";
+        try {
+          return new Date(iso).toLocaleString("ar-EG", { dateStyle: "medium", timeStyle: "short" });
+        } catch (e) {
+          return iso;
+        }
+      }
+
+      async function loadSubscriptionRequests() {
+        const host = document.getElementById("subRequestsHost");
+        host.innerHTML = '<tr><td colspan="8" class="a2-empty">جارٍ التحميل...</td></tr>';
+        try {
+          const status = document.getElementById("reqStatusFilter").value || "";
+          const params = status ? "?status=" + encodeURIComponent(status) : "";
+          const data = await apiGet("/admin/subscription-requests" + params);
+          const items = data.items || [];
+          if (!items.length) {
+            host.innerHTML = '<tr><td colspan="8" class="a2-empty">لا توجد طلبات</td></tr>';
+            return;
+          }
+          host.innerHTML = "";
+          items.forEach((r) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td>
+                <div style="font-weight:700;">${escapeHtml(r.full_name)}</div>
+                ${r.admin_notes ? `<div style="font-size:0.72rem; color:var(--a2-text-muted);">ملاحظة: ${escapeHtml(r.admin_notes)}</div>` : ""}
+              </td>
+              <td>${escapeHtml(r.company_name || "-")}</td>
+              <td style="font-size:0.78rem;">
+                <div dir="ltr">${escapeHtml(r.email)}</div>
+                <div dir="ltr">${escapeHtml(r.phone)}</div>
+              </td>
+              <td>${escapeHtml(r.plan_name)}<div style="font-size:0.72rem; color:var(--a2-text-muted);">${escapeHtml(r.billing_cycle_label)}</div></td>
+              <td>
+                ${escapeHtml(r.payment_method_label)}
+                ${r.has_receipt ? `<div><a href="/admin/subscription-requests/${r.id}/receipt" target="_blank" class="a2-btn a2-btn-sm a2-btn-outline" style="margin-top:0.3rem; display:inline-block;">عرض الإيصال</a></div>` : ""}
+              </td>
+              <td style="font-size:0.78rem;">${fmtReqDT2(r.created_at)}</td>
+              <td><span class="a2-badge ${REQ_STATUS_BADGE[r.status] || "a2-badge-neutral"}">${escapeHtml(REQ_STATUS_LABELS[r.status] || r.status)}</span></td>
+              <td>
+                <div style="display:flex; flex-direction:column; gap:0.3rem;">
+                  <button type="button" class="a2-btn a2-btn-sm" data-approve="${r.id}" ${r.status === "approved" ? "disabled" : ""}>قبول</button>
+                  <button type="button" class="a2-btn a2-btn-sm a2-btn-outline" data-info="${r.id}">طلب معلومات</button>
+                  <button type="button" class="a2-btn a2-btn-sm a2-btn-danger" data-reject="${r.id}">رفض</button>
+                </div>
+              </td>
+            `;
+            host.appendChild(tr);
+          });
+
+          host.querySelectorAll("[data-approve]").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              if (!confirm("سيتم تفعيل الاشتراك مباشرة لهذا العميل. تأكيد؟")) return;
+              try {
+                await apiPostJson("/admin/subscription-requests/" + btn.getAttribute("data-approve") + "/approve", {});
+                showToast("تم قبول الطلب وتفعيل الاشتراك", "#10b981");
+                loadSubscriptionRequests();
+              } catch (e) {
+                showToast(e.message || "فشل قبول الطلب", "#ef4444");
+              }
+            });
+          });
+          host.querySelectorAll("[data-reject]").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              const notes = prompt("سبب الرفض (اختياري):") || "";
+              try {
+                await apiPostJson("/admin/subscription-requests/" + btn.getAttribute("data-reject") + "/reject", { notes });
+                showToast("تم رفض الطلب", "#10b981");
+                loadSubscriptionRequests();
+              } catch (e) {
+                showToast(e.message || "فشل رفض الطلب", "#ef4444");
+              }
+            });
+          });
+          host.querySelectorAll("[data-info]").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              const notes = prompt("ما هي المعلومات الإضافية المطلوبة من العميل؟");
+              if (!notes) return;
+              try {
+                await apiPostJson("/admin/subscription-requests/" + btn.getAttribute("data-info") + "/request-info", { notes });
+                showToast("تم إرسال طلب المعلومات للعميل", "#10b981");
+                loadSubscriptionRequests();
+              } catch (e) {
+                showToast(e.message || "فشل الإرسال", "#ef4444");
+              }
+            });
+          });
+        } catch (e) {
+          host.innerHTML = '<tr><td colspan="8" class="a2-empty">تعذر تحميل الطلبات</td></tr>';
+        }
+      }
+
+      document.getElementById("reqStatusFilter").addEventListener("change", loadSubscriptionRequests);
+      loadSubscriptionRequests();
     </script>
   </body>
 </html>
