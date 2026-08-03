@@ -138,6 +138,30 @@ def _require_admin_user(db, request: Request) -> User:
     return user
 
 
+# تذكير أسبوعي + إلزام شهري بعمل نسخة احتياطية: أي مستخدم (وليس المدير فقط)
+# يجب أن يعرف متى تجب عليه أخذ نسخة من بياناته، ولماذا هذا ضروري.
+_BACKUP_REMINDER_AFTER_DAYS = 7
+_BACKUP_REQUIRED_AFTER_DAYS = 30
+_BACKUP_NECESSITY_TEXT_AR = (
+    "النسخ الاحتياطي الدوري يحمي بياناتك (المبيعات، المشتريات، العملاء، الموظفين...) من الفقدان الكامل "
+    "في حال حدوث عطل تقني أو خطأ بشري أو مشكلة في الخادم. بدون نسخة حديثة، أي عطل قد يعني ضياع بيانات "
+    "متجرك بالكامل بلا إمكانية استرجاع."
+)
+
+
+def _backup_status(user: User) -> dict:
+    now = dt.datetime.utcnow()
+    reference = user.last_backup_at or user.created_at or now
+    days_since = max(0, (now - reference).days)
+    return {
+        "last_backup_at": user.last_backup_at.isoformat() + "Z" if user.last_backup_at else None,
+        "days_since_backup": days_since,
+        "backup_reminder": days_since >= _BACKUP_REMINDER_AFTER_DAYS,
+        "backup_required": days_since >= _BACKUP_REQUIRED_AFTER_DAYS,
+        "backup_necessity_text": _BACKUP_NECESSITY_TEXT_AR,
+    }
+
+
 def _client_ip(request: Request) -> str:
     fwd = request.headers.get("x-forwarded-for", "")
     if fwd:
@@ -193,6 +217,7 @@ def auth_me(request: Request):
                     "plan_name": plan_name,
                     "subscription_expires_at": exp.isoformat() + "Z" if exp else None,
                     "allowed_pages": (u.allowed_pages or []) if u else [],
+                    "backup_status": _backup_status(u) if u else None,
                     "impersonated": bool(request.cookies.get(IMPERSONATOR_COOKIE)),
                     "roles": {
                         "user": bool(u),
@@ -850,7 +875,110 @@ def admin_backup(request: Request):
         buff.seek(0)
         ts = dt.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
         headers = {"Content-Disposition": f'attachment; filename="auditflow-backup-{ts}.json.gz"'}
+        admin.last_backup_at = dt.datetime.utcnow()
         log_event(db, "admin.backup.downloaded", admin.id, {"counts": counts})
+        db.commit()
+        return StreamingResponse(buff, media_type="application/gzip", headers=headers)
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# نسخة احتياطية ذاتية لكل مستخدم (وليس المدير فقط): تصدّر بيانات المستخدم
+# الحالي فقط -- بدون أي احتمال لرؤية بيانات مستخدم آخر. الجداول المشتركة/العامة
+# (roles, permissions, app_settings, company_profile, invite_codes...) والجداول
+# التي ليس لها مالك واضح في المخطط الحالي (simple_products وما يتفرع منها)
+# مستبعدة عمداً من هذا التصدير الذاتي.
+_USER_OWNED_DIRECT_TABLES = sorted({
+    "documents", "analysis_reports", "branches", "categories", "units", "suppliers", "customers",
+    "items", "purchases", "sales", "suspended_sales", "stock_movements", "item_images", "returns",
+    "expenses", "stock_adjustments", "branch_transfers", "employees", "employee_documents", "payrolls",
+    "employee_contracts", "hr_advances", "hr_deductions", "hr_allowances", "hr_commissions", "hr_leaves",
+    "hr_attendance", "hr_end_of_service", "hr_withdrawals", "hr_travel", "hr_custody", "hr_config_items",
+    "importer_snapshots", "audit_logs",
+})
+
+# جدول فرعي: (الجدول الأب, عمود الربط بالجدول الأب) -- ليس لديه user_id مباشر
+# لكنه مملوك بالكامل عبر أبيه المُدرج أعلاه.
+_USER_OWNED_VIA_PARENT_TABLES = {
+    "purchase_lines": ("purchases", "purchase_id"),
+    "sale_lines": ("sales", "sale_id"),
+    "suspended_sale_lines": ("suspended_sales", "suspended_sale_id"),
+    "return_lines": ("returns", "return_id"),
+    "branch_transfer_lines": ("branch_transfers", "transfer_id"),
+    "employee_document_renewals": ("employee_documents", "document_id"),
+    "payroll_allowances": ("payrolls", "payroll_id"),
+    "payroll_deductions": ("payrolls", "payroll_id"),
+}
+
+
+@router.get("/backup/mine")
+def backup_mine(request: Request):
+    """يصدّر نسخة احتياطية من بيانات المستخدم الحالي فقط (وليس بيانات أي مستخدم
+    آخر)، متاح لأي مستخدم مسجّل دخول وليس المدير فقط."""
+    db = SessionLocal()
+    try:
+        user = require_user(db, request)
+        table_map = {t.name: t for t in Base.metadata.sorted_tables}
+        tables = {}
+        counts = {}
+
+        # صف المستخدم نفسه فقط (بدون كلمة المرور أو بيانات الأمان الحساسة)
+        tables["users"] = [
+            {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "role_name": user.role_name,
+                "is_active": int(user.is_active or 0),
+                "plan_name": user.plan_name,
+                "subscription_expires_at": _serialize_backup_value(user.subscription_expires_at),
+                "created_at": _serialize_backup_value(user.created_at),
+                "preferences_json": user.preferences_json,
+                "allowed_pages": user.allowed_pages,
+            }
+        ]
+        counts["users"] = 1
+
+        owned_ids_by_table = {}
+        for tname in _USER_OWNED_DIRECT_TABLES:
+            table = table_map[tname]
+            rows = db.execute(table.select().where(table.c.user_id == user.id)).mappings().all()
+            serialized = [{c: _serialize_backup_value(v) for c, v in row.items()} for row in rows]
+            tables[tname] = serialized
+            counts[tname] = len(serialized)
+            owned_ids_by_table[tname] = {row["id"] for row in serialized if "id" in row}
+
+        for tname, (parent_table, fk_col) in _USER_OWNED_VIA_PARENT_TABLES.items():
+            table = table_map[tname]
+            parent_ids = owned_ids_by_table.get(parent_table) or set()
+            if not parent_ids:
+                tables[tname] = []
+                counts[tname] = 0
+                continue
+            rows = db.execute(table.select().where(table.c[fk_col].in_(parent_ids))).mappings().all()
+            serialized = [{c: _serialize_backup_value(v) for c, v in row.items()} for row in rows]
+            tables[tname] = serialized
+            counts[tname] = len(serialized)
+
+        payload = {
+            "format": "auditflow-user-backup",
+            "schema_version": 1,
+            "generated_at": dt.datetime.utcnow().isoformat() + "Z",
+            "owner_username": user.username,
+            "counts": counts,
+            "tables": tables,
+        }
+        raw = json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")
+        buff = io.BytesIO()
+        with gzip.GzipFile(fileobj=buff, mode="wb") as gz:
+            gz.write(raw)
+        buff.seek(0)
+        ts = dt.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        headers = {"Content-Disposition": f'attachment; filename="my-backup-{ts}.json.gz"'}
+        user.last_backup_at = dt.datetime.utcnow()
+        log_event(db, "backup.mine.downloaded", user.id, {"counts": counts})
+        db.commit()
         return StreamingResponse(buff, media_type="application/gzip", headers=headers)
     finally:
         db.close()
