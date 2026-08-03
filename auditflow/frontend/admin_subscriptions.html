@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "light" ? false : true;
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
+    <title>الاشتراكات — OptimalSuite AI</title>
+    <link rel="stylesheet" href="/static/tailwind.css?v=9" />
+    <link rel="stylesheet" href="/static/dark.css?v=9" />
+    <link rel="stylesheet" href="/static/admin_layout.css?v=1" />
+    <link rel="icon" href="/static/favicon.svg?v=9" />
+  </head>
+  <body class="admin2-shell" data-admin-active="subscriptions" data-admin-title="الاشتراكات">
+    <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
+    <div id="adminLayoutHost"></div>
+
+    <main id="adminContent" class="admin2-content">
+      <div class="a2-card" style="margin-bottom:1rem; border-right:3px solid var(--a2-accent);">
+        <div style="display:flex; align-items:center; gap:0.6rem;">
+          <span style="font-size:1.3rem;">🚧</span>
+          <div>
+            <div style="font-weight:800;">نظام الفوترة الكامل قيد الإنشاء</div>
+            <div style="font-size:0.82rem; color:var(--a2-text-muted); margin-top:0.2rem;">
+              هذه نظرة عامة مبدئية على اشتراكات المستخدمين الحاليين. نظام الدفع الكامل (خطط، فواتير، بوابات دفع مثل Stripe وميسر وHyperPay) قيد التطوير حالياً وسيتم تفعيله قريباً في هذه الصفحة نفسها.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="a2-grid a2-grid-4" style="margin-bottom:1rem;">
+        <div class="a2-card">
+          <div class="a2-stat-label">إجمالي المستخدمين</div>
+          <div class="a2-stat-value" id="subTotalUsers">-</div>
+        </div>
+        <div class="a2-card">
+          <div class="a2-stat-label">مشتركون مدفوعون</div>
+          <div class="a2-stat-value" id="subPaidUsers">-</div>
+        </div>
+        <div class="a2-card">
+          <div class="a2-stat-label">على الخطة المجانية</div>
+          <div class="a2-stat-value" id="subFreeUsers">-</div>
+        </div>
+        <div class="a2-card">
+          <div class="a2-stat-label">تنتهي خلال 7 أيام</div>
+          <div class="a2-stat-value" id="subExpiringUsers">-</div>
+        </div>
+      </div>
+
+      <div class="a2-card">
+        <div style="display:flex; flex-wrap:wrap; gap:0.6rem; align-items:center; justify-content:space-between; margin-bottom:0.8rem;">
+          <h2 class="a2-card-title" style="margin:0;">📋 اشتراكات المستخدمين</h2>
+          <input id="subSearchInp" type="text" class="a2-input" placeholder="بحث باسم المستخدم أو البريد..." style="min-width:220px;" />
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="a2-table">
+            <thead>
+              <tr>
+                <th>المستخدم</th>
+                <th>الخطة</th>
+                <th>تاريخ الانتهاء</th>
+                <th>الحالة</th>
+              </tr>
+            </thead>
+            <tbody id="subscriptionsHost">
+              <tr><td colspan="4" class="a2-empty">جارٍ التحميل...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <script src="/static/app.js?v=19"></script>
+    <script src="/static/admin_layout.js?v=1"></script>
+    <script>
+      let ALL_SUB_USERS = [];
+
+      function escapeHtml(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      }
+
+      function renderSubscriptionsTable(items) {
+        const host = document.getElementById("subscriptionsHost");
+        if (!items.length) {
+          host.innerHTML = '<tr><td colspan="4" class="a2-empty">لا توجد نتائج</td></tr>';
+          return;
+        }
+        const now = Date.now();
+        host.innerHTML = "";
+        items.forEach((x) => {
+          const tr = document.createElement("tr");
+          const expRaw = x.subscription_expires_at || null;
+          let expTxt = "-";
+          let statusBadge = '<span class="a2-badge a2-badge-neutral">مجاني</span>';
+          if (x.plan_name && x.plan_name !== "free") {
+            if (expRaw) {
+              const expDate = new Date(expRaw);
+              expTxt = expDate.toLocaleDateString("ar-EG");
+              const daysLeft = (expDate.getTime() - now) / 86400000;
+              if (daysLeft < 0) {
+                statusBadge = '<span class="a2-badge a2-badge-danger">منتهي</span>';
+              } else if (daysLeft <= 7) {
+                statusBadge = '<span class="a2-badge a2-badge-warning">ينتهي قريباً</span>';
+              } else {
+                statusBadge = '<span class="a2-badge a2-badge-success">نشط</span>';
+              }
+            } else {
+              statusBadge = '<span class="a2-badge a2-badge-success">نشط</span>';
+            }
+          }
+          tr.innerHTML = `
+            <td>
+              <div style="font-weight:700;">${escapeHtml(x.username)}</div>
+              <div style="font-size:0.72rem; color:var(--a2-text-muted);" dir="ltr">${escapeHtml(x.email || "-")}</div>
+            </td>
+            <td><span class="a2-badge ${x.plan_name === "free" ? "a2-badge-neutral" : "a2-badge-success"}">${escapeHtml(x.plan_name || "free")}</span></td>
+            <td dir="ltr" style="font-size:0.8rem;">${expTxt}</td>
+            <td>${statusBadge}</td>
+          `;
+          host.appendChild(tr);
+        });
+      }
+
+      async function loadSubscriptions() {
+        const host = document.getElementById("subscriptionsHost");
+        host.innerHTML = '<tr><td colspan="4" class="a2-empty">جارٍ التحميل...</td></tr>';
+        try {
+          const data = await apiGet("/admin/users?limit=400");
+          ALL_SUB_USERS = data.items || [];
+          const total = ALL_SUB_USERS.length;
+          const paid = ALL_SUB_USERS.filter((x) => x.plan_name && x.plan_name !== "free").length;
+          const free = total - paid;
+          const now = Date.now();
+          const expiring = ALL_SUB_USERS.filter((x) => {
+            if (!x.subscription_expires_at) return false;
+            const days = (new Date(x.subscription_expires_at).getTime() - now) / 86400000;
+            return days >= 0 && days <= 7;
+          }).length;
+          document.getElementById("subTotalUsers").textContent = total;
+          document.getElementById("subPaidUsers").textContent = paid;
+          document.getElementById("subFreeUsers").textContent = free;
+          document.getElementById("subExpiringUsers").textContent = expiring;
+          renderSubscriptionsTable(ALL_SUB_USERS);
+        } catch (e) {
+          host.innerHTML = '<tr><td colspan="4" class="a2-empty">تعذر تحميل البيانات</td></tr>';
+        }
+      }
+
+      document.getElementById("subSearchInp").addEventListener("input", (e) => {
+        const q = (e.target.value || "").trim().toLowerCase();
+        if (!q) {
+          renderSubscriptionsTable(ALL_SUB_USERS);
+          return;
+        }
+        const filtered = ALL_SUB_USERS.filter(
+          (x) => (x.username || "").toLowerCase().includes(q) || (x.email || "").toLowerCase().includes(q)
+        );
+        renderSubscriptionsTable(filtered);
+      });
+
+      loadSubscriptions();
+    </script>
+  </body>
+</html>
