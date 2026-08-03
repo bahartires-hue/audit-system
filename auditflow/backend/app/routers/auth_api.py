@@ -10,7 +10,7 @@ import uuid
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
-from sqlalchemy import func
+from sqlalchemy import DateTime, func, select, text
 
 from ..auth_core import (
     COOKIE_PATH,
@@ -32,7 +32,7 @@ from ..auth_core import (
     subscription_expired_text,
     verify_password,
 )
-from ..db import SessionLocal
+from ..db import Base, SessionLocal
 from ..mailer import send_password_reset_email, send_plain_email, send_smtp_test_email, smtp_status
 from ..models import AnalysisReport, AppSetting, AuditLog, Document, InviteCode, PasswordResetToken, User, UserSession
 from ..rate_limit import limiter
@@ -673,56 +673,184 @@ async def admin_smtp_test(request: Request):
         db.close()
 
 
+# ---------------------------------------------------------------------------
+# Full-system backup / restore
+#
+# Backs up EVERY table registered on the SQLAlchemy metadata (Base.metadata),
+# not just users + AnalysisReport, so that "استعادة" truly restores the
+# system as it was. Two tables are intentionally excluded because they hold
+# short-lived security material rather than business data (see
+# _BACKUP_EXCLUDED_TABLES below); everything else -- items, purchases,
+# sales, returns, expenses, stock movements, branches, customers,
+# suppliers, HR/payroll data, documents, settings, analysis reports, etc.
+# -- is included automatically, in FK-safe (parent-before-child) order.
+# ---------------------------------------------------------------------------
+
+# Tables intentionally left out of backup/restore: these hold live login
+# sessions and single-use password-reset tokens, not business data, and
+# reviving stale ones on restore would be a security concern rather than a
+# recovery benefit.
+_BACKUP_EXCLUDED_TABLES = {"user_sessions", "password_reset_tokens"}
+
+# On restore, if a `users` row already exists we never overwrite these
+# security-sensitive fields from the backup file -- a restore should bring
+# back business data, not silently swap out the live admin's password hash,
+# admin flag, or lockout state.
+_USERS_PROTECTED_FIELDS_ON_UPDATE = {"password_hash", "is_admin", "failed_attempts", "locked_until"}
+
+
+def _backup_tables_ordered() -> list:
+    return [t for t in Base.metadata.sorted_tables if t.name not in _BACKUP_EXCLUDED_TABLES]
+
+
+def _serialize_backup_value(v):
+    if isinstance(v, dt.datetime):
+        return v.isoformat() + "Z"
+    if isinstance(v, dt.date):
+        return v.isoformat()
+    return v
+
+
+def _deserialize_backup_value(col, v):
+    if v is None:
+        return None
+    if isinstance(col.type, DateTime):
+        try:
+            return dt.datetime.fromisoformat(str(v).replace("Z", ""))
+        except Exception:
+            return None
+    return v
+
+
+def _live_table_counts(db) -> dict:
+    counts = {}
+    for table in _backup_tables_ordered():
+        counts[table.name] = int(db.execute(select(func.count()).select_from(table)).scalar_one())
+    return counts
+
+
+def _bump_serial_sequence(db, table) -> None:
+    """After restoring explicit ids into an autoincrement PK column (Postgres),
+    advance the column's sequence past the highest restored id so future
+    inserts never collide with a restored row. No-op on SQLite (no sequences)."""
+    if db.bind is None or db.bind.dialect.name != "postgresql":
+        return
+    for col in table.primary_key.columns:
+        if not col.autoincrement:
+            continue
+        db.execute(
+            text(
+                f'SELECT setval(pg_get_serial_sequence(:tbl, :col), '
+                f'COALESCE((SELECT MAX("{col.name}") FROM "{table.name}"), 0) + 1, false)'
+            ),
+            {"tbl": table.name, "col": col.name},
+        )
+
+
+def _restore_table_rows(db, table, rows: list) -> dict:
+    """Restores one table's rows with per-row isolation (each row runs in its
+    own SAVEPOINT): a single malformed/legacy row is skipped and reported,
+    it never aborts the rest of the table or the rest of the restore."""
+    pk_cols = list(table.primary_key.columns)
+    if not pk_cols:
+        return {"inserted": 0, "updated": 0, "skipped": len(rows), "row_errors": ["لا يوجد مفتاح أساسي لهذا الجدول"]}
+    pk_names = [c.name for c in pk_cols]
+    inserted = 0
+    updated = 0
+    skipped = 0
+    any_inserted = False
+    row_errors = []
+    for idx, row in enumerate(rows):
+        if not isinstance(row, dict) or any(row.get(pk) in (None, "") for pk in pk_names):
+            skipped += 1
+            continue
+        values = {}
+        for col in table.columns:
+            if col.name in row:
+                values[col.name] = _deserialize_backup_value(col, row[col.name])
+        pk_filter = [table.c[pk] == values.get(pk, row.get(pk)) for pk in pk_names]
+        try:
+            with db.begin_nested():
+                exists = db.execute(select(*[table.c[pk] for pk in pk_names]).where(*pk_filter)).first()
+                if exists:
+                    update_values = dict(values)
+                    if table.name == "users":
+                        for f in _USERS_PROTECTED_FIELDS_ON_UPDATE:
+                            update_values.pop(f, None)
+                    if update_values:
+                        db.execute(table.update().where(*pk_filter).values(**update_values))
+                    updated += 1
+                else:
+                    db.execute(table.insert().values(**values))
+                    inserted += 1
+                    any_inserted = True
+        except Exception as e:
+            skipped += 1
+            pk_desc = ",".join(str(row.get(pk)) for pk in pk_names)
+            row_errors.append(f"صف #{idx} (المفتاح={pk_desc}): {str(e).splitlines()[0][:180]}")
+    if any_inserted:
+        try:
+            with db.begin_nested():
+                _bump_serial_sequence(db, table)
+        except Exception:
+            pass
+    result = {"inserted": inserted, "updated": updated, "skipped": skipped}
+    if row_errors:
+        result["row_errors"] = row_errors[:20] + ([f"... و {len(row_errors) - 20} أخطاء إضافية"] if len(row_errors) > 20 else [])
+    return result
+
+
+@router.get("/admin/backup/summary")
+def admin_backup_summary(request: Request):
+    """Live per-table record counts, so the admin can see exactly what a
+    backup would contain BEFORE downloading it."""
+    db = SessionLocal()
+    try:
+        _require_admin_user(db, request)
+        counts = _live_table_counts(db)
+        return {
+            "ok": True,
+            "generated_at": dt.datetime.utcnow().isoformat() + "Z",
+            "counts": counts,
+            "total_tables": len(counts),
+            "total_records": sum(counts.values()),
+            "excluded_tables": sorted(_BACKUP_EXCLUDED_TABLES),
+        }
+    finally:
+        db.close()
+
+
 @router.get("/admin/backup")
 def admin_backup(request: Request):
     db = SessionLocal()
     try:
         admin = _require_admin_user(db, request)
-        users = db.query(User).order_by(User.created_at.desc()).all()
-        reports = db.query(AnalysisReport).order_by(AnalysisReport.created_at.desc()).limit(1000).all()
+        tables = {}
+        counts = {}
+        for table in _backup_tables_ordered():
+            rows = db.execute(table.select()).mappings().all()
+            tables[table.name] = [
+                {col_name: _serialize_backup_value(val) for col_name, val in row.items()} for row in rows
+            ]
+            counts[table.name] = len(tables[table.name])
         payload = {
+            "format": "auditflow-full-backup",
+            "schema_version": 2,
             "generated_at": dt.datetime.utcnow().isoformat() + "Z",
             "by_admin": admin.username,
-            "users": [
-                {
-                    "id": u.id,
-                    "username": u.username,
-                    "email": u.email,
-                    "is_admin": int(u.is_admin or 0),
-                    "is_active": int(u.is_active or 0),
-                    "plan_name": u.plan_name,
-                    "subscription_expires_at": u.subscription_expires_at.isoformat() + "Z" if u.subscription_expires_at else None,
-                    "created_at": u.created_at.isoformat() + "Z" if u.created_at else None,
-                }
-                for u in users
-            ],
-            "reports": [
-                {
-                    "id": r.id,
-                    "user_id": r.user_id,
-                    "title": r.title,
-                    "branch1_name": r.branch1_name,
-                    "branch2_name": r.branch2_name,
-                    "status": r.status,
-                    "created_at": r.created_at.isoformat() + "Z" if r.created_at else None,
-                    "total_ops": r.total_ops,
-                    "matched_ops": r.matched_ops,
-                    "mismatch_ops": r.mismatch_ops,
-                    "errors_count": r.errors_count,
-                    "warnings_count": r.warnings_count,
-                    "archived": int(r.archived or 0),
-                }
-                for r in reports
-            ],
+            "table_order": [t.name for t in _backup_tables_ordered()],
+            "excluded_tables": sorted(_BACKUP_EXCLUDED_TABLES),
+            "counts": counts,
+            "tables": tables,
         }
-        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        raw = json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")
         buff = io.BytesIO()
         with gzip.GzipFile(fileobj=buff, mode="wb") as gz:
             gz.write(raw)
         buff.seek(0)
         ts = dt.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
         headers = {"Content-Disposition": f'attachment; filename="auditflow-backup-{ts}.json.gz"'}
-        log_event(db, "admin.backup.downloaded", admin.id, {"users_count": len(users), "reports_count": len(reports)})
+        log_event(db, "admin.backup.downloaded", admin.id, {"counts": counts})
         return StreamingResponse(buff, media_type="application/gzip", headers=headers)
     finally:
         db.close()
@@ -730,6 +858,8 @@ def admin_backup(request: Request):
 
 @router.post("/admin/backup/validate")
 async def admin_backup_validate(request: Request, backup_file: UploadFile = File(...)):
+    """Upload-only inspection: reports per-table record counts found in the
+    file. Does NOT write anything to the database."""
     db = SessionLocal()
     try:
         admin = _require_admin_user(db, request)
@@ -740,17 +870,38 @@ async def admin_backup_validate(request: Request, backup_file: UploadFile = File
             parsed = json.loads(raw.decode("utf-8"))
         except Exception:
             raise HTTPException(400, "ملف النسخة الاحتياطية غير صالح")
-        users = parsed.get("users")
-        reports = parsed.get("reports")
-        if not isinstance(users, list) or not isinstance(reports, list):
-            raise HTTPException(400, "بنية النسخة الاحتياطية غير صحيحة")
-        log_event(
-            db,
-            "admin.backup.validated",
-            admin.id,
-            {"users_count": len(users), "reports_count": len(reports), "filename": backup_file.filename or "backup"},
-        )
-        return {"ok": True, "users_count": len(users), "reports_count": len(reports)}
+
+        tables = parsed.get("tables")
+        if isinstance(tables, dict):
+            counts = {name: (len(rows) if isinstance(rows, list) else 0) for name, rows in tables.items()}
+            log_event(
+                db,
+                "admin.backup.validated",
+                admin.id,
+                {"counts": counts, "format": parsed.get("format", "auditflow-full-backup"), "filename": backup_file.filename or "backup"},
+            )
+            return {
+                "ok": True,
+                "format": parsed.get("format", "auditflow-full-backup"),
+                "counts": counts,
+                "total_tables": len(counts),
+                "total_records": sum(counts.values()),
+            }
+
+        # Backward compatibility with the old users-only backup format.
+        legacy_users = parsed.get("users")
+        legacy_reports = parsed.get("reports")
+        if isinstance(legacy_users, list) or isinstance(legacy_reports, list):
+            counts = {"users": len(legacy_users or []), "reports (analysis_reports فقط)": len(legacy_reports or [])}
+            log_event(
+                db,
+                "admin.backup.validated",
+                admin.id,
+                {"counts": counts, "format": "legacy", "filename": backup_file.filename or "backup"},
+            )
+            return {"ok": True, "format": "legacy", "counts": counts, "total_tables": len(counts), "total_records": sum(counts.values())}
+
+        raise HTTPException(400, "بنية النسخة الاحتياطية غير صحيحة")
     finally:
         db.close()
 
@@ -1322,6 +1473,12 @@ async def admin_impersonate_stop(request: Request):
 
 @router.post("/admin/backup/restore")
 async def admin_backup_restore(request: Request, backup_file: UploadFile = File(...)):
+    """Restores every table present in the uploaded backup file. Semantics
+    are additive/merge, never destructive: existing rows are matched by
+    primary key and updated with the backup's values, rows missing from the
+    live database are inserted, and rows that exist live but are NOT present
+    in the backup file are left untouched (no deletes, ever). The whole
+    operation is one transaction -- if anything fails, nothing is written."""
     db = SessionLocal()
     try:
         admin = _require_admin_user(db, request)
@@ -1333,44 +1490,65 @@ async def admin_backup_restore(request: Request, backup_file: UploadFile = File(
             parsed = json.loads(raw.decode("utf-8"))
         except Exception:
             raise HTTPException(400, "ملف النسخة الاحتياطية غير صالح")
-        users = parsed.get("users")
-        if not isinstance(users, list):
-            raise HTTPException(400, "بنية النسخة الاحتياطية غير صحيحة")
-        matched = 0
-        updated = 0
-        for u in users:
-            uid = str(u.get("id") or "").strip()
-            email = str(u.get("email") or "").strip().lower()
-            target = None
-            if uid:
-                target = db.query(User).filter(User.id == uid).first()
-            if not target and email:
-                target = db.query(User).filter(User.email == email).first()
-            if not target:
-                continue
-            matched += 1
-            if int(target.is_admin or 0) == 1:
-                continue
-            if "plan_name" in u:
-                target.plan_name = str(u.get("plan_name") or "free")
-            if "is_active" in u:
-                target.is_active = 1 if int(u.get("is_active") or 0) else 0
-            if u.get("subscription_expires_at"):
+
+        tables_payload = parsed.get("tables")
+        if not isinstance(tables_payload, dict):
+            # Backward compatibility: restore an old users-only backup file.
+            legacy_users = parsed.get("users")
+            if not isinstance(legacy_users, list):
+                raise HTTPException(400, "بنية النسخة الاحتياطية غير صحيحة")
+            tables_payload = {"users": legacy_users}
+
+        table_map = {t.name: t for t in _backup_tables_ordered()}
+        unknown_tables = [n for n in tables_payload.keys() if n not in table_map]
+        by_table = {}
+        errors = {}
+        # Each row is restored in its own SAVEPOINT (see _restore_table_rows),
+        # so one malformed row/table never blocks the rest of the restore --
+        # everything that CAN be safely restored, IS restored. We only abort
+        # the whole operation (and commit nothing) if something catastrophic
+        # happens outside that per-row isolation, e.g. the commit itself fails.
+        try:
+            for table in _backup_tables_ordered():
+                name = table.name
+                if name not in tables_payload:
+                    continue
+                rows = tables_payload.get(name)
+                if not isinstance(rows, list):
+                    errors[name] = "بيانات الجدول ليست قائمة"
+                    continue
                 try:
-                    target.subscription_expires_at = dt.datetime.fromisoformat(
-                        str(u["subscription_expires_at"]).replace("Z", "")
-                    )
-                except Exception:
-                    pass
-            updated += 1
-        db.commit()
+                    by_table[name] = _restore_table_rows(db, table, rows)
+                except Exception as e:
+                    errors[name] = str(e).splitlines()[0][:220]
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(400, f"فشلت عملية الاستعادة بالكامل ولم يتم تعديل أي بيانات: {str(e)}")
+
+        total_inserted = sum(v.get("inserted", 0) for v in by_table.values())
+        total_updated = sum(v.get("updated", 0) for v in by_table.values())
+        total_skipped = sum(v.get("skipped", 0) for v in by_table.values())
         log_event(
             db,
             "admin.backup.restored",
             admin.id,
-            {"users_in_file": len(users), "matched": matched, "updated": updated, "filename": backup_file.filename or "backup"},
+            {
+                "tables": by_table,
+                "unknown_tables_in_file": unknown_tables,
+                "errors": errors,
+                "filename": backup_file.filename or "backup",
+            },
         )
-        return {"ok": True, "users_in_file": len(users), "matched": matched, "updated": updated}
+        return {
+            "ok": True,
+            "tables_restored": by_table,
+            "unknown_tables_in_file": unknown_tables,
+            "errors": errors,
+            "total_inserted": total_inserted,
+            "total_updated": total_updated,
+            "total_skipped": total_skipped,
+        }
     finally:
         db.close()
 
