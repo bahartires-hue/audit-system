@@ -18,7 +18,7 @@
     {
       label: "الإدارة",
       items: [
-        { key: "users", label: "المستخدمون", href: "/admin/users", icon: "users" },
+        { key: "users", label: "المستخدمون", href: "/admin/manage-users", icon: "users" },
         { key: "subscriptions", label: "الاشتراكات", href: "/admin/subscriptions", icon: "card" },
         { key: "invites", label: "الدعوات", href: "/admin/invites", icon: "ticket" },
         { key: "documents", label: "المستندات", href: "/admin/documents", icon: "folder" },
