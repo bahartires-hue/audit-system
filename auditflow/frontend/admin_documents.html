@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "light" ? false : true;
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
+    <title>المستندات — OptimalSuite AI</title>
+    <link rel="stylesheet" href="/static/tailwind.css?v=9" />
+    <link rel="stylesheet" href="/static/dark.css?v=9" />
+    <link rel="stylesheet" href="/static/admin_layout.css?v=1" />
+    <link rel="icon" href="/static/favicon.svg?v=9" />
+  </head>
+  <body class="admin2-shell" data-admin-active="documents" data-admin-title="المستندات">
+    <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
+    <div id="adminLayoutHost"></div>
+
+    <main id="adminContent" class="admin2-content">
+      <div class="a2-card" style="margin-bottom:1rem;">
+        <h2 class="a2-card-title">📁 رفع مستند جديد</h2>
+        <form id="docUploadForm" style="display:flex; flex-wrap:wrap; gap:0.6rem; align-items:flex-end;">
+          <div style="flex:1; min-width:160px;">
+            <label style="display:block; font-size:0.78rem; color:var(--a2-text-muted); margin-bottom:0.3rem;">نوع المستند</label>
+            <select id="docTypeSelect" class="a2-select" style="width:100%;">
+              <option value="file">ملف</option>
+              <option value="invoice">فاتورة</option>
+              <option value="contract">عقد</option>
+              <option value="attachment">مرفق</option>
+            </select>
+          </div>
+          <div style="flex:2; min-width:200px;">
+            <label style="display:block; font-size:0.78rem; color:var(--a2-text-muted); margin-bottom:0.3rem;">العنوان (اختياري)</label>
+            <input id="docTitleInp" type="text" class="a2-input" style="width:100%;" placeholder="عنوان المستند" />
+          </div>
+          <div style="flex:2; min-width:220px;">
+            <label style="display:block; font-size:0.78rem; color:var(--a2-text-muted); margin-bottom:0.3rem;">الملف</label>
+            <input id="docFileInp" type="file" class="a2-input" style="width:100%;" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx,.csv,.zip,.txt" required />
+          </div>
+          <button type="submit" id="docUploadBtn" class="a2-btn">رفع المستند</button>
+        </form>
+        <div style="margin-top:0.5rem;">
+          <input id="docNotesInp" type="text" class="a2-input" style="width:100%;" placeholder="ملاحظات (اختياري)" />
+        </div>
+      </div>
+
+      <div class="a2-card">
+        <div style="display:flex; flex-wrap:wrap; gap:0.6rem; align-items:center; justify-content:space-between; margin-bottom:0.8rem;">
+          <h2 class="a2-card-title" style="margin:0;">📄 المستندات المرفوعة</h2>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <select id="docTypeFilter" class="a2-select">
+              <option value="">كل الأنواع</option>
+              <option value="file">ملف</option>
+              <option value="invoice">فاتورة</option>
+              <option value="contract">عقد</option>
+              <option value="attachment">مرفق</option>
+            </select>
+            <input id="docSearchInp" type="text" class="a2-input" placeholder="بحث بالعنوان أو المحتوى..." style="min-width:220px;" />
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="a2-table">
+            <thead>
+              <tr>
+                <th>العنوان</th>
+                <th>النوع</th>
+                <th>بواسطة</th>
+                <th>الحجم</th>
+                <th>تاريخ الرفع</th>
+                <th>إجراء</th>
+              </tr>
+            </thead>
+            <tbody id="documentsHost">
+              <tr><td colspan="6" class="a2-empty">جارٍ التحميل...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <script src="/static/app.js?v=19"></script>
+    <script src="/static/admin_layout.js?v=1"></script>
+    <script>
+      const DOC_TYPE_LABELS_AR = { file: "ملف", invoice: "فاتورة", contract: "عقد", attachment: "مرفق" };
+
+      function fmtSize(bytes) {
+        const b = Number(bytes || 0);
+        if (b < 1024) return b + " B";
+        if (b < 1024 * 1024) return (b / 1024).toFixed(1) + " KB";
+        return (b / (1024 * 1024)).toFixed(1) + " MB";
+      }
+
+      function fmtDocDT(iso) {
+        if (!iso) return "-";
+        try {
+          const d = new Date(iso);
+          return d.toLocaleString("ar-EG", { dateStyle: "medium", timeStyle: "short" });
+        } catch (e) {
+          return iso;
+        }
+      }
+
+      let docSearchTimer = null;
+
+      async function loadDocuments() {
+        const host = document.getElementById("documentsHost");
+        host.innerHTML = '<tr><td colspan="6" class="a2-empty">جارٍ التحميل...</td></tr>';
+        try {
+          const docType = document.getElementById("docTypeFilter").value || "";
+          const q = document.getElementById("docSearchInp").value || "";
+          const params = new URLSearchParams();
+          if (docType) params.set("doc_type", docType);
+          if (q) params.set("q", q);
+          params.set("limit", "300");
+          const data = await apiGet("/api/documents?" + params.toString());
+          const items = data.items || [];
+          if (!items.length) {
+            host.innerHTML = '<tr><td colspan="6" class="a2-empty">لا توجد مستندات</td></tr>';
+            return;
+          }
+          host.innerHTML = "";
+          items.forEach((d) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td>
+                <div style="font-weight:700;">${escapeHtml(d.title || d.original_filename || "-")}</div>
+                ${d.match_snippet ? `<div style="font-size:0.75rem; color:var(--a2-text-muted);">${escapeHtml(d.match_snippet)}</div>` : ""}
+              </td>
+              <td><span class="a2-badge a2-badge-neutral">${escapeHtml(DOC_TYPE_LABELS_AR[d.doc_type] || d.doc_type)}</span></td>
+              <td>${escapeHtml(d.uploaded_by || "-")}</td>
+              <td>${fmtSize(d.size_bytes)}</td>
+              <td>${fmtDocDT(d.created_at)}</td>
+              <td>
+                <div style="display:flex; gap:0.4rem;">
+                  <a class="a2-btn a2-btn-sm a2-btn-outline" href="/api/documents/${encodeURIComponent(d.id)}/download">تنزيل</a>
+                  <button type="button" class="a2-btn a2-btn-sm a2-btn-danger" data-del-id="${d.id}">حذف</button>
+                </div>
+              </td>
+            `;
+            host.appendChild(tr);
+          });
+          host.querySelectorAll("[data-del-id]").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              if (!confirm("هل تريد حذف هذا المستند؟ لا يمكن التراجع.")) return;
+              try {
+                await apiDelete("/api/documents/" + encodeURIComponent(btn.getAttribute("data-del-id")));
+                showToast("تم حذف المستند", "#10b981");
+                loadDocuments();
+              } catch (e) {
+                showToast(e.message || "فشل الحذف", "#ef4444");
+              }
+            });
+          });
+        } catch (e) {
+          host.innerHTML = '<tr><td colspan="6" class="a2-empty">تعذر تحميل المستندات</td></tr>';
+        }
+      }
+
+      function escapeHtml(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      }
+
+      document.getElementById("docTypeFilter").addEventListener("change", loadDocuments);
+      document.getElementById("docSearchInp").addEventListener("input", () => {
+        clearTimeout(docSearchTimer);
+        docSearchTimer = setTimeout(loadDocuments, 300);
+      });
+
+      document.getElementById("docUploadForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const fileInp = document.getElementById("docFileInp");
+        const file = fileInp.files && fileInp.files[0];
+        if (!file) {
+          showToast("الرجاء اختيار ملف", "#ef4444");
+          return;
+        }
+        const btn = document.getElementById("docUploadBtn");
+        btn.disabled = true;
+        btn.textContent = "جارٍ الرفع...";
+        try {
+          const fd = new FormData();
+          fd.append("file", file);
+          fd.append("doc_type", document.getElementById("docTypeSelect").value || "file");
+          fd.append("title", document.getElementById("docTitleInp").value || "");
+          fd.append("notes", document.getElementById("docNotesInp").value || "");
+          await apiPostForm("/api/documents", fd);
+          showToast("تم رفع المستند بنجاح", "#10b981");
+          document.getElementById("docUploadForm").reset();
+          document.getElementById("docNotesInp").value = "";
+          loadDocuments();
+        } catch (e) {
+          showToast(e.message || "فشل رفع المستند", "#ef4444");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "رفع المستند";
+        }
+      });
+
+      loadDocuments();
+    </script>
+  </body>
+</html>
