@@ -6,6 +6,8 @@ pandas
 numpy
 scipy
 pdfplumber
+# PyMuPDF: محرك استخراج نص بديل لملفات PDF ذات خطوط عربية بلا خريطة ToUnicode صحيحة.
+pymupdf
 requests
 beautifulsoup4
 lxml
