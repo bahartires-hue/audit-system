@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import re
 import unicodedata
 from pathlib import Path
@@ -11,6 +12,7 @@ import pdfplumber
 
 from .analyzer import (
     _dataframe_from_pdf_grid,
+    _extract_pdf_rows_from_text,
     _is_balance_column_name,
     _normalize_arabic_digits,
     _promote_ledger_header_row,
@@ -22,6 +24,9 @@ from .analyzer import (
     resolve_document_columns,
     safe,
 )
+from .pdf_extract_engine import PdfExtractionError, extract_pdf_text_with_fallback
+
+logger = logging.getLogger("uvicorn.error")
 
 
 def _has_arabic_script(s: str) -> bool:
@@ -767,6 +772,33 @@ def _dataframe_has_cid_corruption(df: pd.DataFrame) -> bool:
     return False
 
 
+def _fallback_via_multi_engine_text(file_path: str) -> pd.DataFrame | None:
+    """يُستخدم فقط بعد أن يفشل/يتلف استخراج pdfplumber المعتاد. يجرّب PyMuPDF ثم OCR
+    (عبر pdf_extract_engine)، ثم يبني صفوف حركة من النص الناتج بنفس محلّل analyzer النصي.
+    يعيد None إن تعذّر الوصول لأي صفوف قابلة للاستخدام (وليس خطأ) — القرار النهائي بالفشل
+    يبقى بيد pdf_to_excel_bytes نفسها."""
+    try:
+        with open(file_path, "rb") as fh:
+            content = fh.read()
+    except Exception as e:
+        logger.warning("تعذّرت قراءة ملف PDF للمحاولة البديلة (PyMuPDF/OCR): %s", e)
+        return None
+
+    result = extract_pdf_text_with_fallback(content)  # يرفع PdfExtractionError إن فشلت كل الطرق
+    if result.fallback_used:
+        logger.info(
+            "تصدير Excel: استُخدمت طريقة استخراج بديلة (%s) بعد فشل الاستخراج المعتاد | صفحات=%s | المدة=%.2fث",
+            result.method, result.page_count, result.duration_sec,
+        )
+    rows = _extract_pdf_rows_from_text(result.full_text)
+    if not rows:
+        return None
+    df = pd.DataFrame(rows).dropna(how="all")
+    if df.empty:
+        return None
+    return df
+
+
 def pdf_to_excel_bytes(file_path: str) -> bytes:
     df = read_pdf(file_path)
     if df is not None and len(df) <= 2:
@@ -777,6 +809,15 @@ def pdf_to_excel_bytes(file_path: str) -> bytes:
             fallback_df = _extract_statement_rows_from_pdf_text(file_path)
             if fallback_df is not None and len(fallback_df) > len(df):
                 df = fallback_df
+    if df is None or df.empty:
+        # الاستخراج المعتاد (pdfplumber) لم يُعطِ شيئاً قابلاً للاستخدام — نجرّب محرك بديل
+        # (PyMuPDF ثم OCR) قبل أن نطلب من المستخدم إعادة تصدير الملف.
+        try:
+            fallback_df = _fallback_via_multi_engine_text(file_path)
+        except PdfExtractionError as e:
+            raise ValueError(e.user_message)
+        if fallback_df is not None and not fallback_df.empty:
+            df = fallback_df
     if df is None or df.empty:
         raise ValueError(
             "تعذر استخراج بيانات من PDF. جرّب ملفاً نصياً (وليس صورة ممسوحة)، أو صدّره من البرنامج كـ PDF، أو استخدم Excel/CSV."
@@ -792,12 +833,25 @@ def pdf_to_excel_bytes(file_path: str) -> bytes:
     df = _apply_arabic_for_excel_export(df)
 
     if _dataframe_has_cid_corruption(df):
-        raise ValueError(
-            "تعذّر استخراج النص العربي بشكل صحيح من هذا الملف: الخط المضمّن داخل ملف PDF الأصلي لا يحتوي على "
-            "خريطة يونيكود صحيحة لحروفه (هذه مشكلة في ملف PDF المصدر نفسه، وليست خللاً في النظام). "
-            "الحل: أعد تصدير/طباعة الملف إلى PDF من البرنامج الأصلي الذي أنشأه (Word, Excel, نظام الفوترة الأصلي...)، "
-            "ثم أعد المحاولة، أو استخدم Excel/CSV إن كان متوفراً."
-        )
+        # الاستخراج بدا سليماً ظاهرياً لكن بقايا (cid:NNNN) ظهرت داخل الجدول النهائي —
+        # قبل الحكم بالفشل النهائي، نجرّب نفس المحرك البديل (PyMuPDF ثم OCR) كخيار أخير.
+        try:
+            fallback_df = _fallback_via_multi_engine_text(file_path)
+        except PdfExtractionError as e:
+            raise ValueError(e.user_message)
+        if fallback_df is not None and not fallback_df.empty:
+            fallback_df = _apply_arabic_for_excel_export(fallback_df)
+            if not _dataframe_has_cid_corruption(fallback_df):
+                df = fallback_df
+            else:
+                fallback_df = None
+        if fallback_df is None or fallback_df.empty:
+            raise ValueError(
+                "تعذّر استخراج النص العربي بشكل صحيح من هذا الملف حتى بعد تجربة محرك استخراج بديل والتعرف الضوئي "
+                "(OCR): الخط المضمّن داخل ملف PDF الأصلي أو جودة المسح الضوئي تمنع قراءته بشكل صحيح. "
+                "الحل: أعد تصدير/طباعة الملف إلى PDF من البرنامج الأصلي الذي أنشأه (Word, Excel, نظام الفوترة الأصلي...)، "
+                "ثم أعد المحاولة، أو استخدم Excel/CSV إن كان متوفراً."
+            )
 
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine="openpyxl") as writer:
