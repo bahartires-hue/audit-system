@@ -19,6 +19,7 @@ def _migrate_postgresql() -> None:
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences_json JSON DEFAULT '{}'::json",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_pages JSON",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_backup_at TIMESTAMP",
         "ALTER TABLE documents ADD COLUMN IF NOT EXISTS extracted_text TEXT",
         # items
         "ALTER TABLE items ADD COLUMN IF NOT EXISTS bolt_pattern VARCHAR",
@@ -134,6 +135,23 @@ def _migrate_postgresql() -> None:
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_employee_id ON audit_logs (employee_id)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_employees_manager_id ON employees (manager_id)"))
 
+        # ميزة تذكير/إلزام النسخ الاحتياطي: عند أول نشر لهذه الميزة فقط، امنح كل
+        # مستخدم موجود مسبقاً "فترة سماح" كاملة (يبدأ العدّ من الآن، لا من تاريخ
+        # إنشاء حسابه القديم) بدلاً من اعتباره متأخرًا عن النسخ فورًا. نستخدم
+        # app_settings كعلامة تُنفَّذ مرة واحدة فقط ولا تتكرر مع كل إعادة تشغيل.
+        already_backfilled = conn.execute(
+            text("SELECT 1 FROM app_settings WHERE key = 'backup_reminder_backfilled'")
+        ).first()
+        if not already_backfilled:
+            conn.execute(text("UPDATE users SET last_backup_at = NOW() WHERE last_backup_at IS NULL"))
+            conn.execute(
+                text(
+                    "INSERT INTO app_settings (key, value_json, updated_at) "
+                    "VALUES ('backup_reminder_backfilled', '{}'::json, NOW()) "
+                    "ON CONFLICT (key) DO NOTHING"
+                )
+            )
+
 
 def run_migrations() -> None:
     """أعمدة ناقصة على قواعد قديمة (SQLite محلياً، Postgres على Render)."""
@@ -171,6 +189,10 @@ def run_migrations() -> None:
                 conn.execute(text("ALTER TABLE users ADD COLUMN preferences_json JSON"))
             if "allowed_pages" not in ucols:
                 conn.execute(text("ALTER TABLE users ADD COLUMN allowed_pages JSON"))
+            if "last_backup_at" not in ucols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN last_backup_at DATETIME"))
+                # فترة سماح كاملة للمستخدمين الحاليين بدلاً من اعتبارهم متأخرين فورًا
+                conn.execute(text("UPDATE users SET last_backup_at = CURRENT_TIMESTAMP WHERE last_backup_at IS NULL"))
 
         r_docs = conn.execute(text("PRAGMA table_info(documents)"))
         doc_cols = [row[1] for row in r_docs.fetchall()]
