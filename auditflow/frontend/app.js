@@ -1102,3 +1102,118 @@ window.downloadErrors = downloadReportFile;
 window.goMismatchPage = goMismatchPage;
 window.exportFilteredCsv = exportFilteredCsv;
 
+
+
+// ============================================================
+// تذكير أسبوعي بالنسخ الاحتياطي + إلزام شهري بعد 30 يوماً بدون نسخة
+// ملاحظة: هذا التطبيق (banner/overlay) على مستوى الواجهة فقط - يمنع
+// الاستخدام العادي عبر المتصفح، ولا يمنع نداءات الـ API المباشرة.
+// ============================================================
+(function () {
+  function todayKey() {
+    const d = new Date();
+    return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+  }
+
+  function triggerBackupDownload(isAdmin) {
+    window.location.href = isAdmin ? "/admin/backup" : "/backup/mine";
+  }
+
+  function showReminderBanner(status, isAdmin) {
+    const dismissKey = "backup_reminder_dismissed_" + todayKey();
+    try {
+      if (sessionStorage.getItem(dismissKey)) return;
+    } catch (e) {}
+    if (document.getElementById("backupReminderBar")) return;
+    const bar = document.createElement("div");
+    bar.id = "backupReminderBar";
+    bar.style.cssText =
+      "position:fixed;top:0;left:0;right:0;z-index:9998;background:#f59e0b;color:#1f2937;" +
+      "display:flex;align-items:center;justify-content:center;gap:0.75rem;padding:0.5rem 1rem;" +
+      "font-weight:800;font-size:0.85rem;box-shadow:0 2px 8px rgba(0,0,0,0.15);flex-wrap:wrap;text-align:center;direction:rtl;";
+    bar.innerHTML =
+      `<span>⚠️ لم تقم بعمل نسخة احتياطية منذ ${status.days_since_backup} يوم. يُنصح بعمل نسخة الآن لحماية بياناتك.</span>` +
+      `<button type="button" id="backupNowBtnReminder" style="background:#1f2937;color:#fff;border:none;border-radius:8px;padding:0.3rem 0.9rem;font-weight:800;cursor:pointer;">نسخ احتياطي الآن</button>` +
+      `<button type="button" id="backupDismissBtn" style="background:transparent;color:#1f2937;border:1px solid #1f2937;border-radius:8px;padding:0.3rem 0.7rem;font-weight:800;cursor:pointer;">تذكير لاحقاً</button>`;
+    document.body.prepend(bar);
+    document.body.style.paddingTop = (parseInt(document.body.style.paddingTop) || 0) + 44 + "px";
+    document.getElementById("backupNowBtnReminder").addEventListener("click", () => triggerBackupDownload(isAdmin));
+    document.getElementById("backupDismissBtn").addEventListener("click", () => {
+      try { sessionStorage.setItem(dismissKey, "1"); } catch (e) {}
+      bar.remove();
+    });
+  }
+
+  async function recheckAndMaybeRemoveOverlay() {
+    try {
+      const me = await apiGet("/auth/me");
+      const status = me && me.backup_status;
+      const note = document.getElementById("backupRequiredNote");
+      if (status && !status.backup_required) {
+        const overlay = document.getElementById("backupRequiredOverlay");
+        if (overlay) overlay.remove();
+        document.body.style.overflow = "";
+        const bar = document.getElementById("backupReminderBar");
+        if (bar) bar.remove();
+      } else if (note) {
+        note.textContent = "لم يتم رصد نسخة جديدة بعد. إن كنت قد بدأت التنزيل للتو، انتظر قليلاً ثم أعد تحميل الصفحة.";
+      }
+    } catch (e) {}
+  }
+
+  function showBlockingOverlay(status, isAdmin) {
+    if (document.getElementById("backupRequiredOverlay")) return;
+    const existingBar = document.getElementById("backupReminderBar");
+    if (existingBar) existingBar.remove();
+    const overlay = document.createElement("div");
+    overlay.id = "backupRequiredOverlay";
+    overlay.style.cssText =
+      "position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,0.92);" +
+      "display:flex;align-items:center;justify-content:center;padding:1.5rem;";
+    const lastBackupLine = status.last_backup_at
+      ? "آخر نسخة احتياطية: " + status.last_backup_at
+      : "لم تقم بعمل أي نسخة احتياطية من قبل";
+    overlay.innerHTML =
+      '<div style="max-width:520px;background:#fff;border-radius:16px;padding:2rem;text-align:center;direction:rtl;box-shadow:0 10px 40px rgba(0,0,0,0.3);">' +
+        '<div style="font-size:2.5rem;margin-bottom:0.5rem;">🔒</div>' +
+        '<h2 style="font-weight:900;font-size:1.25rem;margin-bottom:0.75rem;color:#111827;">يجب عمل نسخة احتياطية للمتابعة</h2>' +
+        '<p style="color:#4b5563;font-size:0.95rem;line-height:1.7;margin-bottom:1.25rem;">' + status.backup_necessity_text + '</p>' +
+        '<p style="color:#ef4444;font-weight:700;font-size:0.85rem;margin-bottom:1.25rem;">' +
+          'مضى ' + status.days_since_backup + ' يومًا منذ آخر نسخة احتياطية (' + lastBackupLine + ').' +
+        '</p>' +
+        '<button type="button" id="backupNowBtnRequired" style="background:#2563eb;color:#fff;border:none;border-radius:10px;padding:0.75rem 1.5rem;font-weight:800;font-size:1rem;cursor:pointer;width:100%;">' +
+          'إنشاء نسخة احتياطية الآن' +
+        '</button>' +
+        '<p id="backupRequiredNote" style="color:#9ca3af;font-size:0.75rem;margin-top:0.9rem;">سيتم تحديث الحالة تلقائيًا بعد إنشاء النسخة.</p>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    document.body.style.overflow = "hidden";
+    document.getElementById("backupNowBtnRequired").addEventListener("click", () => {
+      triggerBackupDownload(isAdmin);
+      const note = document.getElementById("backupRequiredNote");
+      if (note) note.textContent = "جارٍ التحقق بعد إنشاء النسخة...";
+      setTimeout(recheckAndMaybeRemoveOverlay, 2500);
+    });
+  }
+
+  async function initBackupReminder() {
+    try {
+      const me = await apiGet("/auth/me");
+      if (!me || !me.username) return; // غير مسجّل دخول - لا شيء لعرضه
+      const status = me.backup_status;
+      if (!status) return;
+      const isAdmin = !!me.is_admin;
+      if (status.backup_required) {
+        showBlockingOverlay(status, isAdmin);
+      } else if (status.backup_reminder) {
+        showReminderBanner(status, isAdmin);
+      }
+    } catch (e) {}
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initBackupReminder);
+  } else {
+    initBackupReminder();
+  }
+})();
