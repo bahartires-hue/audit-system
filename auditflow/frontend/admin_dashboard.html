@@ -706,8 +706,23 @@
               showToast(e.message || "تعذر حفظ الإعدادات", "#ef4444");
             }
           });
-          backupBtn.addEventListener("click", () => {
-            window.location.href = "/admin/backup";
+          backupBtn.addEventListener("click", async () => {
+            try {
+              const summary = await apiGet("/admin/backup/summary");
+              const counts = summary.counts || {};
+              const nonZero = Object.entries(counts).filter(([, n]) => n > 0);
+              const lines = nonZero.length
+                ? nonZero.map(([name, n]) => `${TABLE_LABEL_AR[name] || name}: ${n}`).join("\n")
+                : "لا توجد بيانات في أي جدول بعد.";
+              const totalTables = summary.total_tables ?? Object.keys(counts).length;
+              const totalRecords = summary.total_records ?? nonZero.reduce((s, [, n]) => s + n, 0);
+              const msg = `سيتم تصدير نسخة احتياطية كاملة تشمل ${totalTables} جدولاً (${totalRecords} سجلاً إجمالاً):\n\n${lines}\n\nمتابعة التنزيل؟`;
+              if (!confirm(msg)) return;
+              window.location.href = "/admin/backup";
+            } catch (e) {
+              if (!confirm("تعذر جلب إحصائية الجداول قبل النسخ (" + (e.message || "خطأ غير معروف") + "). هل تريد المتابعة والتنزيل مباشرة؟")) return;
+              window.location.href = "/admin/backup";
+            }
           });
           smtpTestBtn.addEventListener("click", async () => {
             const to_email = (smtpTestEmail.value || "").trim();
@@ -1241,6 +1256,28 @@
       })();
 
 
+      const TABLE_LABEL_AR = {
+        users: "المستخدمون", analysis_reports: "تقارير المطابقة", app_settings: "الإعدادات",
+        company_profile: "بيانات المؤسسة", branches: "الفروع", categories: "الفئات", units: "الوحدات",
+        suppliers: "الموردون", customers: "العملاء", items: "المنتجات/الأصناف", purchases: "المشتريات",
+        purchase_lines: "بنود المشتريات", sales: "المبيعات", sale_lines: "بنود المبيعات",
+        suspended_sales: "المبيعات المعلقة", suspended_sale_lines: "بنود المبيعات المعلقة",
+        stock_movements: "حركات المخزون", stock_adjustments: "تسويات المخزون", item_images: "صور المنتجات",
+        returns: "المرتجعات", return_lines: "بنود المرتجعات", expenses: "المصروفات",
+        branch_transfers: "تحويلات الفروع", branch_transfer_lines: "بنود تحويلات الفروع",
+        documents: "المستندات", audit_logs: "سجل النشاط", invite_codes: "أكواد الدعوة",
+        roles: "الأدوار", permissions: "الصلاحيات", role_permissions: "صلاحيات الأدوار",
+        simple_products: "منتجات (النظام المبسط)", simple_purchases: "مشتريات (النظام المبسط)",
+        simple_sales: "مبيعات (النظام المبسط)", importer_snapshots: "لقطات الاستيراد",
+        employees: "الموظفون", employee_documents: "مستندات الموظفين",
+        employee_document_renewals: "تجديد مستندات الموظفين", employee_contracts: "عقود الموظفين",
+        payrolls: "الرواتب", payroll_allowances: "بدلات الرواتب", payroll_deductions: "استقطاعات الرواتب",
+        hr_advances: "السلف", hr_deductions: "الاستقطاعات", hr_allowances: "البدلات",
+        hr_commissions: "العمولات", hr_leaves: "الإجازات", hr_attendance: "الحضور والانصراف",
+        hr_end_of_service: "نهاية الخدمة", hr_withdrawals: "السحوبات", hr_travel: "السفر",
+        hr_custody: "العهدة", hr_config_items: "إعدادات الموارد البشرية",
+      };
+
       (function setupBackupRestore() {
         const btn = document.getElementById("restoreBackupBtn");
         const inp = document.getElementById("restoreBackupFile");
@@ -1249,7 +1286,11 @@
         inp.addEventListener("change", async () => {
           const file = inp.files && inp.files[0];
           if (!file) return;
-          if (!confirm("استعادة بيانات المستخدمين (الخطة والتفعيل وتاريخ الانتهاء) من هذه النسخة الاحتياطية؟")) {
+          const warn =
+            "استعادة كاملة لكل بيانات النظام من هذا الملف (المستخدمون، المنتجات، المبيعات، المشتريات، الموارد البشرية، وكل الجداول الأخرى).\n\n" +
+            "لن يتم حذف أي بيانات موجودة حاليًا: يتم فقط إضافة الصفوف الناقصة وتحديث الصفوف المطابقة بمعرّفها. " +
+            "بيانات الأمان الحساسة (كلمة المرور، صلاحية المدير) لا تُستبدل أبدًا من النسخة الاحتياطية.\n\nمتابعة الاستعادة؟";
+          if (!confirm(warn)) {
             inp.value = "";
             return;
           }
@@ -1257,7 +1298,15 @@
             const fd = new FormData();
             fd.append("backup_file", file);
             const r = await apiPostForm("/admin/backup/restore", fd);
-            showToast(`تم تحديث ${r.updated} من ${r.matched} مستخدم مطابق ✔️`, "#10b981");
+            const tablesTouched = Object.keys(r.tables_restored || {}).filter(
+              (t) => (r.tables_restored[t].inserted || 0) + (r.tables_restored[t].updated || 0) > 0
+            ).length;
+            let msg = `تمت الاستعادة: ${r.total_inserted || 0} إضافة، ${r.total_updated || 0} تحديث عبر ${tablesTouched} جدولاً ✔️`;
+            if (r.total_skipped) msg += ` (تم تجاوز ${r.total_skipped} صف بسبب بيانات غير صالحة)`;
+            showToast(msg, "#10b981");
+            if (r.unknown_tables_in_file && r.unknown_tables_in_file.length) {
+              showToast(`تنبيه: جداول غير معروفة في الملف تم تجاهلها: ${r.unknown_tables_in_file.join(", ")}`, "#f59e0b");
+            }
             await loadAdminPanel();
           } catch (e) {
             showToast(e.message || "تعذرت الاستعادة", "#ef4444");
