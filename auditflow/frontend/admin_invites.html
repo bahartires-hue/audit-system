@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "light" ? false : true;
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
+    <title>الدعوات — OptimalSuite AI</title>
+    <link rel="stylesheet" href="/static/tailwind.css?v=9" />
+    <link rel="stylesheet" href="/static/dark.css?v=9" />
+    <link rel="stylesheet" href="/static/admin_layout.css?v=1" />
+    <link rel="icon" href="/static/favicon.svg?v=9" />
+  </head>
+  <body class="admin2-shell" data-admin-active="invites" data-admin-title="الدعوات">
+    <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
+    <div id="adminLayoutHost"></div>
+
+    <main id="adminContent" class="admin2-content">
+      <div class="a2-card" style="max-width:640px;">
+        <h2 class="a2-card-title">🎟️ دعوة عميل جديد</h2>
+        <p style="color:var(--a2-text-muted); font-size:0.85rem; margin-bottom:1rem;">الدعوة افتراضيًا لمستخدم واحد وتنتهي بعد المدة المحددة.</p>
+        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.75rem;">
+          <input id="inviteHours" type="number" min="1" max="168" value="168" class="a2-input" style="width:110px;" />
+          <span style="font-size:0.8rem; color:var(--a2-text-muted);">ساعة صلاحية</span>
+          <button id="createInviteBtn" class="a2-btn">إنشاء دعوة</button>
+        </div>
+        <div id="inviteOut" style="margin-top:1rem; font-size:0.85rem; font-weight:800;"></div>
+      </div>
+
+      <div class="a2-card" style="max-width:640px; margin-top:1.25rem;">
+        <h2 class="a2-card-title">الدعوات الحالية</h2>
+        <div id="invitesListHost" class="a2-grid" style="gap:0.5rem;"></div>
+      </div>
+    </main>
+
+    <script src="/static/app.js?v=19"></script>
+    <script src="/static/admin_layout.js?v=1"></script>
+    <script>
+      async function setupInviteCard() {
+        const btn = document.getElementById("createInviteBtn");
+        const out = document.getElementById("inviteOut");
+        const hrs = document.getElementById("inviteHours");
+        btn.addEventListener("click", async () => {
+          try {
+            const expires_in_hours = Math.max(1, Math.min(168, Number(hrs.value || 168)));
+            const r = await apiPostJson("/auth/invites", { expires_in_hours });
+            out.innerHTML = `تم إنشاء الكود: <code style="background:var(--a2-accent-soft); padding:2px 8px; border-radius:6px;">${r.code}</code>`;
+            showToast("تم إنشاء الدعوة \u2714\ufe0f", "#10b981");
+            loadInvitesList();
+          } catch (e) {
+            showToast(e.message || "تعذر إنشاء الدعوة", "#ef4444");
+          }
+        });
+      }
+
+      async function loadInvitesList() {
+        const host = document.getElementById("invitesListHost");
+        try {
+          const data = await apiGet("/auth/invites");
+          const items = data.items || data.invites || (Array.isArray(data) ? data : []);
+          if (!items.length) {
+            host.innerHTML = '<p class="a2-empty">لا دعوات بعد.</p>';
+            return;
+          }
+          const STATUS_AR = { active: "فعّالة", expired: "منتهية", disabled: "معطّلة" };
+          const STATUS_CLASS = { active: "a2-badge-success", expired: "a2-badge-neutral", disabled: "a2-badge-danger" };
+          host.innerHTML = items
+            .map((x) => {
+              const used = x.used_count || 0;
+              const max = x.max_uses || 1;
+              const status = STATUS_AR[x.status] || x.status || "-";
+              const badgeClass = STATUS_CLASS[x.status] || "a2-badge-neutral";
+              return `<div class="a2-card" style="padding:0.6rem 0.85rem; display:flex; justify-content:space-between; align-items:center;">
+                <div><code>${x.code}</code><div style="font-size:0.72rem; color:var(--a2-text-muted); margin-top:2px;">استخدام: ${used}/${max}</div></div>
+                <span class="a2-badge ${badgeClass}">${status}</span>
+              </div>`;
+            })
+            .join("");
+        } catch (e) {
+          host.innerHTML = `<p class="a2-empty">${e.message || "تعذر تحميل الدعوات"}</p>`;
+        }
+      }
+
+      setupInviteCard();
+      loadInvitesList();
+    </script>
+  </body>
+</html>
