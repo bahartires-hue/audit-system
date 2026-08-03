@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "light" ? false : true;
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
+    <title>الملف الشخصي — OptimalSuite AI</title>
+    <link rel="stylesheet" href="/static/tailwind.css?v=9" />
+    <link rel="stylesheet" href="/static/dark.css?v=9" />
+    <link rel="stylesheet" href="/static/admin_layout.css?v=1" />
+    <link rel="icon" href="/static/favicon.svg?v=9" />
+  </head>
+  <body class="admin2-shell" data-admin-active="profile" data-admin-title="الملف الشخصي">
+    <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
+    <div id="adminLayoutHost"></div>
+
+    <main id="adminContent" class="admin2-content">
+      <div class="a2-grid a2-grid-2">
+        <div class="a2-card">
+          <h2 class="a2-card-title">👤 بيانات الحساب</h2>
+          <div style="display:flex; align-items:center; gap:0.8rem; margin-bottom:1rem;">
+            <div class="admin2-avatar" style="width:52px; height:52px; font-size:1.4rem;" id="profileAvatar">؟</div>
+            <div>
+              <div style="font-weight:800; font-size:1.05rem;" id="profileUsername">-</div>
+              <div style="font-size:0.8rem; color:var(--a2-text-muted);" dir="ltr" id="profileEmail">-</div>
+            </div>
+          </div>
+          <div class="a2-grid" style="gap:0.6rem;">
+            <div>
+              <span class="a2-stat-label">الدور</span>
+              <div id="profileRole" style="font-weight:700; margin-top:0.2rem;">-</div>
+            </div>
+            <div>
+              <span class="a2-stat-label">الخطة الحالية</span>
+              <div id="profilePlan" style="font-weight:700; margin-top:0.2rem;">-</div>
+            </div>
+            <div>
+              <span class="a2-stat-label">تاريخ انتهاء الاشتراك</span>
+              <div id="profileExpiry" style="font-weight:700; margin-top:0.2rem;" dir="ltr">-</div>
+            </div>
+            <div>
+              <span class="a2-stat-label">حالة الحساب</span>
+              <div id="profileStatus" style="font-weight:700; margin-top:0.2rem;">-</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="a2-card">
+          <h2 class="a2-card-title">🔒 تغيير كلمة المرور</h2>
+          <form id="changePasswordForm" style="display:flex; flex-direction:column; gap:0.7rem;">
+            <div>
+              <label style="display:block; font-size:0.78rem; color:var(--a2-text-muted); margin-bottom:0.3rem;">كلمة المرور الحالية</label>
+              <input id="oldPasswordInp" type="password" class="a2-input" style="width:100%;" required />
+            </div>
+            <div>
+              <label style="display:block; font-size:0.78rem; color:var(--a2-text-muted); margin-bottom:0.3rem;">كلمة المرور الجديدة</label>
+              <input id="newPasswordInp" type="password" class="a2-input" style="width:100%;" required minlength="8" />
+            </div>
+            <div>
+              <label style="display:block; font-size:0.78rem; color:var(--a2-text-muted); margin-bottom:0.3rem;">تأكيد كلمة المرور الجديدة</label>
+              <input id="confirmPasswordInp" type="password" class="a2-input" style="width:100%;" required minlength="8" />
+            </div>
+            <button type="submit" id="changePasswordBtn" class="a2-btn" style="align-self:flex-start;">تحديث كلمة المرور</button>
+          </form>
+        </div>
+      </div>
+    </main>
+
+    <script src="/static/app.js?v=19"></script>
+    <script src="/static/admin_layout.js?v=1"></script>
+    <script>
+      async function loadProfile() {
+        try {
+          const me = await apiGet("/auth/me");
+          document.getElementById("profileUsername").textContent = me.username || "-";
+          document.getElementById("profileEmail").textContent = me.email || "-";
+          document.getElementById("profileAvatar").textContent = (me.username || "؟").trim().charAt(0).toUpperCase();
+          document.getElementById("profileRole").textContent = me.is_admin ? "مدير" : (me.role_name || "مستخدم");
+          document.getElementById("profilePlan").textContent = me.plan_name || "free";
+          document.getElementById("profileExpiry").textContent = me.subscription_expires_at
+            ? new Date(me.subscription_expires_at).toLocaleDateString("ar-EG")
+            : "-";
+          document.getElementById("profileStatus").textContent = me.is_active ? "نشط" : "موقوف";
+        } catch (e) {
+          showToast("تعذر تحميل بيانات الحساب", "#ef4444");
+        }
+      }
+
+      document.getElementById("changePasswordForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const oldPassword = document.getElementById("oldPasswordInp").value;
+        const newPassword = document.getElementById("newPasswordInp").value;
+        const confirmPassword = document.getElementById("confirmPasswordInp").value;
+        if (newPassword.length < 8) {
+          showToast("كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل", "#ef4444");
+          return;
+        }
+        if (newPassword !== confirmPassword) {
+          showToast("كلمتا المرور الجديدتان غير متطابقتين", "#ef4444");
+          return;
+        }
+        const btn = document.getElementById("changePasswordBtn");
+        btn.disabled = true;
+        btn.textContent = "جارٍ التحديث...";
+        try {
+          await apiPostJson("/auth/change-password", { old_password: oldPassword, new_password: newPassword });
+          showToast("تم تحديث كلمة المرور بنجاح", "#10b981");
+          document.getElementById("changePasswordForm").reset();
+        } catch (e2) {
+          showToast(e2.message || "فشل تحديث كلمة المرور", "#ef4444");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "تحديث كلمة المرور";
+        }
+      });
+
+      loadProfile();
+    </script>
+  </body>
+</html>
