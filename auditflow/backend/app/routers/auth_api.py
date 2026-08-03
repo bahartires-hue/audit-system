@@ -140,7 +140,7 @@ def _require_admin_user(db, request: Request) -> User:
 
 # تذكير أسبوعي + إلزام شهري بعمل نسخة احتياطية: أي مستخدم (وليس المدير فقط)
 # يجب أن يعرف متى تجب عليه أخذ نسخة من بياناته، ولماذا هذا ضروري.
-_BACKUP_REMINDER_AFTER_DAYS = 0  # TEMP: معاينة اليوم بطلب بحر - سيُعاد لـ 7 لاحقاً
+_BACKUP_REMINDER_AFTER_DAYS = 7
 _BACKUP_REQUIRED_AFTER_DAYS = 30
 _BACKUP_NECESSITY_TEXT_AR = (
     "النسخ الاحتياطي الدوري يحمي بياناتك (المبيعات، المشتريات، العملاء، الموظفين...) من الفقدان الكامل "
