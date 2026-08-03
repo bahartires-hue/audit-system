@@ -14,6 +14,7 @@ from ..auth_core import require_csrf, require_user, user_can_access_page_key
 from ..db import SessionLocal
 from ..services.ai_text_tools import ai_text_enabled, generate_text, transcribe_audio
 from ..services.ocr_vision import extract_text_from_image, ocr_enabled
+from ..services.pdf_extract_engine import PdfExtractionError, extract_pdf_text_with_fallback
 
 router = APIRouter(prefix="/api/tools", tags=["toolbox"])
 
@@ -795,35 +796,18 @@ async def word_pdf_convert(request: Request, file: UploadFile = File(...), direc
     elif dirn == "pdf2word":
         if not name.endswith(".pdf"):
             raise HTTPException(400, "الملف يجب أن يكون PDF")
-        import re as _re
-        import pdfplumber
         from docx import Document as DocxDoc
         from docx.enum.text import WD_ALIGN_PARAGRAPH
         from docx.oxml.ns import qn
         from docx.oxml import OxmlElement
 
         try:
-            texts = []
-            with pdfplumber.open(io.BytesIO(content)) as pdf:
-                for page in pdf.pages[:200]:
-                    txt = page.extract_text() or ""
-                    if txt:
-                        texts.append(txt)
-        except Exception as e:
-            raise HTTPException(400, f"تعذر قراءة ملف PDF: {str(e)}")
-        if not texts:
+            extraction = extract_pdf_text_with_fallback(content, max_pages=200)
+        except PdfExtractionError as e:
+            raise HTTPException(400, e.user_message)
+        texts = extraction.pages
+        if not any((t or "").strip() for t in texts):
             raise HTTPException(400, "لم يتم العثور على نص قابل للاستخراج في ملف PDF")
-
-        full_text = "\n".join(texts)
-        cid_hits = _re.findall(r"\(cid:\d+\)", full_text)
-        if len(cid_hits) >= 3:
-            raise HTTPException(
-                400,
-                "تعذّر استخراج النص العربي بشكل صحيح من هذا الملف: الخط المضمّن داخل ملف PDF الأصلي لا يحتوي على "
-                "خريطة يونيكود صحيحة لحروفه (هذه مشكلة في ملف PDF المصدر نفسه، وليست خللاً في النظام، ولا يمكن لأي "
-                "برنامج تحويل — بما فيها Word أو Acrobat — استخراج النص الصحيح منها). الحل: أعد تصدير/طباعة الملف "
-                "إلى PDF من البرنامج الأصلي الذي أنشأه (Word, Excel, نظام الفوترة الأصلي...)، ثم أعد المحاولة."
-            )
 
         def _is_arabic_line(s: str) -> bool:
             return any(
@@ -854,9 +838,13 @@ async def word_pdf_convert(request: Request, file: UploadFile = File(...), direc
             docx_doc.add_page_break()
         out = io.BytesIO()
         docx_doc.save(out)
-        return _attachment(
+        resp = _attachment(
             out.getvalue(), "converted.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
+        resp.headers["X-Extraction-Method"] = extraction.method
+        if extraction.note:
+            resp.headers["X-Extraction-Note"] = quote(extraction.note, safe="")
+        return resp
     else:
         raise HTTPException(400, "اتجاه التحويل غير مدعوم")
 
@@ -1185,18 +1173,11 @@ async def pdf_summarize(request: Request, file: UploadFile = File(...)):
     if not ai_text_enabled():
         raise HTTPException(400, "خدمة التلخيص الذكي غير مفعّلة حالياً")
     content = await file.read()
-    import pdfplumber
-
     try:
-        parts = []
-        with pdfplumber.open(io.BytesIO(content)) as pdf:
-            for page in pdf.pages[:150]:
-                txt = page.extract_text() or ""
-                if txt:
-                    parts.append(txt)
-        full_text = "\n".join(parts)
-    except Exception as e:
-        raise HTTPException(400, f"تعذر قراءة ملف PDF: {str(e)}")
+        extraction = extract_pdf_text_with_fallback(content, max_pages=150)
+    except PdfExtractionError as e:
+        raise HTTPException(400, e.user_message)
+    full_text = extraction.full_text
     if not full_text.strip():
         raise HTTPException(400, "لم يتم العثور على نص قابل للاستخراج في ملف PDF (قد يكون ممسوحًا ضوئيًا)")
 
@@ -1208,26 +1189,24 @@ async def pdf_summarize(request: Request, file: UploadFile = File(...)):
         result = generate_text(system_prompt, full_text, max_chars=40000)
     except RuntimeError as e:
         raise HTTPException(400, str(e))
-    return {"result": result}
+    out: dict = {"result": result}
+    if extraction.note:
+        out["extraction_note"] = extraction.note
+    return out
 
 
 # ============================================================ أدوات AI (المرحلة 3)
-def _extract_document_text(name: str, content: bytes, max_pages: int = 200) -> str:
-    """يستخرج نصًا عاديًا من ملف PDF أو Word أو نصي (txt)."""
+def _extract_document_text(name: str, content: bytes, max_pages: int = 200) -> tuple[str, str | None]:
+    """يستخرج نصًا عاديًا من ملف PDF أو Word أو نصي (txt).
+    يعيد (النص, ملاحظة اختيارية) — الملاحظة تُملأ فقط عند استخدام طريقة استخراج بديلة لملف PDF
+    (PyMuPDF أو OCR) بعد فشل الاستخراج المباشر؛ None في الحالة الطبيعية."""
     name = (name or "").lower()
     if name.endswith(".pdf"):
-        import pdfplumber
-
         try:
-            parts = []
-            with pdfplumber.open(io.BytesIO(content)) as pdf:
-                for page in pdf.pages[:max_pages]:
-                    txt = page.extract_text() or ""
-                    if txt:
-                        parts.append(txt)
-            return "\n".join(parts)
-        except Exception as e:
-            raise HTTPException(400, f"تعذر قراءة ملف PDF: {str(e)}")
+            result = extract_pdf_text_with_fallback(content, max_pages=max_pages)
+        except PdfExtractionError as e:
+            raise HTTPException(400, e.user_message)
+        return result.full_text, result.note
     if name.endswith(".docx"):
         from docx import Document as DocxDoc
 
@@ -1235,10 +1214,10 @@ def _extract_document_text(name: str, content: bytes, max_pages: int = 200) -> s
             doc = DocxDoc(io.BytesIO(content))
         except Exception as e:
             raise HTTPException(400, f"تعذر قراءة ملف Word: {str(e)}")
-        return "\n".join((p.text or "") for p in doc.paragraphs)
+        return "\n".join((p.text or "") for p in doc.paragraphs), None
     if name.endswith(".txt"):
         try:
-            return content.decode("utf-8", errors="ignore")
+            return content.decode("utf-8", errors="ignore"), None
         except Exception as e:
             raise HTTPException(400, f"تعذر قراءة الملف النصي: {str(e)}")
     raise HTTPException(400, "الصيغ المدعومة: PDF أو Word (.docx) أو نص (.txt)")
@@ -1280,7 +1259,7 @@ async def contract_analyze(request: Request, file: UploadFile = File(...)):
     if not (name.endswith(".pdf") or name.endswith(".docx")):
         raise HTTPException(400, "الملف يجب أن يكون PDF أو Word (.docx)")
     content = await file.read()
-    text = _extract_document_text(name, content)
+    text, extraction_note = _extract_document_text(name, content)
     if not text.strip():
         raise HTTPException(400, "لم يتم العثور على نص قابل للتحليل في المستند")
     system_prompt = (
@@ -1293,7 +1272,10 @@ async def contract_analyze(request: Request, file: UploadFile = File(...)):
         result = generate_text(system_prompt, text, max_chars=30000)
     except RuntimeError as e:
         raise HTTPException(400, str(e))
-    return {"result": result}
+    out: dict = {"result": result}
+    if extraction_note:
+        out["extraction_note"] = extraction_note
+    return out
 
 
 @router.post("/document-qa")
@@ -1313,7 +1295,7 @@ async def document_qa(request: Request, file: UploadFile = File(...), question: 
     if not (name.endswith(".pdf") or name.endswith(".docx") or name.endswith(".txt")):
         raise HTTPException(400, "الصيغ المدعومة: PDF أو Word (.docx) أو نص (.txt)")
     content = await file.read()
-    text = _extract_document_text(name, content)
+    text, extraction_note = _extract_document_text(name, content)
     if not text.strip():
         raise HTTPException(400, "لم يتم العثور على نص قابل للقراءة في المستند (قد يكون ممسوحًا ضوئيًا)")
     system_prompt = (
@@ -1325,7 +1307,10 @@ async def document_qa(request: Request, file: UploadFile = File(...), question: 
         result = generate_text(system_prompt, user_text, max_chars=30000)
     except RuntimeError as e:
         raise HTTPException(400, str(e))
-    return {"result": result}
+    out: dict = {"result": result}
+    if extraction_note:
+        out["extraction_note"] = extraction_note
+    return out
 
 
 @router.post("/duplicate-invoice-detect")
