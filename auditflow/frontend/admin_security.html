@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "light" ? false : true;
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
+    <title>الأمان — OptimalSuite AI</title>
+    <link rel="stylesheet" href="/static/tailwind.css?v=9" />
+    <link rel="stylesheet" href="/static/dark.css?v=9" />
+    <link rel="stylesheet" href="/static/admin_layout.css?v=1" />
+    <link rel="icon" href="/static/favicon.svg?v=9" />
+  </head>
+  <body class="admin2-shell" data-admin-active="security" data-admin-title="الأمان">
+    <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
+    <div id="adminLayoutHost"></div>
+
+    <main id="adminContent" class="admin2-content">
+      <div class="a2-grid a2-grid-3" style="margin-bottom:1.25rem;">
+        <div class="a2-card">
+          <div class="a2-stat-label">🔒 حسابات مقفولة الآن</div>
+          <div class="a2-stat-value" id="secLockedCount">0</div>
+        </div>
+        <div class="a2-card">
+          <div class="a2-stat-label">🖥️ جلسات نشطة</div>
+          <div class="a2-stat-value" id="secSessionsCount">0</div>
+        </div>
+        <div class="a2-card">
+          <div class="a2-stat-label">⚠️ محاولات فاشلة اليوم</div>
+          <div class="a2-stat-value" id="secFailedTodayCount">0</div>
+        </div>
+      </div>
+
+      <div class="a2-card" style="margin-bottom:1.25rem;">
+        <h2 class="a2-card-title">آخر محاولات الدخول الفاشلة</h2>
+        <div id="secFailedHost" class="a2-grid" style="gap:0.5rem; max-height:20rem; overflow-y:auto;"></div>
+      </div>
+
+      <div class="a2-card">
+        <h2 class="a2-card-title">الجلسات النشطة</h2>
+        <p style="font-size:0.75rem; color:var(--a2-text-muted); margin-bottom:0.75rem;">إنهاء جلستك الحالية سيسجّل خروجك فورًا.</p>
+        <div style="overflow:auto;">
+          <table class="a2-table">
+            <thead><tr><th>المستخدم</th><th>بدأت</th><th>تنتهي</th><th>إجراء</th></tr></thead>
+            <tbody id="secSessionsHost"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <script src="/static/app.js?v=19"></script>
+    <script src="/static/admin_layout.js?v=1"></script>
+    <script>
+      async function loadAdminSecurity() {
+        const lockedEl = document.getElementById("secLockedCount");
+        const sessionsEl = document.getElementById("secSessionsCount");
+        const failedTodayEl = document.getElementById("secFailedTodayCount");
+        const failedHost = document.getElementById("secFailedHost");
+        const sessionsHost = document.getElementById("secSessionsHost");
+        try {
+          const s = await apiGet("/admin/security/summary");
+          lockedEl.textContent = s.locked_accounts;
+          sessionsEl.textContent = s.active_sessions;
+          failedTodayEl.textContent = s.failed_logins_today;
+        } catch (e) {}
+        try {
+          const data = await apiGet("/admin/security/failed-logins?limit=30");
+          const items = data.items || [];
+          if (!items.length) {
+            failedHost.innerHTML = '<p class="a2-empty">لا محاولات فاشلة مسجّلة.</p>';
+          } else {
+            failedHost.innerHTML = "";
+            items.forEach((row) => {
+              const div = document.createElement("div");
+              div.className = "a2-card";
+              div.style.cssText = "padding:0.55rem 0.85rem; display:flex; align-items:center; justify-content:space-between;";
+              div.innerHTML = `<div><span style="font-weight:800;">${row.username || "(غير معروف)"}</span><span style="color:var(--a2-text-muted); font-size:0.78rem;" dir="ltr"> · ${row.ip || ""}</span>${row.locked ? ' <span class="a2-badge a2-badge-danger">تم القفل</span>' : ""}</div><div style="color:var(--a2-text-muted); font-size:0.72rem;" dir="ltr">${row.created_at || ""}</div>`;
+              failedHost.appendChild(div);
+            });
+          }
+        } catch (e) {
+          failedHost.innerHTML = `<p class="a2-empty">${e.message || "تعذّر تحميل محاولات الدخول"}</p>`;
+        }
+        try {
+          const data = await apiGet("/admin/security/sessions?limit=100");
+          const items = data.items || [];
+          sessionsHost.innerHTML = "";
+          if (!items.length) {
+            sessionsHost.innerHTML = '<tr><td colspan="4" class="a2-empty">لا جلسات نشطة.</td></tr>';
+          }
+          items.forEach((row) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td style="font-weight:800;">${row.username}</td>
+              <td style="font-size:0.75rem;" dir="ltr">${row.created_at || ""}</td>
+              <td style="font-size:0.75rem;" dir="ltr">${row.expires_at || ""}</td>
+              <td><button class="a2-btn a2-btn-danger a2-btn-sm" data-token="${row.token_full}">إنهاء الجلسة</button></td>
+            `;
+            tr.querySelector("[data-token]")?.addEventListener("click", async (ev) => {
+              const token = ev.currentTarget.getAttribute("data-token");
+              if (!confirm(`إنهاء جلسة ${row.username}؟ إذا كانت جلستك الحالية سيتم تسجيل خروجك فورًا.`)) return;
+              try {
+                await apiPostJson("/admin/security/sessions/revoke", { token });
+                showToast("تم إنهاء الجلسة ✔️", "#10b981");
+                await loadAdminSecurity();
+              } catch (e) {
+                showToast(e.message || "تعذر إنهاء الجلسة", "#ef4444");
+              }
+            });
+            sessionsHost.appendChild(tr);
+          });
+        } catch (e) {
+          sessionsHost.innerHTML = `<tr><td colspan="4" class="a2-empty">${e.message || "تعذّر تحميل الجلسات"}</td></tr>`;
+        }
+      }
+      loadAdminSecurity();
+    </script>
+  </body>
+</html>
