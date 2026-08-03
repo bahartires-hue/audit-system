@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "light" ? false : true;
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
+    <title>الأسعار والخط�7 | OptimalSuite AI</title>
+    <link rel="icon" href="/static/favicon.svg?v=9" type="image/svg+xml" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/tailwind.css?v=9" />
+    <link rel="stylesheet" href="/static/dark.css?v=9" />
+    <style>
+      body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+
+      /* ============================================================
+         لوحة التحكم الرئيسية الجديدة (op-dashboard) — هوية بصرية
+         فخمة بلونين (ذهبي ثابت + كحلي في الليلي / كريمي في النهاري)،
+         مستقلة تمامًا عن صفحات مطابقة الفروع ومطابقة الشركات القائمة.
+         مقيّدة بالكامل بالمحدد body.op-dashboard فلا تؤثر على أي صفحة
+         أخرى في الموقع.
+         ============================================================ */
+      body.op-dashboard {
+        --gold: #c9a24d;
+        --gold-soft: #b8863a;
+        --gold-dim: rgba(180, 140, 60, 0.35);
+        --bg-page: #f6f1e4;
+        --bg-1: #ffffff;
+        --bg-2: #fdf9ef;
+        --text-heading: #201a0c;
+        --text-body: #55503f;
+        --text-muted: #8a7f63;
+        --surface-soft: rgba(180, 140, 60, 0.07);
+        --input-bg: #ffffff;
+        --input-border: rgba(180, 140, 60, 0.4);
+        --input-text: #201a0c;
+        background: var(--bg-page) !important;
+        color: var(--text-body);
+      }
+      html.dark body.op-dashboard {
+        --gold: #c9a24d;
+        --gold-soft: #e8cd85;
+        --gold-dim: rgba(201, 164, 77, 0.32);
+        --bg-page: #070b16;
+        --bg-1: #131b30;
+        --bg-2: #0d1424;
+        --text-heading: #f4e9cf;
+        --text-body: #c7cede;
+        --text-muted: #8a93a8;
+        --surface-soft: rgba(255, 255, 255, 0.025);
+        --input-bg: #070b16;
+        --input-border: rgba(201, 164, 77, 0.28);
+        --input-text: #f1e9d2;
+      }
+
+      /* --- الهيكل: نعتمد على ترتيب flex الموجود أصلًا في .erp-shell/.erp-content
+         (وليس position:fixed) حتى يظهر الشريط الجانبي يمين الصفحة تلقائيًا مع RTL،
+         بنفس طريقة عمل .erp-sidebar الأصلية في باقي الموقع. --- */
+      body.op-dashboard.erp-shell { align-items: stretch; }
+      body.op-dashboard .op-sidebar {
+        display: none;
+        width: 84px;
+        flex-shrink: 0;
+        background: rgba(9, 13, 24, 0.04);
+        border-inline-end: 1px solid var(--gold-dim);
+        flex-direction: column;
+        align-items: center;
+        padding: 1.25rem 0;
+        gap: 0.5rem;
+      }
+      html.dark body.op-dashboard .op-sidebar { background: rgba(9, 13, 24, 0.95); }
+      @media (min-width: 768px) {
+        body.op-dashboard .op-sidebar { display: flex; }
+      }
+      body.op-dashboard .op-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 100vh;
+      }
+      body.op-dashboard .op-brand {
+        width: 46px;
+        height: 46px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, var(--gold), #8a6a1f);
+        margin-bottom: 1.25rem;
+        box-shadow: 0 8px 20px rgba(180, 140, 60, 0.25);
+        flex-shrink: 0;
+      }
+      body.op-dashboard .op-sidebar-nav { flex: 1; overflow-y: auto; }
+      body.op-dashboard .op-side-link {
+        width: 46px;
+        height: 46px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-muted);
+        transition: all 0.15s ease;
+        flex-shrink: 0;
+      }
+      body.op-dashboard .op-side-link:hover {
+        background: var(--surface-soft);
+        color: var(--gold-soft);
+      }
+      body.op-dashboard .op-side-link.nav-link--active {
+        background: linear-gradient(135deg, rgba(180, 140, 60, 0.28), rgba(180, 140, 60, 0.08));
+        color: var(--gold-soft);
+        box-shadow: 0 0 18px rgba(180, 140, 60, 0.2);
+      }
+      body.op-dashboard .op-topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1rem 1.75rem;
+        background: var(--bg-1);
+        border-bottom: 1px solid var(--gold-dim);
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        backdrop-filter: blur(6px);
+      }
+      body.op-dashboard .op-profile { display: flex; align-items: center; gap: 0.6rem; }
+      body.op-dashboard .op-avatar {
+        width: 42px; height: 42px; border-radius: 50%;
+        background: linear-gradient(135deg, var(--gold-soft), var(--gold));
+        color: #1a1406; display: flex; align-items: center; justify-content: center;
+        font-weight: 800; font-size: 1.05rem; flex-shrink: 0;
+      }
+      body.op-dashboard .op-profile-name { color: var(--text-heading); font-weight: 800; font-size: 0.9rem; line-height: 1.3; }
+      body.op-dashboard .op-profile-role { color: var(--text-muted); font-size: 0.72rem; font-weight: 700; }
+      body.op-dashboard .op-icon-btn {
+        width: 40px; height: 40px; border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        background: var(--surface-soft);
+        border: 1px solid var(--gold-dim);
+        color: var(--text-body);
+        cursor: pointer;
+      }
+      body.op-dashboard .op-icon-btn:hover { background: rgba(180, 140, 60, 0.14); color: var(--gold-soft); }
+      body.op-dashboard .op-main { padding: 2rem 1.75rem 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
+      body.op-dashboard .op-hero { text-align: center; margin-bottom: 2.25rem; }
+      body.op-dashboard .op-hero-eyebrow { color: var(--text-muted); font-weight: 700; font-size: 0.95rem; }
+      body.op-dashboard .op-hero h1 { font-size: 2.2rem; font-weight: 800; color: var(--text-heading); margin: 0.35rem 0; }
+      body.op-dashboard .op-hero h1 b { color: var(--gold-soft); font-weight: 800; }
+      body.op-dashboard .op-hero p { color: var(--text-body); font-weight: 700; }
+      body.op-dashboard .op-hero-rule { width: 70px; height: 3px; background: linear-gradient(90deg, transparent, var(--gold), transparent); margin: 0.9rem auto 0; border-radius: 3px; }
+      body.op-dashboard .op-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+      @media (max-width: 900px) { body.op-dashboard .op-stats { grid-template-columns: repeat(2, 1fr); } }
+      body.op-dashboard .op-stat-card {
+        background: linear-gradient(175deg, var(--bg-2), var(--bg-1));
+        border: 1px solid var(--gold-dim);
+        border-radius: 16px; padding: 1.1rem; text-align: center;
+      }
+      body.op-dashboard .op-stat-icon { font-size: 1.4rem; margin-bottom: 0.4rem; }
+      body.op-dashboard .op-stat-value { font-size: 1.3rem; font-weight: 800; color: var(--gold-soft); }
+      body.op-dashboard .op-stat-label { font-size: 0.75rem; color: var(--text-muted); font-weight: 700; margin-top: 0.15rem; }
+      body.op-dashboard .op-modules-panel {
+        background: linear-gradient(175deg, var(--bg-2), var(--bg-1));
+        border: 1px solid var(--gold-dim);
+        border-radius: 20px; padding: 1.5rem; position: relative; overflow: hidden;
+      }
+      body.op-dashboard .op-modules-panel::before {
+        content: ""; position: absolute; inset: 0 0 auto 0; height: 3px;
+        background: linear-gradient(90deg, transparent, var(--gold-soft), var(--gold), var(--gold-soft), transparent);
+        opacity: 0.9;
+      }
+      body.op-dashboard .op-modules-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem; }
+      body.op-dashboard .op-modules-head h2 { color: var(--text-heading); font-weight: 800; font-size: 1.1rem; }
+      body.op-dashboard .op-modules-head span { color: var(--text-muted); font-size: 0.8rem; font-weight: 700; }
+      body.op-dashboard .op-modules-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+      @media (max-width: 1024px) { body.op-dashboard .op-modules-grid { grid-template-columns: repeat(2, 1fr); } }
+      @media (max-width: 600px) { body.op-dashboard .op-modules-grid { grid-template-columns: 1fr; } }
+      body.op-dashboard .op-module-card {
+        background: var(--surface-soft);
+        border: 1px solid var(--gold-dim);
+        border-radius: 16px; padding: 1.25rem 1rem; text-align: center;
+        display: flex; flex-direction: column; align-items: center; transition: all 0.15s ease;
+      }
+      body.op-dashboard .op-module-card:hover { border-color: var(--gold); background: rgba(180, 140, 60, 0.1); transform: translateY(-2px); }
+      body.op-dashboard .op-module-icon { width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.85rem; font-size: 1.5rem; }
+      body.op-dashboard .op-module-title { color: var(--text-heading); font-weight: 800; font-size: 0.95rem; margin-bottom: 0.35rem; }
+      body.op-dashboard .op-module-desc { color: var(--text-muted); font-size: 0.75rem; font-weight: 700; line-height: 1.5; min-height: 2.6em; margin-bottom: 0.9rem; }
+      body.op-dashboard .op-module-btn {
+        display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.5rem 1.1rem; border-radius: 10px;
+        background: linear-gradient(270deg, #8a6a1f 0%, var(--gold) 45%, var(--gold-soft) 100%);
+        color: #1a1406; font-weight: 800; font-size: 0.8rem; box-shadow: 0 6px 16px rgba(180, 140, 60, 0.25);
+      }
+      body.op-dashboard .op-module-btn:hover { filter: brightness(1.08); }
+      body.op-dashboard .op-support-card {
+        margin-top: auto; width: 60px; border-radius: 14px;
+        background: var(--surface-soft); border: 1px solid var(--gold-dim);
+        display: flex; flex-direction: column; align-items: center; padding: 0.7rem 0.3rem; gap: 0.4rem; text-align: center;
+        flex-shrink: 0;
+      }
+      body.op-dashboard .op-shell-card {
+        background: linear-gradient(175deg, var(--bg-2), var(--bg-1));
+        border: 1px solid var(--gold-dim); border-radius: 20px; padding: 3.5rem 1.5rem; text-align: center;
+      }
+      body.op-dashboard .op-shell-icon { font-size: 3rem; margin-bottom: 1rem; }
+      body.op-dashboard .op-shell-card h1 { color: var(--text-heading); font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; }
+      body.op-dashboard .op-shell-badge {
+        display: inline-block; padding: 0.3rem 0.9rem; border-radius: 999px;
+        background: rgba(180, 140, 60, 0.15); color: var(--gold-soft); font-size: 0.75rem; font-weight: 800; margin-bottom: 1rem;
+      }
+      body.op-dashboard .op-shell-card p { color: var(--text-muted); font-weight: 700; max-width: 480px; margin: 0 auto 1.5rem; line-height: 1.7; }
+
+      /* --- إعادة تلوين محتوى منقول من صفحات قديمة (مثل الإعدادات) بنفس أسلوب Tailwind
+         القديم، لتتوافق مع الهوية الجديدة تلقائيًا في الوضعين الليلي والنهاري --- */
+      body.op-dashboard .op-main h1,
+      body.op-dashboard .op-main h2,
+      body.op-dashboard .op-main h3 { color: var(--text-heading) !important; }
+      body.op-dashboard .op-main p,
+      body.op-dashboard .op-main label,
+      body.op-dashboard .op-main span,
+      body.op-dashboard .op-main div,
+      body.op-dashboard .op-main td,
+      body.op-dashboard .op-main th { color: var(--text-body); }
+      body.op-dashboard .op-main .rounded-3xl,
+      body.op-dashboard .op-main .rounded-2xl.border {
+        background: linear-gradient(175deg, var(--bg-2), var(--bg-1)) !important;
+        border-color: var(--gold-dim) !important;
+      }
+      body.op-dashboard .op-main .bg-slate-50,
+      body.op-dashboard .op-main .bg-slate-800\/40,
+      body.op-dashboard .op-main .bg-slate-800\/80 {
+        background: var(--surface-soft) !important;
+        border-color: var(--gold-dim) !important;
+      }
+      body.op-dashboard .op-main input,
+      body.op-dashboard .op-main select,
+      body.op-dashboard .op-main textarea {
+        background: var(--input-bg) !important;
+        border-color: var(--input-border) !important;
+        color: var(--input-text) !important;
+      }
+      body.op-dashboard .op-main input::placeholder,
+      body.op-dashboard .op-main textarea::placeholder { color: var(--text-muted) !important; opacity: 0.8; }
+      body.op-dashboard .op-main button {
+        border-color: var(--gold-dim);
+      }
+      body.op-dashboard .op-main button.bg-slate-900,
+      body.op-dashboard .op-main button.bg-indigo-600 {
+        background: linear-gradient(270deg, #8a6a1f 0%, var(--gold) 45%, var(--gold-soft) 100%) !important;
+        color: #1a1406 !important;
+        border: none !important;
+      }
+      body.op-dashboard .op-main button.bg-emerald-600 {
+        background: #1f9d63 !important;
+        color: #fff !important;
+        border: none !important;
+      }
+      body.op-dashboard .op-main table thead { background: var(--surface-soft) !important; }
+      body.op-dashboard .op-main table tr { border-color: var(--gold-dim) !important; }
+      body.op-dashboard .op-main .text-emerald-600,
+      body.op-dashboard .op-main .text-emerald-700 { color: #1f9d63 !important; }
+      body.op-dashboard .op-main 
