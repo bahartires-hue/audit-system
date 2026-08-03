@@ -24,6 +24,7 @@ class User(Base):
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
     preferences_json = Column(JSON, nullable=False, default=lambda: {})
     allowed_pages = Column(JSON, nullable=True)
+    last_backup_at = Column(DateTime, nullable=True)
 
 
 class Role(Base):
