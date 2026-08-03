@@ -812,6 +812,7 @@ async function initAuthUI() {
         host.innerHTML = `
           <div class="flex items-center gap-2 flex-wrap justify-center">
             <span class="text-sm font-extrabold text-slate-700 dark:text-slate-300">مرحباً ${username}</span>
+            <button type="button" id="myBackupBtn" class="px-3 py-1.5 rounded-xl border border-emerald-300 dark:border-emerald-700 text-sm font-extrabold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40">نسخة احتياطية</button>
             <button type="button" id="logoutBtn" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-extrabold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">خروج</button>
           </div>
         `;
@@ -819,6 +820,9 @@ async function initAuthUI() {
           await apiPostJson("/auth/logout", {});
           showToast("تم تسجيل الخروج");
           window.location.reload();
+        });
+        document.getElementById("myBackupBtn")?.addEventListener("click", () => {
+          window.location.href = me?.is_admin ? "/admin/backup" : "/backup/mine";
         });
         return;
       }
