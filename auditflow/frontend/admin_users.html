@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "light" ? false : true;
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
+    <title>المستخدمون — OptimalSuite AI</title>
+    <link rel="stylesheet" href="/static/tailwind.css?v=9" />
+    <link rel="stylesheet" href="/static/dark.css?v=9" />
+    <link rel="stylesheet" href="/static/admin_layout.css?v=1" />
+    <link rel="icon" href="/static/favicon.svg?v=9" />
+  </head>
+  <body class="admin2-shell" data-admin-active="users" data-admin-title="المستخدمون">
+    <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
+    <div id="adminLayoutHost"></div>
+
+    <main id="adminContent" class="admin2-content">
+      <div class="a2-card">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem; margin-bottom:1rem;">
+          <div>
+            <h2 class="a2-card-title" style="margin:0;">👥 إدارة المستخدمين</h2>
+            <p style="font-size:0.8rem; color:var(--a2-text-muted); margin-top:0.25rem;">التحكم بالحسابات، الخطط، فترات الاشتراك، ومتابعة نشاط كل مستخدم.</p>
+          </div>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <button type="button" id="notifyAllBtn" class="a2-btn a2-btn-outline">📢 إرسال إشعار</button>
+            <button type="button" id="openCreateUserBtn" class="a2-btn">+ إنشاء مستخدم</button>
+          </div>
+        </div>
+        <input id="usersSearchInp" placeholder="بحث بالاسم أو البريد..." class="a2-input" style="width:100%; max-width:320px; margin-bottom:1rem;" />
+        <div style="overflow:auto;">
+          <table class="a2-table">
+            <thead>
+              <tr>
+                <th>المستخدم</th>
+                <th>الخطة</th>
+                <th>الانتهاء</th>
+                <th>الحالة</th>
+                <th>آخر دخول/خروج</th>
+                <th>التقارير</th>
+                <th>إجراء</th>
+              </tr>
+            </thead>
+            <tbody id="adminUsersHost"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <script src="/static/app.js?v=19"></script>
+    <script src="/static/admin_layout.js?v=1"></script>
+    <script>
+      const PAGE_PERMISSION_ITEMS = [
+        { key: "op-matching", title: "مطابقة الحسابات" },
+        { key: "op-branches", title: "إدارة الفروع" },
+        { key: "op-hr", title: "الموارد البشرية" },
+        { key: "op-finance", title: "مركز الأدوات الذكية" },
+        { key: "op-inventory", title: "المالية" },
+        { key: "op-suppliers", title: "إدارة المستندات" },
+        { key: "op-analytics", title: "التقارير والتحليلات" },
+        { key: "op-convert", title: "تحويل الملفات" },
+        { key: "op-settings", title: "الإعدادات" },
+      ];
+
+      function ensurePermsModal() {
+        let modal = document.getElementById("permsModal");
+        if (modal) return modal;
+        modal = document.createElement("div");
+        modal.id = "permsModal";
+        modal.className = "hidden fixed inset-0 z-[75] bg-black/50 items-center justify-center p-4";
+        modal.innerHTML = `
+          <div class="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">🔐 صلاحيات مشاهدة الصفحات</h3>
+              <button type="button" id="permsCloseBtn" class="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300">✕</button>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">حددي الصفحات التي يمكن لهذا المستخدم رؤيتها. صفحة "الرئيسية" متاحة دائمًا لكل مستخدم.</p>
+            <div id="permsList" class="grid grid-cols-2 gap-2"></div>
+            <div class="mt-4 flex items-center justify-end gap-2">
+              <button type="button" id="permsCancelBtn" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-extrabold text-slate-700 dark:text-slate-200">إلغاء</button>
+              <button type="button" id="permsSaveBtn" class="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold">حفظ</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        modal.querySelector("#permsCloseBtn").addEventListener("click", () => { modal.classList.add("hidden"); modal.classList.remove("flex"); });
+        modal.querySelector("#permsCancelBtn").addEventListener("click", () => { modal.classList.add("hidden"); modal.classList.remove("flex"); });
+        return modal;
+      }
+
+      function openPermsModal(user, onSave) {
+        const modal = ensurePermsModal();
+        const list = modal.querySelector("#permsList");
+        const current = new Set(user.allowed_pages || []);
+        list.innerHTML = "";
+        PAGE_PERMISSION_ITEMS.forEach((item) => {
+          const label = document.createElement("label");
+          label.className = "flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 cursor-pointer select-none";
+          label.innerHTML = `<input type="checkbox" data-key="${item.key}" class="rounded border-slate-300 dark:border-slate-600" ${current.has(item.key) ? "checked" : ""} /><span class="text-sm font-bold text-slate-700 dark:text-slate-200">${item.title}</span>`;
+          list.appendChild(label);
+        });
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+        const oldSaveBtn = modal.querySelector("#permsSaveBtn");
+        const saveBtn = oldSaveBtn.cloneNode(true);
+        oldSaveBtn.parentNode.replaceChild(saveBtn, oldSaveBtn);
+        saveBtn.addEventListener("click", () => {
+          const selected = Array.from(list.querySelectorAll('input[type="checkbox"]:checked')).map((el) => el.getAttribute("data-key"));
+          modal.classList.add("hidden");
+          modal.classList.remove("flex");
+          onSave(selected);
+        });
+      }
+
+      async function adminUpdateUser(userId, patch) {
+        try {
+          await apiPatchJson("/admin/users", { user_id: userId, ...patch });
+          showToast("تم تحديث المستخدم ✔️", "#10b981");
+          await loadAdminPanel();
+        } catch (e) {
+          showToast(e.message || "فشل التحديث", "#ef4444");
+        }
+      }
+
+      function ensureCreateUserModal() {
+        let modal = document.getElementById("createUserModal");
+        if (modal) return modal;
+        modal = document.createElement("div");
+        modal.id = "createUserModal";
+        modal.className = "hidden fixed inset-0 z-[75] bg-black/50 items-center justify-center p-4";
+        modal.innerHTML = `
+          <div class="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">إنشاء مستخدم جديد</h3>
+              <button type="button" id="createUserCloseBtn" class="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300">✕</button>
+            </div>
+            <div class="grid gap-3">
+              <input id="cuUsername" placeholder="اسم المستخدم" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100" />
+              <input id="cuEmail" type="email" placeholder="البريد الإلكتروني" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100" />
+              <input id="cuPassword" type="text" placeholder="كلمة المرور المبدئية" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100" />
+              <select id="cuPlan" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100">
+                <option value="free">مجاني</option>
+                <option value="paid">مدفوع</option>
+              </select>
+            </div>
+            <div class="mt-4 flex items-center justify-end gap-2">
+              <button type="button" id="cuCancelBtn" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-extrabold text-slate-700 dark:text-slate-200">إلغاء</button>
+              <button type="button" id="cuSaveBtn" class="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold">إنشاء</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        function close() { modal.classList.add("hidden"); modal.classList.remove("flex"); }
+        modal.querySelector("#createUserCloseBtn").addEventListener("click", close);
+        modal.querySelector("#cuCancelBtn").addEventListener("click", close);
+        modal.querySelector("#cuSaveBtn").addEventListener("click", async () => {
+          const username = (document.getElementById("cuUsername").value || "").trim();
+          const email = (document.getElementById("cuEmail").value || "").trim();
+          const password = (document.getElementById("cuPassword").value || "").trim();
+          const plan_name = document.getElementById("cuPlan").value || "free";
+          try {
+            await apiPostJson("/admin/users/create", { username, email, password, plan_name });
+            showToast("تم إنشاء المستخدم ✔️", "#10b981");
+            close();
+            await loadAdminPanel();
+          } catch (e) {
+            showToast(e.message || "تعذر إنشاء المستخدم", "#ef4444");
+          }
+        });
+        return modal;
+      }
+      document.getElementById("openCreateUserBtn")?.addEventListener("click", () => {
+        const modal = ensureCreateUserModal();
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+      });
+
+      function ensureNotifyModal() {
+        let modal = document.getElementById("notifyModal");
+        if (modal) return modal;
+        modal = document.createElement("div");
+        modal.id = "notifyModal";
+        modal.className = "hidden fixed inset-0 z-[75] bg-black/50 items-center justify-center p-4";
+        modal.innerHTML = `
+          <div class="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-lg font-extrabold text-slate-900 dark:text-slate-50">📢 إرسال إشعار لجميع المستخدمين</h3>
+              <button type="button" id="notifyCloseBtn" class="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300">✕</button>
+            </div>
+            <div class="grid gap-3">
+              <input id="notifySubject" placeholder="عنوان الرسالة" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100" />
+              <textarea id="notifyBody" rows="5" placeholder="نص الرسالة" class="rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100"></textarea>
+              <label class="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200">
+                <input id="notifyOnlyActive" type="checkbox" checked /> المستخدمون النشطون فقط
+              </label>
+            </div>
+            <div class="mt-4 flex items-center justify-end gap-2">
+              <button type="button" id="notifyCancelBtn" class="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-extrabold text-slate-700 dark:text-slate-200">إلغاء</button>
+              <button type="button" id="notifySendBtn" class="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold">إرسال</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+        function close() { modal.classList.add("hidden"); modal.classList.remove("flex"); }
+        modal.querySelector("#notifyCloseBtn").addEventListener("click", close);
+        modal.querySelector("#notifyCancelBtn").addEventListener("click", close);
+        modal.querySelector("#notifySendBtn").addEventListener("click", async () => {
+          const subject = (document.getElementById("notifySubject").value || "").trim();
+          const body = (document.getElementById("notifyBody").value || "").trim();
+          const only_active = document.getElementById("notifyOnlyActive").checked;
+          if (!subject || !body) { showToast("العنوان والنص مطلوبان", "#ef4444"); return; }
+          try {
+            const r = await apiPostJson("/admin/notify-all", { subject, body, only_active });
+            showToast(`تم الإرسال إلى ${r.sent} من ${r.targets} مستخدم ✔️`, "#10b981");
+            close();
+          } catch (e) {
+            showToast(e.message || "تعذر إرسال الإشعار", "#ef4444");
+          }
+        });
+        return modal;
+      }
+      document.getElementById("notifyAllBtn")?.addEventListener("click", () => {
+        const modal = ensureNotifyModal();
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+      });
+
+      function fmtActivityDT(v) {
+        if (!v) return "-";
+        try { return new Date(v).toLocaleString("ar-EG", { dateStyle: "short", timeStyle: "short" }); } catch (e) { return "-"; }
+      }
+
+      function closeAllMenus() {
+        document.querySelectorAll(".a2-row-menu").forEach((m) => m.remove());
+      }
+      document.addEventListener("click", closeAllMenus);
+
+      async function loadAdminPanel() {
+        const usersHost = document.getElementById("adminUsersHost");
+        try {
+          const u = await apiGet("/admin/users?limit=400");
+          const items = u.items || [];
+          usersHost.innerHTML = "";
+          if (!items.length) {
+            usersHost.innerHTML = '<tr><td colspan="7" class="a2-empty">لا يوجد مستخدمون</td></tr>';
+            return;
+          }
+          items.forEach((x) => {
+            const tr = document.createElement("tr");
+            const exp = x.subscription_expires_at || "-";
+            const activeTxt = x.is_active ? "نشط" : "موقوف";
+            const initial = (x.username || "؟").trim().charAt(0).toUpperCase();
+            tr.innerHTML = `
+              <td>
+                <div style="display:flex; align-items:center; gap:0.6rem;">
+                  <div class="admin2-avatar" style="width:32px;height:32px;font-size:0.8rem;">${initial}</div>
+                  <div>
+                    <div style="font-weight:800;">${x.username}</div>
+                    <div style="font-size:0.72rem; color:var(--a2-text-muted);" dir="ltr">${x.email || "-"}</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="a2-badge ${x.plan_name === "free" ? "a2-badge-neutral" : "a2-badge-success"}">${x.plan_name || "free"}</span></td>
+              <td dir="ltr" style="font-size:0.78rem;">${exp}</td>
+              <td><span class="a2-badge ${x.is_active ? "a2-badge-success" : "a2-badge-danger"}">${activeTxt}${x.is_admin ? " · مدير" : ""}</span></td>
+              <td style="font-size:0.72rem;">
+                <div>دخول: <b>${fmtActivityDT(x.last_login_at)}</b></div>
+                <div>خروج: <b>${fmtActivityDT(x.last_logout_at)}</b></div>
+              </td>
+              <td><b>${x.reports_count || 0}</b></td>
+              <td>
+                <div style="display:flex; gap:0.4rem; align-items:center; position:relative;">
+                  <button class="a2-btn ${x.is_active ? "a2-btn-danger" : ""} a2-btn-sm" data-a="toggle">${x.is_active ? "إيقاف" : "تفعيل"}</button>
+                  <select class="a2-select" style="font-size:0.75rem; padding:0.3rem 0.5rem;" data-a="plan">
+                    <option value="">الاشتراك...</option>
+                    <option value="free">مجاني</option>
+                    <option value="1">شهر</option>
+                    <option value="3">3 أشهر</option>
+                    <option value="6">6 أشهر</option>
+                    <option value="12">سنة</option>
+                    <option value="60">5 سنوات</option>
+                  </select>
+                  <button class="a2-icon-btn" data-a="menu" title="المزيد">⋮</button>
+                </div>
+              </td>
+            `;
+            tr.querySelector('[data-a="toggle"]').addEventListener("click", () => adminUpdateUser(x.id, { is_active: !x.is_active }));
+            tr.querySelector('[data-a="plan"]').addEventListener("change", (ev) => {
+              const v = ev.target.value;
+              if (!v) return;
+              if (v === "free") adminUpdateUser(x.id, { plan_name: "free", subscription_months: 0 });
+              else adminUpdateUser(x.id, { plan_name: "paid", subscription_months: Number(v) });
+              ev.target.value = "";
+            });
+            tr.querySelector('[data-a="menu"]').addEventListener("click", (ev) => {
+              ev.stopPropagation();
+              closeAllMenus();
+              const menu = document.createElement("div");
+              menu.className = "a2-row-menu a2-card";
+              menu.style.cssText = "position:absolute; inset-inline-end:0; top:2.2rem; z-index:50; min-width:190px; padding:0.4rem; display:flex; flex-direction:column; gap:0.15rem;";
+              const menuItems = [
+                { label: "الصلاحيات", action: "perms" },
+                { label: "منح كل الصفحات", action: "permsAll" },
+                ...(x.is_admin ? [] : [{ label: "تسجيل كمستخدم", action: "impersonate" }]),
+                { label: "إعادة كلمة المرور", action: "resetpw" },
+                ...(x.locked_until && new Date(x.locked_until) > new Date() ? [{ label: "🔓 فك القفل", action: "unlock" }] : []),
+                ...(x.is_admin ? [] : [{ label: "حذف", action: "delete", danger: true }]),
+              ];
+              menu.innerHTML = menuItems
+                .map((m) => `<button type="button" data-act="${m.action}" style="text-align:start; padding:0.45rem 0.6rem; border-radius:8px; border:none; background:transparent; font-size:0.82rem; font-weight:700; cursor:pointer; color:${m.danger ? "var(--a2-danger)" : "var(--a2-text)"};" onmouseover="this.style.background='var(--a2-accent-soft)'" onmouseout="this.style.background='transparent'">${m.label}</button>`)
+                .join("");
+              ev.currentTarget.parentElement.appendChild(menu);
+              menu.addEventListener("click", (mev) => mev.stopPropagation());
+              menu.querySelector('[data-act="perms"]')?.addEventListener("click", () => {
+                closeAllMenus();
+                if (x.is_admin) { showToast("المدير يرى كل الصفحات دائمًا", "#0ea5e9"); return; }
+                openPermsModal(x, (selected) => adminUpdateUser(x.id, { allowed_pages: selected }));
+              });
+              menu.querySelector('[data-act="permsAll"]')?.addEventListener("click", () => {
+                closeAllMenus();
+                if (x.is_admin) { showToast("المدير يرى كل الصفحات دائمًا", "#0ea5e9"); return; }
+                adminUpdateUser(x.id, { allowed_pages: PAGE_PERMISSION_ITEMS.map((i) => i.key) });
+              });
+              menu.querySelector('[data-act="impersonate"]')?.addEventListener("click", async () => {
+                closeAllMenus();
+                if (!confirm(`تسجيل الدخول كـ ${x.username}؟ سيتم تحويلك لحسابه مباشرة.`)) return;
+                try {
+                  await apiPostJson("/admin/impersonate", { user_id: x.id });
+                  showToast(`تم تسجيل الدخول كـ ${x.username} ✔️`, "#10b981");
+                  window.location.href = "/";
+                } catch (e) {
+                  showToast(e.message || "فشل تسجيل الدخول كمستخدم", "#ef4444");
+                }
+              });
+              menu.querySelector('[data-act="resetpw"]')?.addEventListener("click", async () => {
+                closeAllMenus();
+                if (!confirm(`إعادة تعيين كلمة مرور ${x.username}؟ سيتم توليد كلمة مرور جديدة.`)) return;
+                try {
+                  const r = await apiPostJson("/admin/users/reset-password", { user_id: x.id });
+                  prompt(`كلمة المرور الجديدة لـ ${x.username} (انسخيها الآن، لن تظهر مجددًا):`, r.new_password);
+                  showToast("تم إعادة تعيين كلمة المرور ✔️", "#10b981");
+                } catch (e) {
+                  showToast(e.message || "فشل إعادة التعيين", "#ef4444");
+                }
+              });
+              menu.querySelector('[data-act="unlock"]')?.addEventListener("click", async () => {
+                closeAllMenus();
+                if (!confirm(`فك قفل حساب ${x.username}؟`)) return;
+                try {
+                  await apiPostJson("/admin/security/unlock", { user_id: x.id });
+                  showToast("تم فك القفل ✔️", "#10b981");
+                  await loadAdminPanel();
+                } catch (e) {
+                  showToast(e.message || "تعذر فك القفل", "#ef4444");
+                }
+              });
+              menu.querySelector('[data-act="delete"]')?.addEventListener("click", async () => {
+                closeAllMenus();
+                if (!confirm(`حذف ${x.username} نهائيًا؟ هذا الإجراء لا يمكن التراجع عنه.`)) return;
+                try {
+                  await apiDelete(`/admin/users/${x.id}`);
+                  showToast("تم حذف المستخدم ✔️", "#10b981");
+                  await loadAdminPanel();
+                } catch (e) {
+                  showToast(e.message || "تعذر حذف المستخدم", "#ef4444");
+                }
+              });
+            });
+            usersHost.appendChild(tr);
+          });
+        } catch (e) {
+          usersHost.innerHTML = `<tr><td colspan="7" class="a2-empty">${e.message || "تعذر تحميل المستخدمين"}</td></tr>`;
+        }
+      }
+      loadAdminPanel();
+
+      document.getElementById("usersSearchInp").addEventListener("input", function () {
+        const q = (this.value || "").toLowerCase().trim();
+        document.querySelectorAll("#adminUsersHost > tr").forEach((row) => {
+          const t = (row.innerText || "").toLowerCase();
+          row.style.display = !q || t.includes(q) ? "" : "none";
+        });
+      });
+    </script>
+  </body>
+</html>
