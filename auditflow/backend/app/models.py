@@ -478,7 +478,7 @@ class ImporterSnapshot(Base):
 
 # ============================================================ المخزون البسيط (نظام بسيط ومستقل)
 class SimpleProduct(Base):
-    """صنف في نظام المخزون البسيط. نظام بسيط ومستقل تمامًا عن نظام Item/Purchase/Sale الأصلي وعن محرك المطابقة."""
+    """صنف في نظام المخزون البسيط. نظام بسيط ومستقل تمامًا عن نظال Item/Purchase/Sale الأصلي وعن محرك المطابقة."""
 
     __tablename__ = "simple_products"
 
@@ -620,7 +620,7 @@ class Payroll(Base):
     paid_at = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
     # بنود يدوية إضافية أدخلها المستخدم عند الإنشاء — تُحفظ هنا (JSON) كي تُعاد نفسها بدقة
-    # عند "إعادة الحساب" لاحقًا، بدل محاولة تخمينها من نصوص البنود المحفوظة.
+    # عند "إعادة الحساب" لاحقًاٌ بدل محاولة تخمينها من نصوص البنود المحفوظة.
     extra_allowances_json = Column(Text, nullable=True)
     extra_deductions_json = Column(Text, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
@@ -837,6 +837,55 @@ class HRConfigItem(Base):
     category = Column(String, nullable=False, index=True)  # department|position|leave_type|allowance_type|deduction_type|branch
     name = Column(String, nullable=False)
     created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+
+class Plan(Base):
+    __tablename__ = "plans"
+
+    id = Column(String, primary_key=True)
+    key = Column(String, unique=True, nullable=False, index=True)  # free | pro | enterprise
+    name_ar = Column(String, nullable=False)
+    price_monthly = Column(Integer, nullable=False, default=0)
+    price_annual = Column(Integer, nullable=False, default=0)
+    max_users = Column(Integer, nullable=True)  # null = غير محدود
+    features_json = Column(JSON, nullable=False, default=list)
+    is_active = Column(Integer, nullable=False, default=1)
+    sort_order = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class BankAccount(Base):
+    __tablename__ = "bank_accounts"
+
+    id = Column(String, primary_key=True)
+    bank_name = Column(String, nullable=False)
+    beneficiary_name = Column(String, nullable=False)
+    account_number = Column(String, nullable=False)
+    iban = Column(String, nullable=False)
+    is_active = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False)
+
+
+class SubscriptionRequest(Base):
+    __tablename__ = "subscription_requests"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    full_name = Column(String, nullable=False)
+    company_name = Column(String, nullable=True)
+    email = Column(String, nullable=False)
+    phone = Column(String, nullable=False)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    billing_cycle = Column(String, nullable=False, default="monthly")  # monthly | annual
+    payment_method = Column(String, nullable=False)  # bank_transfer | cash
+    receipt_stored_filename = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="pending", index=True)
+    # pending | approved | rejected | info_requested
+    admin_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow, nullable=False, index=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    reviewed_by_id = Column(String, ForeignKey("users.id"), nullable=True)
 
 
 
