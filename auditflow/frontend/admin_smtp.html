@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "light" ? false : true;
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
+    <title>إعدادات البريد — OptimalSuite AI</title>
+    <link rel="stylesheet" href="/static/tailwind.css?v=9" />
+    <link rel="stylesheet" href="/static/dark.css?v=9" />
+    <link rel="stylesheet" href="/static/admin_layout.css?v=1" />
+    <link rel="icon" href="/static/favicon.svg?v=9" />
+  </head>
+  <body class="admin2-shell" data-admin-active="smtp" data-admin-title="إعدادات البريد">
+    <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
+    <div id="adminLayoutHost"></div>
+
+    <main id="adminContent" class="admin2-content">
+      <div class="a2-card" style="max-width:640px;">
+        <h2 class="a2-card-title">📧 إعدادات البريد (SMTP)</h2>
+        <p id="smtpStatusTxt" style="font-size:0.85rem; color:var(--a2-text-muted); margin-bottom:1rem;">جاري الفحص...</p>
+        <div style="display:flex; flex-wrap:wrap; gap:0.75rem;">
+          <input id="smtpTestEmail" type="email" placeholder="بريد لاختبار الإرسال" class="a2-input" style="flex:1; min-width:220px;" />
+          <button id="smtpTestBtn" class="a2-btn a2-btn-outline">اختبار الإرسال</button>
+        </div>
+      </div>
+    </main>
+
+    <script src="/static/app.js?v=19"></script>
+    <script src="/static/admin_layout.js?v=1"></script>
+    <script>
+      async function setupSmtp() {
+        const statusTxt = document.getElementById("smtpStatusTxt");
+        const testEmail = document.getElementById("smtpTestEmail");
+        const testBtn = document.getElementById("smtpTestBtn");
+        try {
+          const cfg = await apiGet("/admin/config");
+          const smtp = cfg.smtp || {};
+          statusTxt.textContent = smtp.enabled ? `SMTP مفعل (${smtp.host}:${smtp.port})` : "SMTP غير مفعّل";
+        } catch (e) {
+          statusTxt.textContent = "تعذر جلب حالة SMTP";
+        }
+        testBtn.addEventListener("click", async () => {
+          const to_email = (testEmail.value || "").trim();
+          if (!to_email) {
+            showToast("أدخل بريد الاختبار", "#ef4444");
+            return;
+          }
+          try {
+            await apiPostJson("/admin/smtp-test", { to_email });
+            showToast("تم إرسال بريد الاختبار \u2714\ufe0f", "#10b981");
+          } catch (e) {
+            showToast(e.message || "فشل اختبار SMTP", "#ef4444");
+          }
+        });
+      }
+      setupSmtp();
+    </script>
+  </body>
+</html>
