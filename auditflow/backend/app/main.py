@@ -426,6 +426,56 @@ def ui_admin_dashboard(request: Request):
     return _require_admin_page(request, FRONTEND_DIR / "admin_dashboard.html")
 
 
+@app.get("/admin/manage-users", response_class=HTMLResponse)
+def ui_admin_users(request: Request):
+    return _require_admin_page(request, FRONTEND_DIR / "admin_users.html")
+
+
+@app.get("/admin/subscriptions", response_class=HTMLResponse)
+def ui_admin_subscriptions(request: Request):
+    return _require_admin_page(request, FRONTEND_DIR / "admin_subscriptions.html")
+
+
+@app.get("/admin/invites", response_class=HTMLResponse)
+def ui_admin_invites(request: Request):
+    return _require_admin_page(request, FRONTEND_DIR / "admin_invites.html")
+
+
+@app.get("/admin/documents", response_class=HTMLResponse)
+def ui_admin_documents(request: Request):
+    return _require_admin_page(request, FRONTEND_DIR / "admin_documents.html")
+
+
+@app.get("/admin/activity", response_class=HTMLResponse)
+def ui_admin_activity(request: Request):
+    return _require_admin_page(request, FRONTEND_DIR / "admin_activity.html")
+
+
+@app.get("/admin/security", response_class=HTMLResponse)
+def ui_admin_security(request: Request):
+    return _require_admin_page(request, FRONTEND_DIR / "admin_security.html")
+
+
+@app.get("/admin/settings", response_class=HTMLResponse)
+def ui_admin_settings(request: Request):
+    return _require_admin_page(request, FRONTEND_DIR / "admin_settings.html")
+
+
+@app.get("/admin/smtp", response_class=HTMLResponse)
+def ui_admin_smtp(request: Request):
+    return _require_admin_page(request, FRONTEND_DIR / "admin_smtp.html")
+
+
+@app.get("/admin/backups", response_class=HTMLResponse)
+def ui_admin_backups(request: Request):
+    return _require_admin_page(request, FRONTEND_DIR / "admin_backups.html")
+
+
+@app.get("/admin/profile", response_class=HTMLResponse)
+def ui_admin_profile(request: Request):
+    return _require_admin_page(request, FRONTEND_DIR / "admin_profile.html")
+
+
 @app.get("/help", response_class=HTMLResponse)
 def ui_help(request: Request):
     return _require_login_page(request, FRONTEND_DIR / "help.html")
