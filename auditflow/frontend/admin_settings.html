@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "light" ? false : true;
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
+    <title>إعدادات النظام — OptimalSuite AI</title>
+    <link rel="stylesheet" href="/static/tailwind.css?v=9" />
+    <link rel="stylesheet" href="/static/dark.css?v=9" />
+    <link rel="stylesheet" href="/static/admin_layout.css?v=1" />
+    <link rel="icon" href="/static/favicon.svg?v=9" />
+  </head>
+  <body class="admin2-shell" data-admin-active="settings" data-admin-title="إعدادات النظام">
+    <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
+    <div id="adminLayoutHost"></div>
+
+    <main id="adminContent" class="admin2-content">
+      <div class="a2-card" style="max-width:640px;">
+        <h2 class="a2-card-title">⚙️ إعدادات عامة</h2>
+        <p style="color:var(--a2-text-muted); font-size:0.85rem; margin-bottom:1rem;">تحديث بيانات التواصل واسم المؤسسة بدون تعديل الكود.</p>
+        <div class="a2-grid a2-grid-2" style="gap:0.75rem;">
+          <input id="cfgCompanyName" placeholder="اسم المؤسسة" class="a2-input" />
+          <input id="cfgAdminContact" placeholder="تواصل الإدارة (هاتف/واتساب)" class="a2-input" />
+          <input id="cfgWhatsapp" placeholder="رابط واتساب" class="a2-input" />
+          <input id="cfgEmail" placeholder="رابط البريد mailto:" class="a2-input" />
+        </div>
+        <div style="margin-top:1.25rem;">
+          <button id="saveAdminConfigBtn" class="a2-btn">حفظ الإعدادات</button>
+        </div>
+      </div>
+    </main>
+
+    <script src="/static/app.js?v=19"></script>
+    <script src="/static/admin_layout.js?v=1"></script>
+    <script>
+      async function setupAdminConfig() {
+        const companyInp = document.getElementById("cfgCompanyName");
+        const contactInp = document.getElementById("cfgAdminContact");
+        const waInp = document.getElementById("cfgWhatsapp");
+        const emailInp = document.getElementById("cfgEmail");
+        const saveBtn = document.getElementById("saveAdminConfigBtn");
+        try {
+          const cfg = await apiGet("/admin/config");
+          companyInp.value = cfg.company_name || "";
+          contactInp.value = cfg.admin_contact || "";
+          waInp.value = (cfg.social_links && cfg.social_links.whatsapp) || "";
+          emailInp.value = (cfg.social_links && cfg.social_links.email) || "";
+        } catch (e) {
+          showToast(e.message || "تعذر تحميل الإعدادات", "#ef4444");
+        }
+        saveBtn.addEventListener("click", async () => {
+          try {
+            await apiPatchJson("/admin/config", {
+              company_name: (companyInp.value || "").trim(),
+              admin_contact: (contactInp.value || "").trim(),
+              social_links: { whatsapp: (waInp.value || "").trim(), email: (emailInp.value || "").trim() },
+            });
+            showToast("تم حفظ الإعدادات العامة \u2714\ufe0f", "#10b981");
+          } catch (e) {
+            showToast(e.message || "تعذر حفظ الإعدادات", "#ef4444");
+          }
+        });
+      }
+      setupAdminConfig();
+    </script>
+  </body>
+</html>
