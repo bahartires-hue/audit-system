@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("auditflow-theme");
+          var d = t === "light" ? false : true;
+          document.documentElement.classList.toggle("dark", d);
+        } catch (e) {}
+      })();
+    </script>
+    <title>سجل النشاط — OptimalSuite AI</title>
+    <link rel="stylesheet" href="/static/tailwind.css?v=9" />
+    <link rel="stylesheet" href="/static/dark.css?v=9" />
+    <link rel="stylesheet" href="/static/admin_layout.css?v=1" />
+    <link rel="icon" href="/static/favicon.svg?v=9" />
+  </head>
+  <body class="admin2-shell" data-admin-active="activity" data-admin-title="سجل النشاط">
+    <div id="toast" class="hidden toast-host text-white px-4 py-3 rounded-xl font-extrabold text-sm"></div>
+    <div id="adminLayoutHost"></div>
+
+    <main id="adminContent" class="admin2-content">
+      <div class="a2-card">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:0.6rem;">
+          <h2 class="a2-card-title" style="margin:0;">📝 سجل النشاط</h2>
+          <input id="auditSearchInp" placeholder="بحث..." class="a2-input" style="width:220px;" />
+        </div>
+        <div id="adminAuditHost" class="a2-grid" style="gap:0.5rem; max-height:70vh; overflow-y:auto;"></div>
+      </div>
+    </main>
+
+    <script src="/static/app.js?v=19"></script>
+    <script src="/static/admin_layout.js?v=1"></script>
+    <script>
+      function fmtActivityDT(v) {
+        if (!v) return "-";
+        try { return new Date(v).toLocaleString("ar-EG", { dateStyle: "short", timeStyle: "short" }); } catch (e) { return "-"; }
+      }
+
+      async function loadAdminAudit(q) {
+        const host = document.getElementById("adminAuditHost");
+        try {
+          const url = "/admin/audit?limit=200" + (q ? "&q=" + encodeURIComponent(q) : "");
+          const data = await apiGet(url);
+          const items = data.items || [];
+          if (!items.length) {
+            host.innerHTML = '<p class="a2-empty">لا سجلات بعد.</p>';
+            return;
+          }
+          host.innerHTML = "";
+          items.forEach((row) => {
+            const div = document.createElement("div");
+            div.className = "a2-card";
+            div.style.cssText = "padding:0.6rem 0.85rem;";
+            div.innerHTML = `<div style="font-weight:800; font-size:0.85rem;">${row.action}</div><div style="font-size:0.72rem; color:var(--a2-text-muted); margin-top:2px;" dir="ltr">${fmtActivityDT(row.created_at)}</div>`;
+            host.appendChild(div);
+          });
+        } catch (e) {
+          host.innerHTML = `<p class="a2-empty">${e.message || "تعذّر تحميل سجل النشاط"}</p>`;
+        }
+      }
+
+      let auditSearchTimer = null;
+      document.getElementById("auditSearchInp").addEventListener("input", (ev) => {
+        clearTimeout(auditSearchTimer);
+        auditSearchTimer = setTimeout(() => loadAdminAudit(ev.target.value.trim()), 300);
+      });
+
+      loadAdminAudit("");
+    </script>
+  </body>
+</html>
