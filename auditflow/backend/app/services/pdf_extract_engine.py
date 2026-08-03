@@ -126,7 +126,7 @@ def _extract_with_ocr(content: bytes, max_pages: int, max_ocr_pages: int) -> Lis
     from .ocr_vision import extract_text_from_image, ocr_enabled
 
     if not ocr_enabled():
-        raise RuntimeError("OCR غير متاح (مفتاح ANTHROPIC_API_KEY غير موجود)")
+        raise RuntimeError("OCR غير متاح (مفتاح GEMINI_API_KEY غير موجود)")
 
     page_count = _pdf_page_count(content)
     total_pages = min(page_count, max_pages)
@@ -161,7 +161,7 @@ def extract_pdf_text_with_fallback(
     content: bytes, max_pages: int = 200, max_ocr_pages: int = 30
 ) -> PdfExtractionResult:
     """
-    يحاول استخراج نص PDF بالترتيب: pdfplumber ثم PyMuPDF ثم OCR (Claude Vision عبر ocr_vision).
+    يحاول استخراج نص PDF بالترتيب: pdfplumber ثم PyMuPDF ثم OCR (Gemini عبر ocr_vision).
     ينجح عند أول طريقة تُعطي نصاً كافياً وغير تالف؛ ويسجّل الطريقة الناجحة والمدة وعدد الصفحات.
     يرفع PdfExtractionError فقط إذا فشلت الطرق الثلاث جميعها.
     """
