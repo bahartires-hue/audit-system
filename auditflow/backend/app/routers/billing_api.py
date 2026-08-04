@@ -39,7 +39,6 @@ def seed_default_plans(db) -> None:
         return
     defaults = [
         {"key": "free", "name_ar": "مجانية", "price_monthly": 0, "price_annual": 0, "max_users": 1,
-         .test_unsed_variable",
          "features_json": ["مستخدم واحد", "الميزات الأساسية"], "sort_order": 0},
         {"key": "pro", "name_ar": "احترافية", "price_monthly": 149, "price_annual": 1490, "max_users": 5,
          "features_json": ["حتى 5 مستخدمين", "كل الميزات الأساسية", "دعم فني بالبريد"], "sort_order": 1},
@@ -124,7 +123,7 @@ async def submit_subscription_request(
         if not plan:
             raise HTTPException(400, "الخطة المحددة غير موجودة")
         if billing_cycle not in ("monthly", "annual"):
-            raise HTTPException(400, "دورة الفوترة غير صحيح ة")
+            raise HTTPException(400, "دورة الفوترة غير صحيحة")
         if payment_method not in ("bank_transfer", "cash"):
             raise HTTPException(400, "طريقة الدفع غير صحيحة")
 
