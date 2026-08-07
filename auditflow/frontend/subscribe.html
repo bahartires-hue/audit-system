@@ -14,7 +14,7 @@
         }
       })();
     </script>
-    <title>طلب اشتراك | OptimalSuite AI</title>
+    <title>الاشتراك | OptimalSuite AI</title>
     <link rel="icon" href="/static/favicon.svg?v=9" type="image/svg+xml" />
     <link
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700;800&display=swap"
@@ -24,14 +24,6 @@
     <link rel="stylesheet" href="/static/dark.css?v=9" />
     <style>
       body { font-family: "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
-
-      /* ============================================================
-         لوحة التحكم الرئيسية الجديدة (op-dashboard) — هوية بصرية
-         فخمة بلونين (ذهبي ثابت + كحلي في الليلي / كريمي في النهاري)،
-         مستقلة تمامًا عن صفحات مطابقة الفروع ومطابقة الشركات القائمة.
-         مقيّدة بالكامل بالمحدد body.op-dashboard فلا تؤثر على أي صفحة
-         أخرى في الموقع.
-         ============================================================ */
       body.op-dashboard {
         --gold: #c9a24d;
         --gold-soft: #b8863a;
@@ -64,10 +56,6 @@
         --input-border: rgba(201, 164, 77, 0.28);
         --input-text: #f1e9d2;
       }
-
-      /* --- الهيكل: نعتمد على ترتيب flex الموجود أصلًا في .erp-shell/.erp-content
-         (وليس position:fixed) حتى يظهر الشريط الجانبي يمين الصفحة تلقائيًا مع RTL،
-         بنفس طريقة عمل .erp-sidebar الأصلية في باقي الموقع. --- */
       body.op-dashboard.erp-shell { align-items: stretch; }
       body.op-dashboard .op-sidebar {
         display: none;
@@ -155,126 +143,37 @@
         cursor: pointer;
       }
       body.op-dashboard .op-icon-btn:hover { background: rgba(180, 140, 60, 0.14); color: var(--gold-soft); }
-      body.op-dashboard .op-main { padding: 2rem 1.75rem 3rem; max-width: 1180px; margin: 0 auto; width: 100%; }
-      body.op-dashboard .op-hero { text-align: center; margin-bottom: 2.25rem; }
-      body.op-dashboard .op-hero-eyebrow { color: var(--text-muted); font-weight: 700; font-size: 0.95rem; }
-      body.op-dashboard .op-hero h1 { font-size: 2.2rem; font-weight: 800; color: var(--text-heading); margin: 0.35rem 0; }
-      body.op-dashboard .op-hero h1 b { color: var(--gold-soft); font-weight: 800; }
-      body.op-dashboard .op-hero p { color: var(--text-body); font-weight: 700; }
-      body.op-dashboard .op-hero-rule { width: 70px; height: 3px; background: linear-gradient(90deg, transparent, var(--gold), transparent); margin: 0.9rem auto 0; border-radius: 3px; }
-      body.op-dashboard .op-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
-      @media (max-width: 900px) { body.op-dashboard .op-stats { grid-template-columns: repeat(2, 1fr); } }
-      body.op-dashboard .op-stat-card {
+      body.op-dashboard .op-main { padding: 2rem 1.75rem 3rem; max-width: 760px; margin: 0 auto; width: 100%; }
+      .sub-card {
         background: linear-gradient(175deg, var(--bg-2), var(--bg-1));
         border: 1px solid var(--gold-dim);
-        border-radius: 16px; padding: 1.1rem; text-align: center;
+        border-radius: 18px; padding: 1.5rem; margin-bottom: 1.25rem;
       }
-      body.op-dashboard .op-stat-icon { font-size: 1.4rem; margin-bottom: 0.4rem; }
-      body.op-dashboard .op-stat-value { font-size: 1.3rem; font-weight: 800; color: var(--gold-soft); }
-      body.op-dashboard .op-stat-label { font-size: 0.75rem; color: var(--text-muted); font-weight: 700; margin-top: 0.15rem; }
-      body.op-dashboard .op-modules-panel {
-        background: linear-gradient(175deg, var(--bg-2), var(--bg-1));
-        border: 1px solid var(--gold-dim);
-        border-radius: 20px; padding: 1.5rem; position: relative; overflow: hidden;
+      .sub-card h2 { font-size: 1.05rem; font-weight: 800; color: var(--text-heading); margin: 0 0 1rem; }
+      .sub-label { display:block; font-size:0.78rem; font-weight:700; color: var(--text-muted); margin-bottom:0.35rem; }
+      .sub-input, .sub-select {
+        width: 100%; background: var(--input-bg); border: 1px solid var(--input-border); color: var(--input-text);
+        border-radius: 10px; padding: 0.6rem 0.8rem; font-size: 0.88rem; font-family: inherit;
       }
-      body.op-dashboard .op-modules-panel::before {
-        content: ""; position: absolute; inset: 0 0 auto 0; height: 3px;
-        background: linear-gradient(90deg, transparent, var(--gold-soft), var(--gold), var(--gold-soft), transparent);
-        opacity: 0.9;
+      .sub-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+      @media (max-width: 640px) { .sub-grid2 { grid-template-columns: 1fr; } }
+      .pm-options { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+      @media (max-width: 640px) { .pm-options { grid-template-columns: 1fr; } }
+      .pm-option {
+        border: 1px solid var(--gold-dim); border-radius: 14px; padding: 1rem; cursor: pointer;
+        text-align: center; font-weight: 800; color: var(--text-body); background: var(--surface-soft);
       }
-      body.op-dashboard .op-modules-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem; }
-      body.op-dashboard .op-modules-head h2 { color: var(--text-heading); font-weight: 800; font-size: 1.1rem; }
-      body.op-dashboard .op-modules-head span { color: var(--text-muted); font-size: 0.8rem; font-weight: 700; }
-      body.op-dashboard .op-modules-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
-      @media (max-width: 1024px) { body.op-dashboard .op-modules-grid { grid-template-columns: repeat(2, 1fr); } }
-      @media (max-width: 600px) { body.op-dashboard .op-modules-grid { grid-template-columns: 1fr; } }
-      body.op-dashboard .op-module-card {
-        background: var(--surface-soft);
-        border: 1px solid var(--gold-dim);
-        border-radius: 16px; padding: 1.25rem 1rem; text-align: center;
-        display: flex; flex-direction: column; align-items: center; transition: all 0.15s ease;
+      .pm-option.selected { border-color: var(--gold); background: linear-gradient(135deg, rgba(180,140,60,0.22), rgba(180,140,60,0.06)); color: var(--gold-soft); }
+      .bank-acc-item { border: 1px dashed var(--gold-dim); border-radius: 12px; padding: 0.8rem; margin-bottom: 0.6rem; font-size: 0.82rem; }
+      .bank-acc-item div { margin-bottom: 0.2rem; }
+      .sub-cta {
+        display: block; width: 100%; text-align: center; padding: 0.85rem 1rem; border-radius: 12px;
+        background: linear-gradient(135deg, var(--gold-soft), var(--gold)); color: #1a1406;
+        font-weight: 800; border: none; cursor: pointer; font-size: 0.95rem;
       }
-      body.op-dashboard .op-module-card:hover { border-color: var(--gold); background: rgba(180, 140, 60, 0.1); transform: translateY(-2px); }
-      body.op-dashboard .op-module-icon { width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.85rem; font-size: 1.5rem; }
-      body.op-dashboard .op-module-title { color: var(--text-heading); font-weight: 800; font-size: 0.95rem; margin-bottom: 0.35rem; }
-      body.op-dashboard .op-module-desc { color: var(--text-muted); font-size: 0.75rem; font-weight: 700; line-height: 1.5; min-height: 2.6em; margin-bottom: 0.9rem; }
-      body.op-dashboard .op-module-btn {
-        display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.5rem 1.1rem; border-radius: 10px;
-        background: linear-gradient(270deg, #8a6a1f 0%, var(--gold) 45%, var(--gold-soft) 100%);
-        color: #1a1406; font-weight: 800; font-size: 0.8rem; box-shadow: 0 6px 16px rgba(180, 140, 60, 0.25);
-      }
-      body.op-dashboard .op-module-btn:hover { filter: brightness(1.08); }
-      body.op-dashboard .op-support-card {
-        margin-top: auto; width: 60px; border-radius: 14px;
-        background: var(--surface-soft); border: 1px solid var(--gold-dim);
-        display: flex; flex-direction: column; align-items: center; padding: 0.7rem 0.3rem; gap: 0.4rem; text-align: center;
-        flex-shrink: 0;
-      }
-      body.op-dashboard .op-shell-card {
-        background: linear-gradient(175deg, var(--bg-2), var(--bg-1));
-        border: 1px solid var(--gold-dim); border-radius: 20px; padding: 3.5rem 1.5rem; text-align: center;
-      }
-      body.op-dashboard .op-shell-icon { font-size: 3rem; margin-bottom: 1rem; }
-      body.op-dashboard .op-shell-card h1 { color: var(--text-heading); font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; }
-      body.op-dashboard .op-shell-badge {
-        display: inline-block; padding: 0.3rem 0.9rem; border-radius: 999px;
-        background: rgba(180, 140, 60, 0.15); color: var(--gold-soft); font-size: 0.75rem; font-weight: 800; margin-bottom: 1rem;
-      }
-      body.op-dashboard .op-shell-card p { color: var(--text-muted); font-weight: 700; max-width: 480px; margin: 0 auto 1.5rem; line-height: 1.7; }
-
-      /* --- إعادة تلوين محتوى منقول من صفحات قديمة (مثل الإعدادات) بنفس أسلوب Tailwind
-         القديم، لتتوافق مع الهوية الجديدة تلقائيًا في الوضعين الليلي والنهاري --- */
-      body.op-dashboard .op-main h1,
-      body.op-dashboard .op-main h2,
-      body.op-dashboard .op-main h3 { color: var(--text-heading) !important; }
-      body.op-dashboard .op-main p,
-      body.op-dashboard .op-main label,
-      body.op-dashboard .op-main span,
-      body.op-dashboard .op-main div,
-      body.op-dashboard .op-main td,
-      body.op-dashboard .op-main th { color: var(--text-body); }
-      body.op-dashboard .op-main .rounded-3xl,
-      body.op-dashboard .op-main .rounded-2xl.border {
-        background: linear-gradient(175deg, var(--bg-2), var(--bg-1)) !important;
-        border-color: var(--gold-dim) !important;
-      }
-      body.op-dashboard .op-main .bg-slate-50,
-      body.op-dashboard .op-main .bg-slate-800\/40,
-      body.op-dashboard .op-main .bg-slate-800\/80 {
-        background: var(--surface-soft) !important;
-        border-color: var(--gold-dim) !important;
-      }
-      body.op-dashboard .op-main input,
-      body.op-dashboard .op-main select,
-      body.op-dashboard .op-main textarea {
-        background: var(--input-bg) !important;
-        border-color: var(--input-border) !important;
-        color: var(--input-text) !important;
-      }
-      body.op-dashboard .op-main input::placeholder,
-      body.op-dashboard .op-main textarea::placeholder { color: var(--text-muted) !important; opacity: 0.8; }
-      body.op-dashboard .op-main button {
-        border-color: var(--gold-dim);
-      }
-      body.op-dashboard .op-main button.bg-slate-900,
-      body.op-dashboard .op-main button.bg-indigo-600 {
-        background: linear-gradient(270deg, #8a6a1f 0%, var(--gold) 45%, var(--gold-soft) 100%) !important;
-        color: #1a1406 !important;
-        border: none !important;
-      }
-      body.op-dashboard .op-main button.bg-emerald-600 {
-        background: #1f9d63 !important;
-        color: #fff !important;
-        border: none !important;
-      }
-      body.op-dashboard .op-main table thead { background: var(--surface-soft) !important; }
-      body.op-dashboard .op-main table tr { border-color: var(--gold-dim) !important; }
-      body.op-dashboard .op-main .text-emerald-600,
-      body.op-dashboard .op-main .text-emerald-700 { color: #1f9d63 !important; }
-      body.op-dashboard .op-main .text-amber-600 { color: #b8863a !important; }
-      body.op-dashboard .op-main .text-rose-600 { color: #c0435a !important; }
-      body.op-dashboard .op-main details summary { color: var(--text-heading); }
-
+      .sub-cta:disabled { opacity: 0.6; cursor: not-allowed; }
+      .plan-summary { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+      .plan-summary-price { font-size:1.3rem; font-weight:800; color: var(--gold-soft); }
     </style>
   </head>
   <body class="op-dashboard erp-shell min-h-screen" data-report-type="dashboard">
@@ -292,7 +191,8 @@
         <a href="/branches-management" class="op-side-link nav-link nav-link--idle" data-nav="op-branches" title="إدارة الفروع"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21V7a2 2 0 012-2h6a2 2 0 012 2v14M13 21V11a2 2 0 012-2h4a2 2 0 012 2v10M7 9h2M7 13h2M7 17h2"/></svg></a>
         <a href="/hr" class="op-side-link nav-link nav-link--idle" data-nav="op-hr" title="الموارد البشرية"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-4-4"/></svg></a>
         <a href="/finance" class="op-side-link nav-link nav-link--idle" data-nav="op-finance" title="مركز الأدوات الذكية"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 8h6m-5 4h4m-6 4h8M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg></a>
-        <a href="/inventory-management" class="op-side-link nav-link nav-link--idle" data-nav="op-inventory" title="المالية"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg></a>        <a href="/suppliers" class="op-side-link nav-link nav-link--idle" data-nav="op-suppliers" title="إدارة المستندات"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13h1l2 7h11l2-7h1M8 13V7a4 4 0 118 0v6m-9 0h10"/></svg></a>
+        <a href="/inventory-management" class="op-side-link nav-link nav-link--idle" data-nav="op-inventory" title="المالية"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg></a>
+        <a href="/suppliers" class="op-side-link nav-link nav-link--idle" data-nav="op-suppliers" title="إدارة المستندات"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13h1l2 7h11l2-7h1M8 13V7a4 4 0 118 0v6m-9 0h10"/></svg></a>
         <a href="/analytics" class="op-side-link nav-link nav-link--idle" data-nav="op-analytics" title="التقارير والتحليلات"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg></a>
         <a href="/convert" class="op-side-link nav-link nav-link--idle" data-nav="op-convert" title="تحويل الملفات"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4M16 17H4m0 0l4 4m-4-4l4-4"/></svg></a>
         <a href="/admin" class="op-side-link nav-link nav-link--idle" data-nav="op-admin" data-admin-only="1" title="لوحة المدير"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg></a>
@@ -303,29 +203,25 @@
         <a href="#" data-nav="privacy" style="display:none" aria-hidden="true" tabindex="-1"></a>
         <a href="#" data-nav="agreement" style="display:none" aria-hidden="true" tabindex="-1"></a>
       </nav>
-      <div class="op-support-card">
-        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:var(--gold-soft)"><path stroke-linecap="round" stroke-linejoin="round" d="M18 10a6 6 0 10-12 0v2a2 2 0 00-2 2v2a2 2 0 002 2h1v-6a5 5 0 0110 0v6h1a2 2 0 002-2v-2a2 2 0 00-2-2v-2z"/></svg>
-        <span style="font-size:0.62rem;font-weight:800;color:var(--gold-soft);">الدعم الفني</span>
-        <a href="/contact" style="font-size:0.58rem;font-weight:800;color:var(--text-muted);">تواصل معنا</a>
-      </div>
     </aside>
 
     <div id="mobileNavDrawer" class="mobile-nav-drawer md:hidden" role="navigation" aria-label="قائمة الجوال">
       <a href="/" data-nav="op-home" class="nav-link nav-link--active">الرئيسية</a>
-        <a href="/matching" data-nav="op-matching" class="nav-link nav-link--idle">مطابقة الحسابات</a>
-        <a href="/branches-management" data-nav="op-branches" class="nav-link nav-link--idle">إدارة الفروع</a>
-        <a href="/hr" data-nav="op-hr" class="nav-link nav-link--idle">الموارد البشرية</a>
-        <a href="/finance" data-nav="op-finance" class="nav-link nav-link--idle">مركز الأدوات الذكية</a>
-        <a href="/inventory-management" data-nav="op-inventory" class="nav-link nav-link--idle">المالية</a>        <a href="/suppliers" data-nav="op-suppliers" class="nav-link nav-link--idle">إدارة المستندات</a>
-        <a href="/analytics" data-nav="op-analytics" class="nav-link nav-link--idle">التقارير والتحليلات</a>
-        <a href="/convert" data-nav="op-convert" class="nav-link nav-link--idle">تحويل الملفات</a>
-        <a href="/admin" data-nav="op-admin" data-admin-only="1" class="nav-link nav-link--idle">👑 لوحة المدير</a>
-        <a href="/settings" data-nav="op-settings" class="nav-link nav-link--idle">الإعدادات</a>
+      <a href="/matching" data-nav="op-matching" class="nav-link nav-link--idle">مطابقة الحسابات</a>
+      <a href="/branches-management" data-nav="op-branches" class="nav-link nav-link--idle">إدارة الفروع</a>
+      <a href="/hr" data-nav="op-hr" class="nav-link nav-link--idle">الموارد البشرية</a>
+      <a href="/finance" data-nav="op-finance" class="nav-link nav-link--idle">مركز الأدوات الذكية</a>
+      <a href="/inventory-management" data-nav="op-inventory" class="nav-link nav-link--idle">المالية</a>
+      <a href="/suppliers" data-nav="op-suppliers" class="nav-link nav-link--idle">إدارة المستندات</a>
+      <a href="/analytics" data-nav="op-analytics" class="nav-link nav-link--idle">التقارير والتحليلات</a>
+      <a href="/convert" data-nav="op-convert" class="nav-link nav-link--idle">تحويل الملفات</a>
+      <a href="/admin" data-nav="op-admin" data-admin-only="1" class="nav-link nav-link--idle">👑 لوحة المدير</a>
+      <a href="/settings" data-nav="op-settings" class="nav-link nav-link--idle">الإعدادات</a>
       <a href="#" data-nav="importer" style="display:none" aria-hidden="true" tabindex="-1"></a>
-        <a href="#" data-nav="companies" style="display:none" aria-hidden="true" tabindex="-1"></a>
-        <a href="#" data-nav="terms" style="display:none" aria-hidden="true" tabindex="-1"></a>
-        <a href="#" data-nav="privacy" style="display:none" aria-hidden="true" tabindex="-1"></a>
-        <a href="#" data-nav="agreement" style="display:none" aria-hidden="true" tabindex="-1"></a>
+      <a href="#" data-nav="companies" style="display:none" aria-hidden="true" tabindex="-1"></a>
+      <a href="#" data-nav="terms" style="display:none" aria-hidden="true" tabindex="-1"></a>
+      <a href="#" data-nav="privacy" style="display:none" aria-hidden="true" tabindex="-1"></a>
+      <a href="#" data-nav="agreement" style="display:none" aria-hidden="true" tabindex="-1"></a>
     </div>
 
     <div class="op-content">
@@ -337,7 +233,7 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
         </button>
         <div class="min-w-0 flex flex-col">
-          <span style="font-weight:800;color:var(--text-heading);font-size:0.85rem;">طلب اشتراك</span>
+          <span style="font-weight:800;color:var(--text-heading);font-size:0.85rem;">الاشتراك</span>
         </div>
         <div class="flex items-center gap-3" style="margin-inline-start:auto;">
           <div class="op-avatar" id="opAvatarInitial">؟</div>
@@ -347,9 +243,6 @@
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <button type="button" class="op-icon-btn" title="الإشعارات" aria-label="الإشعارات">
-            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-          </button>
           <button type="button" id="themeToggle" class="op-icon-btn" title="الوضع الليلي/النهاري" aria-label="تبديل الوضع"></button>
           <button type="button" id="opFullscreenBtn" class="op-icon-btn" title="ملء الشاشة" aria-label="ملء الشاشة">
             <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V6a2 2 0 012-2h2M4 16v2a2 2 0 002 2h2m8-16h2a2 2 0 012 2v2m-4 12h2a2 2 0 002-2v-2"/></svg>
@@ -361,87 +254,209 @@
       </header>
 
       <main class="op-main">
-        <div class="max-w-2xl mx-auto w-full px-4 py-6 md:px-6 space-y-5">
-          <div class="text-center space-y-1">
-            <h1 class="text-2xl font-extrabold text-slate-900 dark:text-slate-50">طلب اشتراك</h1>
-            <p class="text-sm text-slate-600 dark:text-slate-400">أكمل بياناتك واختر طريقة الدفع، وسنراجع طلبك في أقرب وقت.</p>
+        <div id="subFormWrap">
+          <div class="sub-card">
+            <h2>📦 الخطة المختارة</h2>
+            <div class="sub-grid2" style="margin-bottom:0.8rem;">
+              <div>
+                <label class="sub-label">الخطة</label>
+                <select id="subPlanSelect" class="sub-select"></select>
+              </div>
+              <div>
+                <label class="sub-label">دورة الفوترة</label>
+                <select id="subCycleSelect" class="sub-select">
+                  <option value="monthly">شهري</option>
+                  <option value="annual">سنوي</option>
+                </select>
+              </div>
+            </div>
+            <div class="plan-summary">
+              <div id="subPlanFeatures" style="font-size:0.8rem; color:var(--text-muted);"></div>
+              <div class="plan-summary-price" id="subPlanPrice">-</div>
+            </div>
           </div>
 
-          <div class="erp-card">
-            <label class="text-xs font-extrabold text-slate-500 dark:text-slate-400">الخطة</label>
-            <select id="subPlanSelect" class="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100"></select>
-            <div class="flex items-center gap-2 mt-3">
-              <label class="flex items-center gap-1 text-sm font-extrabold text-slate-700 dark:text-slate-200">
-                <input type="radio" name="subCycle" id="subCycleMonthly" value="monthly" /> شهري
-              </label>
-              <label class="flex items-center gap-1 text-sm font-extrabold text-slate-700 dark:text-slate-200">
-                <input type="radio" name="subCycle" id="subCycleAnnual" value="annual" /> سنوي
-              </label>
-              <span id="subPriceLabel" class="font-extrabold text-slate-900 dark:text-slate-50" style="margin-inline-start:auto;"></span>
+          <div class="sub-card">
+            <h2>👤 بيانات التواصل</h2>
+            <div class="sub-grid2" style="margin-bottom:0.8rem;">
+              <div>
+                <label class="sub-label">الاسم الكامل *</label>
+                <input id="subFullName" type="text" class="sub-input" required />
+              </div>
+              <div>
+                <label class="sub-label">اسم المنشأة (اختياري)</label>
+                <input id="subCompanyName" type="text" class="sub-input" />
+              </div>
+            </div>
+            <div class="sub-grid2">
+              <div>
+                <label class="sub-label">البريد الإلكتروني *</label>
+                <input id="subEmail" type="email" class="sub-input" dir="ltr" required />
+              </div>
+              <div>
+                <label class="sub-label">رقم الجوال *</label>
+                <input id="subPhone" type="tel" class="sub-input" dir="ltr" required />
+              </div>
             </div>
           </div>
 
-          <form id="subscribeForm" class="erp-card space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label class="text-xs font-extrabold text-slate-500 dark:text-slate-400">الاسم الكامل</label>
-                <input id="subFullName" type="text" required class="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100" />
-              </div>
-              <div>
-                <label class="text-xs font-extrabold text-slate-500 dark:text-slate-400">اسم الشركة (اختياري)</label>
-                <input id="subCompanyName" type="text" class="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100" />
-              </div>
-              <div>
-                <label class="text-xs font-extrabold text-slate-500 dark:text-slate-400">البريد الإلكتروني</label>
-                <input id="subEmail" type="email" disabled dir="ltr" class="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-100 dark:bg-slate-900 px-3 py-2 text-slate-500 dark:text-slate-400" />
-              </div>
-              <div>
-                <label class="text-xs font-extrabold text-slate-500 dark:text-slate-400">رقم الجوال</label>
-                <input id="subPhone" type="tel" required dir="ltr" class="mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 py-2 text-slate-900 dark:text-slate-100" />
+          <div class="sub-card">
+            <h2>💳 طريقة الدفع</h2>
+            <div class="pm-options">
+              <div class="pm-option" id="pmBankOption" data-pm="bank_transfer">🏦 حوالة بنكية</div>
+              <div class="pm-option" id="pmCashOption" data-pm="cash">💵 نقداً</div>
+            </div>
+
+            <div id="bankTransferPanel" style="display:none; margin-top:1.1rem;">
+              <div id="bankAccountsList"><div style="font-size:0.82rem; color:var(--text-muted);">جارٍ تحميل الحسابات البنكية...</div></div>
+              <div style="margin-top:0.8rem;">
+                <label class="sub-label">رفع إيصال التحويل *</label>
+                <input id="subReceiptFile" type="file" class="sub-input" accept=".pdf,.jpg,.jpeg,.png,.webp" />
               </div>
             </div>
 
-            <div>
-              <label class="text-xs font-extrabold text-slate-500 dark:text-slate-400 block mb-2">طريقة الدفع</label>
-              <div class="flex items-center gap-4">
-                <label class="flex items-center gap-1 text-sm font-extrabold text-slate-700 dark:text-slate-200">
-                  <input type="radio" name="subMethod" id="methodBank" value="bank_transfer" checked /> حوالة بنكية
-                </label>
-                <label class="flex items-center gap-1 text-sm font-extrabold text-slate-700 dark:text-slate-200">
-                  <input type="radio" name="subMethod" id="methodCash" value="cash" /> نقداً
-                </label>
-              </div>
-            </div>
-
-            <div id="bankSection" class="space-y-3">
-              <div id="bankAccountsList" class="space-y-2 text-sm">
-                <div class="text-slate-500 dark:text-slate-400">جارٍ تحميل الحسابات البنكية...</div>
-              </div>
-              <div>
-                <label class="text-xs font-extrabold text-slate-500 dark:text-slate-400">صورة إيصال التحويل</label>
-                <input id="subReceiptFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp" class="mt-1 w-full text-sm text-slate-700 dark:text-slate-200" />
-              </div>
-            </div>
-
-            <div id="cashSection" class="hidden erp-card" style="background:rgba(180,140,60,0.06);">
-              <p class="text-sm text-slate-700 dark:text-slate-200">سيتم إنشاء طلبك بانتظار المراجعة، وسيتواصل معك فريق المبيعات لإتمام الدفع النقدي.</p>
-            </div>
-
-            <button type="submit" id="subscribeSubmitBtn" class="w-full px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-extrabold hover:bg-slate-800 dark:hover:bg-slate-200">إرسال الطلب</button>
-          </form>
-
-          <div class="erp-card" id="myRequestsCard">
-            <h2 class="text-lg font-extrabold text-slate-900 dark:text-slate-50 mb-2">طلباتي السابقة</h2>
-            <div id="myRequestsHost" class="space-y-2 text-sm">
-              <div class="text-slate-500 dark:text-slate-400">جارٍ التحميل...</div>
+            <div id="cashPanel" style="display:none; margin-top:1.1rem; font-size:0.85rem; color:var(--text-body); background:var(--surface-soft); border:1px solid var(--gold-dim); border-radius:12px; padding:0.9rem;">
+              سيتم تسجيل طلبك وسيتواصل معك فريق المبيعات لإتمام الدفع نقدًا وتفعيل الاشتراك.
             </div>
           </div>
+
+          <button type="button" id="subSubmitBtn" class="sub-cta" disabled>يرجى اختيار طريقة الدفع</button>
+        </div>
+
+        <div id="subSuccessWrap" style="display:none;" class="sub-card">
+          <h2>✅ تم إرسال طلب الاشتراك</h2>
+          <p style="font-size:0.85rem; color:var(--text-body); line-height:1.8;">
+            طلبك الآن قيد المراجعة من فريقنا. سيصلك بريد إلكتروني فور اعتماد الطلب وتفعيل الاشتراك.
+          </p>
+          <a href="/" class="plan-cta" style="display:inline-block; margin-top:0.8rem; text-decoration:none; padding:0.65rem 1.4rem; border-radius:10px; background:linear-gradient(135deg, var(--gold-soft), var(--gold)); color:#1a1406; font-weight:800;">العودة للرئيسية</a>
+        </div>
+
+        <div style="text-align:center; margin-top:2.5rem; font-size:0.8rem; color:var(--text-muted); font-weight:700; padding-bottom:2rem;">
+          تطوير الموقع: محمد علي السوداني<br />جميع الحقوق محفوظة © OptimalSuite AI
         </div>
       </main>
     </div>
 
     <script src="/static/app.js?v=19"></script>
     <script>
+      let SUB_PLANS = [];
+      let SUB_BANK_ACCOUNTS = [];
+      let SUB_SELECTED_PM = null;
+
+      function fmtSAR(n) {
+        return new Intl.NumberFormat("ar-EG").format(n || 0) + " ر.س";
+      }
+
+      function qs(name) {
+        return new URLSearchParams(window.location.search).get(name);
+      }
+
+      function updatePlanSummary() {
+        const planId = document.getElementById("subPlanSelect").value;
+        const cycle = document.getElementById("subCycleSelect").value;
+        const plan = SUB_PLANS.find((p) => p.id === planId);
+        if (!plan) return;
+        const price = cycle === "annual" ? plan.price_annual : plan.price_monthly;
+        document.getElementById("subPlanPrice").textContent = price === 0 ? "مجانية" : fmtSAR(price) + (cycle === "annual" ? " / سنويًا" : " / شهريًا");
+        document.getElementById("subPlanFeatures").textContent = (plan.features || []).join(" · ");
+      }
+
+      async function loadPlansForSubscribe() {
+        try {
+          const data = await apiGet("/api/plans");
+          SUB_PLANS = data.items || [];
+          const sel = document.getElementById("subPlanSelect");
+          sel.innerHTML = SUB_PLANS.map((p) => `<option value="${p.id}">${p.name_ar}</option>`).join("");
+          const preselect = qs("plan");
+          if (preselect && SUB_PLANS.some((p) => p.id === preselect)) sel.value = preselect;
+          const preCycle = qs("cycle");
+          if (preCycle === "annual" || preCycle === "monthly") document.getElementById("subCycleSelect").value = preCycle;
+          updatePlanSummary();
+        } catch (e) {
+          showToast("تعذر تحميل الخطط", "#ef4444");
+        }
+      }
+
+      async function loadBankAccountsForSubscribe() {
+        const host = document.getElementById("bankAccountsList");
+        try {
+          const data = await apiGet("/api/bank-accounts");
+          SUB_BANK_ACCOUNTS = data.items || [];
+          if (!SUB_BANK_ACCOUNTS.length) {
+            host.innerHTML = '<div style="font-size:0.82rem; color:var(--text-muted);">لا توجد حسابات بنكية متاحة حاليًا، الرجاء اختيار الدفع نقدًا أو التواصل معنا.</div>';
+            return;
+          }
+          host.innerHTML = SUB_BANK_ACCOUNTS.map((b) => `
+            <div class="bank-acc-item">
+              <div><b>البنك:</b> ${b.bank_name}</div>
+              <div><b>اسم المستفيد:</b> ${b.beneficiary_name}</div>
+              <div dir="ltr"><b>رقم الحساب:</b> ${b.account_number}</div>
+              <div dir="ltr"><b>الآيبان:</b> ${b.iban}</div>
+            </div>
+          `).join("");
+        } catch (e) {
+          host.innerHTML = '<div style="font-size:0.82rem; color:var(--text-muted);">تعذر تحميل الحسابات البنكية</div>';
+        }
+      }
+
+      function selectPaymentMethod(pm) {
+        SUB_SELECTED_PM = pm;
+        document.getElementById("pmBankOption").classList.toggle("selected", pm === "bank_transfer");
+        document.getElementById("pmCashOption").classList.toggle("selected", pm === "cash");
+        document.getElementById("bankTransferPanel").style.display = pm === "bank_transfer" ? "block" : "none";
+        document.getElementById("cashPanel").style.display = pm === "cash" ? "block" : "none";
+        const btn = document.getElementById("subSubmitBtn");
+        btn.disabled = false;
+        btn.textContent = "إرسال طلب الاشتراك";
+        if (pm === "bank_transfer" && !SUB_BANK_ACCOUNTS.length) loadBankAccountsForSubscribe();
+      }
+
+      document.getElementById("pmBankOption").addEventListener("click", () => selectPaymentMethod("bank_transfer"));
+      document.getElementById("pmCashOption").addEventListener("click", () => selectPaymentMethod("cash"));
+      document.getElementById("subPlanSelect").addEventListener("change", updatePlanSummary);
+      document.getElementById("subCycleSelect").addEventListener("change", updatePlanSummary);
+
+      document.getElementById("subSubmitBtn").addEventListener("click", async () => {
+        const fullName = (document.getElementById("subFullName").value || "").trim();
+        const email = (document.getElementById("subEmail").value || "").trim();
+        const phone = (document.getElementById("subPhone").value || "").trim();
+        if (!fullName || !email || !phone) {
+          showToast("الرجاء تعبئة الاسم والبريد ورقم الجوال", "#ef4444");
+          return;
+        }
+        if (!SUB_SELECTED_PM) {
+          showToast("الرجاء اختيار طريقة الدفع", "#ef4444");
+          return;
+        }
+        const receiptInp = document.getElementById("subReceiptFile");
+        const receiptFile = receiptInp.files && receiptInp.files[0];
+        if (SUB_SELECTED_PM === "bank_transfer" && !receiptFile) {
+          showToast("الرجاء رفع صورة إيصال التحويل", "#ef4444");
+          return;
+        }
+        const btn = document.getElementById("subSubmitBtn");
+        btn.disabled = true;
+        btn.textContent = "جارٍ الإرسال...";
+        try {
+          const fd = new FormData();
+          fd.append("full_name", fullName);
+          fd.append("company_name", document.getElementById("subCompanyName").value || "");
+          fd.append("email", email);
+          fd.append("phone", phone);
+          fd.append("plan_id", document.getElementById("subPlanSelect").value);
+          fd.append("billing_cycle", document.getElementById("subCycleSelect").value);
+          fd.append("payment_method", SUB_SELECTED_PM);
+          if (receiptFile) fd.append("receipt", receiptFile);
+          await apiPostForm("/api/subscribe", fd);
+          document.getElementById("subFormWrap").style.display = "none";
+          document.getElementById("subSuccessWrap").style.display = "block";
+        } catch (e) {
+          showToast(e.message || "فشل إرسال طلب الاشتراك", "#ef4444");
+          btn.disabled = false;
+          btn.textContent = "إرسال طلب الاشتراك";
+        }
+      });
+
       (function () {
         var fsBtn = document.getElementById("opFullscreenBtn");
         if (fsBtn) {
@@ -454,7 +469,7 @@
         if (backBtn) {
           backBtn.addEventListener("click", function () {
             if (window.history.length > 1) window.history.back();
-            else window.location.href = "/";
+            else window.location.href = "/pricing";
           });
         }
         var opLogoutBtn = document.getElementById("opLogoutBtn");
@@ -476,172 +491,15 @@
               if (nameEl) nameEl.textContent = me.username;
               if (avatarEl) avatarEl.textContent = me.username.trim().charAt(0).toUpperCase() || "؟";
               if (roleEl) roleEl.textContent = me.is_admin ? "مدير النظام" : (me.role_name === "admin" ? "مدير النظام" : "مستخدم النظام");
+              if (!document.getElementById("subFullName").value) document.getElementById("subFullName").value = me.username;
+              if (me.email && !document.getElementById("subEmail").value) document.getElementById("subEmail").value = me.email;
             }
           } catch (e) {}
         })();
       })();
-      
+
       initAuthUI();
-    
-    </script>
-    <script>
-      let SUB_PLANS = [];
-      let SUB_BANK_ACCOUNTS = [];
-      const SUB_STATUS_LABELS = { pending: "قيد المراجعة", approved: "مقبول", rejected: "مرفوض", info_requested: "بانتظار معلومات إضافية" };
-      const SUB_STATUS_COLORS = { pending: "#d97706", approved: "#059669", rejected: "#dc2626", info_requested: "#2563eb" };
-
-      function escapeHtml(s) {
-        return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-      }
-      function fmtPrice(n) {
-        return Number(n || 0).toLocaleString("ar-SA") + " ر.س";
-      }
-      function qsParam(name) {
-        return new URLSearchParams(window.location.search).get(name);
-      }
-
-      function updatePriceLabel() {
-        const plan = SUB_PLANS.find((p) => p.id === document.getElementById("subPlanSelect").value);
-        if (!plan) return;
-        const cycle = document.querySelector('input[name="subCycle"]:checked')?.value || "monthly";
-        const price = cycle === "annual" ? plan.price_annual : plan.price_monthly;
-        document.getElementById("subPriceLabel").textContent = price > 0 ? fmtPrice(price) + (cycle === "annual" ? " / سنة" : " / شهر") : "مجانية";
-      }
-
-      async function loadPlansForSubscribe() {
-        const select = document.getElementById("subPlanSelect");
-        try {
-          const data = await apiGet("/api/plans");
-          SUB_PLANS = data.items || [];
-          select.innerHTML = SUB_PLANS.map((p) => `<option value="${p.id}">${escapeHtml(p.name_ar)}</option>`).join("");
-          const wantedPlan = qsParam("plan");
-          if (wantedPlan && SUB_PLANS.some((p) => p.id === wantedPlan)) select.value = wantedPlan;
-          const wantedCycle = qsParam("cycle") === "annual" ? "annual" : "monthly";
-          document.getElementById(wantedCycle === "annual" ? "subCycleAnnual" : "subCycleMonthly").checked = true;
-          updatePriceLabel();
-        } catch (e) {
-          select.innerHTML = '<option value="">تعذر تحميل الخطط</option>';
-        }
-      }
-
-      async function loadBankAccountsForSubscribe() {
-        const host = document.getElementById("bankAccountsList");
-        try {
-          const data = await apiGet("/api/bank-accounts");
-          SUB_BANK_ACCOUNTS = data.items || [];
-          if (!SUB_BANK_ACCOUNTS.length) {
-            host.innerHTML = '<div class="text-slate-500 dark:text-slate-400">لا توجد حسابات بنكية مفعّلة حالياً، يرجى التواصل مع فريق الدعم.</div>';
-            return;
-          }
-          host.innerHTML = SUB_BANK_ACCOUNTS
-            .map(
-              (b) => `
-              <div class="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
-                <div class="font-extrabold text-slate-900 dark:text-slate-50">${escapeHtml(b.bank_name)}</div>
-                <div class="text-slate-600 dark:text-slate-400">المستفيد: ${escapeHtml(b.beneficiary_name)}</div>
-                <div class="text-slate-600 dark:text-slate-400" dir="ltr">رقم الحساب: ${escapeHtml(b.account_number)}</div>
-                <div class="text-slate-600 dark:text-slate-400" dir="ltr">IBAN: ${escapeHtml(b.iban)}</div>
-              </div>`
-            )
-            .join("");
-        } catch (e) {
-          host.innerHTML = '<div class="text-rose-600">تعذر تحميل الحسابات البنكية</div>';
-        }
-      }
-
-      function fmtReqDT(iso) {
-        if (!iso) return "-";
-        try {
-          return new Date(iso).toLocaleString("ar-EG", { dateStyle: "medium", timeStyle: "short" });
-        } catch (e) {
-          return iso;
-        }
-      }
-
-      async function loadMyRequests() {
-        const host = document.getElementById("myRequestsHost");
-        try {
-          const data = await apiGet("/api/subscribe/mine");
-          const items = data.items || [];
-          if (!items.length) {
-            host.innerHTML = '<div class="text-slate-500 dark:text-slate-400">لا توجد طلبات سابقة</div>';
-            return;
-          }
-          host.innerHTML = items
-            .map(
-              (r) => `
-              <div class="rounded-xl border border-slate-200 dark:border-slate-700 p-3 flex items-center justify-between gap-3 flex-wrap">
-                <div>
-                  <div class="font-extrabold text-slate-900 dark:text-slate-50">${escapeHtml(r.plan_name)} — ${escapeHtml(r.billing_cycle_label)}</div>
-                  <div class="text-xs text-slate-500 dark:text-slate-400">${fmtReqDT(r.created_at)} · ${escapeHtml(r.payment_method_label)}</div>
-                  ${r.admin_notes ? `<div class="text-xs mt-1 text-slate-600 dark:text-slate-300">ملاحظات: ${escapeHtml(r.admin_notes)}</div>` : ""}
-                </div>
-                <span class="px-2 py-1 rounded-full text-xs font-extrabold" style="background:${SUB_STATUS_COLORS[r.status] || "#6b7280"}22; color:${SUB_STATUS_COLORS[r.status] || "#6b7280"};">${escapeHtml(SUB_STATUS_LABELS[r.status] || r.status)}</span>
-              </div>`
-            )
-            .join("");
-        } catch (e) {
-          host.innerHTML = '<div class="text-rose-600">تعذر تحميل الطلبات</div>';
-        }
-      }
-
-      function toggleMethodSections() {
-        const method = document.querySelector('input[name="subMethod"]:checked')?.value || "bank_transfer";
-        document.getElementById("bankSection").classList.toggle("hidden", method !== "bank_transfer");
-        document.getElementById("cashSection").classList.toggle("hidden", method !== "cash");
-      }
-
-      document.getElementById("subPlanSelect").addEventListener("change", updatePriceLabel);
-      document.querySelectorAll('input[name="subCycle"]').forEach((el) => el.addEventListener("change", updatePriceLabel));
-      document.querySelectorAll('input[name="subMethod"]').forEach((el) => el.addEventListener("change", toggleMethodSections));
-
-      document.getElementById("subscribeForm").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const method = document.querySelector('input[name="subMethod"]:checked')?.value || "bank_transfer";
-        const receiptFile = document.getElementById("subReceiptFile").files[0];
-        if (method === "bank_transfer" && !receiptFile) {
-          showToast("يرجى رفع صورة إيصال التحويل", "#ef4444");
-          return;
-        }
-        const btn = document.getElementById("subscribeSubmitBtn");
-        btn.disabled = true;
-        btn.textContent = "جارٍ الإرسال...";
-        try {
-          const fd = new FormData();
-          fd.append("plan_id", document.getElementById("subPlanSelect").value);
-          fd.append("billing_cycle", document.querySelector('input[name="subCycle"]:checked')?.value || "monthly");
-          fd.append("full_name", document.getElementById("subFullName").value.trim());
-          fd.append("company_name", document.getElementById("subCompanyName").value.trim());
-          fd.append("phone", document.getElementById("subPhone").value.trim());
-          fd.append("payment_method", method);
-          if (receiptFile) fd.append("receipt", receiptFile);
-          await apiPostForm("/api/subscribe", fd);
-          showToast("تم استلام طلبك بنجاح، سنقوم بمراجعته قريباً ✔️", "#10b981");
-          document.getElementById("subscribeForm").reset();
-          toggleMethodSections();
-          loadMyRequests();
-        } catch (e2) {
-          showToast(e2.message || "تعذر إرسال الطلب", "#ef4444");
-        } finally {
-          btn.disabled = false;
-          btn.textContent = "إرسال الطلب";
-        }
-      });
-
-      (async function () {
-        try {
-          const me = await apiGet("/auth/me");
-          if (me?.username) {
-            document.getElementById("subFullName").value = me.username;
-            document.getElementById("subEmail").value = me.email || "";
-          }
-        } catch (e) {}
-      })();
-
       loadPlansForSubscribe();
-      loadBankAccountsForSubscribe();
-      loadMyRequests();
-      toggleMethodSections();
     </script>
   </body>
 </html>
