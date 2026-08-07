@@ -24,6 +24,7 @@ from .rate_limit import limiter
 from .routers.auth_api import router as auth_router
 from .routers.cashierko_api import router as cashierko_router
 from .routers.documents_api import router as documents_router
+from .routers.billing_api import router as billing_router
 from .routers.toolbox_api import router as toolbox_router
 from .routes.importer import router as importer_router
 from .routers.smartpos_v2_api import router as smartpos_v2_router
@@ -143,6 +144,7 @@ app.include_router(simple_inventory_router)
 app.include_router(company_profile_router)
 app.include_router(cashierko_router)
 app.include_router(documents_router)
+app.include_router(billing_router)
 app.include_router(toolbox_router)
 app.include_router(smartpos_v2_router)
 app.include_router(importer_router)
@@ -474,6 +476,21 @@ def ui_admin_backups(request: Request):
 @app.get("/admin/profile", response_class=HTMLResponse)
 def ui_admin_profile(request: Request):
     return _require_admin_page(request, FRONTEND_DIR / "admin_profile.html")
+
+
+@app.get("/pricing", response_class=HTMLResponse)
+def ui_pricing(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "pricing.html")
+
+
+@app.get("/subscribe", response_class=HTMLResponse)
+def ui_subscribe(request: Request):
+    return _require_login_page(request, FRONTEND_DIR / "subscribe.html")
+
+
+@app.get("/admin/manage-bank-accounts", response_class=HTMLResponse)
+def ui_admin_bank_accounts(request: Request):
+    return _require_admin_page(request, FRONTEND_DIR / "admin_bank_accounts.html")
 
 
 @app.get("/help", response_class=HTMLResponse)
