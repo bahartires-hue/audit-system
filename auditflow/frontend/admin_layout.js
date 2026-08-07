@@ -35,6 +35,7 @@
       label: "الإعدادات",
       items: [
         { key: "settings", label: "إعدادات النظام", href: "/admin/settings", icon: "gear" },
+        { key: "bank_accounts", label: "الحسابات البنكية", href: "/admin/manage-bank-accounts", icon: "card" },
         { key: "smtp", label: "إعدادات البريد", href: "/admin/smtp", icon: "mail" },
         { key: "backups", label: "النسخ الاحتياطية", href: "/admin/backups", icon: "save" },
         { key: "security", label: "الأمان", href: "/admin/security", icon: "lock" },
